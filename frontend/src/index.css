@@ -1,0 +1,905 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    position: relative;
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
+  
+  #root {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  /* Dark mode support */
+  .dark body {
+    @apply bg-gray-900 text-gray-100;
+  }
+
+  .dark .bg-white {
+    @apply bg-gray-800;
+  }
+
+  .dark .text-gray-900 {
+    @apply text-gray-100;
+  }
+
+  .dark .border-gray-200 {
+    @apply border-gray-700;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 hover:shadow-md active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary-100 hover:bg-secondary-200 text-secondary-700 font-medium py-2 px-4 rounded-lg transition-all duration-200 hover:shadow-md active:scale-95;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 hover:shadow-md active:scale-95;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-300 hover:shadow-md;
+  }
+
+  .input-field {
+    @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+
+  /* Layout Components */
+  .layout-container {
+    @apply min-h-screen;
+  }
+
+  .main-container {
+    @apply flex-1 flex flex-col;
+  }
+
+  .content-area {
+    @apply flex-1 overflow-auto;
+  }
+
+  .content-wrapper {
+    @apply w-full max-w-7xl mx-auto;
+  }
+
+  .sidebar-container {
+    @apply flex flex-col;
+  }
+
+  /* Navbar Components */
+  .navbar-container {
+    @apply bg-white shadow-sm w-full relative overflow-hidden;
+    min-height: 64px;
+    max-height: 80px;
+  }
+
+  /* Content spacing and centering */
+  .page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8;
+  }
+
+  .section-spacing {
+    @apply mb-8;
+  }
+
+  .card-spacing {
+    @apply mb-6;
+  }
+
+  .content-center {
+    @apply max-w-4xl mx-auto;
+  }
+
+  .text-center {
+    @apply text-center;
+  }
+
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+
+  .grid-center {
+    @apply grid place-items-center;
+  }
+
+  /* Interactive Elements */
+  .interactive-card {
+    @apply card hover:scale-[1.02] cursor-pointer;
+  }
+
+  /* Mobile Traffic Monitoring Fixes */
+  .mobile-safe-area {
+    @apply pb-safe-bottom;
+  }
+
+  .floating-element {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .bottom-sheet-safe {
+    @apply pb-4;
+  }
+
+  /* Prevent component overlap - Force high z-index */
+  .z-map { 
+    z-index: 0 !important; 
+    position: relative !important;
+  }
+  .z-search-bar { 
+    z-index: 9999 !important; 
+    position: fixed !important;
+  }
+  .z-controls { 
+    z-index: 9998 !important; 
+    position: fixed !important;
+  }
+  .z-dropdown { 
+    z-index: 9997 !important; 
+    position: fixed !important;
+  }
+  .z-fab { 
+    z-index: 9996 !important; 
+    position: fixed !important;
+  }
+  .z-modal { 
+    z-index: 9995 !important; 
+    position: fixed !important;
+  }
+  .z-bottom-sheet { 
+    z-index: 9994 !important; 
+    position: fixed !important;
+  }
+  .z-backdrop { 
+    z-index: 9993 !important; 
+    position: fixed !important;
+  }
+
+  /* Override Leaflet default z-index values */
+  .leaflet-container {
+    z-index: 0 !important;
+  }
+  
+  .leaflet-control-container {
+    z-index: 0 !important;
+  }
+  
+  .leaflet-popup-pane {
+    z-index: 700 !important;
+  }
+  
+  .leaflet-tooltip-pane {
+    z-index: 650 !important;
+  }
+
+  /* Ensure UI components are always visible */
+  .floating-element {
+    position: relative !important;
+    z-index: inherit !important;
+  }
+
+  /* Force visibility for mobile UI */
+  .mobile-ui-overlay {
+    pointer-events: auto !important;
+    position: relative !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Ensure search bar is always visible */
+  .floating-search-bar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(10px) !important;
+  }
+
+  /* Debug visibility - temporary */
+  .z-search-bar {
+    background: rgba(255, 0, 0, 0.1) !important;
+    border: 2px solid red !important;
+  }
+
+  /* Mobile responsive improvements */
+  @media (max-width: 640px) {
+    .floating-search-bar {
+      @apply left-2 right-2 top-2;
+    }
+
+    .floating-controls {
+      @apply right-2 top-16;
+    }
+
+    .layers-menu {
+      @apply w-56 right-2;
+    }
+
+    .fab-mobile {
+      @apply w-12 h-12;
+    }
+
+    .fab-mobile svg {
+      @apply w-5 h-5;
+    }
+
+    /* Layout adjustments for mobile */
+    .layout-container {
+      @apply flex-col;
+    }
+
+    .content-wrapper {
+      @apply px-2 py-4;
+    }
+  }
+
+  /* Tablet responsive improvements */
+  @media (max-width: 1024px) and (min-width: 641px) {
+    .content-wrapper {
+      @apply px-4;
+    }
+  }
+
+  /* Ensure proper touch targets */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .pulse-dot {
+    @apply animate-pulse;
+  }
+
+  .bounce-in {
+    animation: bounceIn 0.6s ease-out;
+  }
+
+  .fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  .slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+
+  .notification-enter {
+    animation: notificationEnter 0.5s ease-out;
+  }
+
+  .achievement-pop {
+    animation: achievementPop 0.8s ease-out;
+  }
+
+  .progress-fill {
+    animation: progressFill 2s ease-out;
+  }
+
+  /* Text effects */
+  .gradient-text {
+    @apply bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent;
+  }
+
+  .shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Hover effects */
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
+  }
+
+  .hover-glow {
+    @apply transition-all duration-300 hover:shadow-lg hover:shadow-primary-200;
+  }
+
+  /* Loading states */
+  .skeleton {
+    @apply bg-gray-200 animate-pulse rounded;
+  }
+
+  /* Utility classes */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  /* Custom animations */
+  @keyframes bounceIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    70% {
+      transform: scale(0.9);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes notificationEnter {
+    0% {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes achievementPop {
+    0% {
+      opacity: 0;
+      transform: scale(0.5) rotate(-5deg);
+    }
+    50% {
+      transform: scale(1.1) rotate(2deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes progressFill {
+    from {
+      width: 0%;
+    }
+    to {
+      width: 100%;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  @keyframes swing {
+    20% {
+      transform: rotate(15deg);
+    }
+    40% {
+      transform: rotate(-10deg);
+    }
+    60% {
+      transform: rotate(5deg);
+    }
+    80% {
+      transform: rotate(-5deg);
+    }
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+
+  .animate-swing {
+    animation: swing 1s ease-in-out;
+  }
+
+  /* Interactive states */
+  .interactive-element {
+    @apply transition-all duration-200 active:scale-95;
+  }
+
+  /* Citizen dashboard specific animations */
+  .citizen-score-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .live-indicator {
+    @apply relative;
+  }
+
+  .live-indicator::after {
+    content: '';
+    @apply absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping;
+  }
+
+  /* Report form step animations */
+  .step-enter {
+    animation: stepEnter 0.3s ease-out;
+  }
+
+  @keyframes stepEnter {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Notification animations */
+  .notification-badge {
+    @apply animate-bounce;
+  }
+
+  /* Traffic Monitoring specific animations */
+  .traffic-stats-enter {
+    animation: trafficStatsEnter 0.6s ease-out;
+  }
+
+  .map-marker-bounce {
+    animation: mapMarkerBounce 0.8s ease-out;
+  }
+
+  .sidebar-item-hover {
+    @apply transition-all duration-200 hover:bg-gray-50 hover:scale-[1.02] hover:shadow-sm;
+  }
+
+  .progress-bar-animate {
+    animation: progressBarFill 1.5s ease-out;
+  }
+
+  .live-pulse {
+    animation: livePulse 2s infinite;
+  }
+
+  @keyframes trafficStatsEnter {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes mapMarkerBounce {
+    0% {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.3);
+    }
+    50% {
+      transform: translateY(-10px) scale(1.1);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes progressBarFill {
+    from {
+      width: 0%;
+    }
+    to {
+      width: var(--progress-width);
+    }
+  }
+
+  @keyframes livePulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.1);
+    }
+  }
+
+  /* Enhanced hover effects for traffic monitoring */
+  .traffic-card-hover {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-2 hover:scale-[1.02];
+  }
+
+  .map-control-hover {
+    @apply transition-all duration-200 hover:bg-gray-100 hover:scale-110 active:scale-95;
+  }
+
+  .incident-item-hover {
+    @apply transition-all duration-200 hover:bg-gradient-to-r hover:from-gray-50 hover:to-blue-50 hover:border-blue-200;
+  }
+
+  /* Emergency Center specific animations */
+  .animate-fade-in {
+    animation: fadeInUp 0.5s ease-out;
+  }
+
+  .emergency-button-glow {
+    animation: emergencyGlow 2s infinite;
+  }
+
+  .emergency-pulse {
+    animation: emergencyPulse 1.5s infinite;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes emergencyGlow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(239, 68, 68, 0.6);
+    }
+  }
+
+  @keyframes emergencyPulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+  }
+
+  /* Mobile optimizations */
+  @media (max-width: 640px) {
+    .card {
+      @apply p-4;
+    }
+    
+    .interactive-card:hover {
+      transform: none;
+    }
+
+    .traffic-card-hover:hover {
+      transform: none;
+    }
+
+    .hover-lift:hover {
+      transform: none;
+    }
+  }
+
+  /* Global mobile layout fixes */
+  @media (max-width: 1023px) {
+    body {
+      overflow-x: hidden;
+      width: 100vw;
+      max-width: 100vw;
+    }
+    
+    html {
+      overflow-x: hidden;
+      width: 100vw;
+      max-width: 100vw;
+    }
+    
+    /* Fix any container that might cause whitespace */
+    .container, .max-w-7xl, .max-w-6xl, .max-w-5xl {
+      max-width: 100% !important;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    
+    /* Ensure grids collapse to single column */
+    .grid-cols-2, .grid-cols-3, .grid-cols-4 {
+      grid-template-columns: 1fr !important;
+    }
+    
+    /* Fix flex layouts */
+    .gap-6, .gap-8 {
+      gap: 1rem;
+    }
+  }
+
+  /* Mobile-specific utilities */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-area-inset-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-area-inset-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Prevent zoom on input focus (iOS) */
+  @media (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="url"],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+    
+    /* Ensure all content respects mobile boundaries */
+    .sm\:grid-cols-2, .md\:grid-cols-2, .lg\:grid-cols-2,
+    .sm\:grid-cols-3, .md\:grid-cols-3, .lg\:grid-cols-3,
+    .sm\:grid-cols-4, .md\:grid-cols-4, .lg\:grid-cols-4 {
+      grid-template-columns: 1fr !important;
+    }
+    
+    /* Ensure proper mobile spacing */
+    .space-x-6 > * + *, .space-x-8 > * + * {
+      margin-left: 0.5rem !important;
+    }
+  }
+
+  /* Smooth scrolling for mobile */
+  @media (max-width: 768px) {
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Mobile-friendly tap targets */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Hide scrollbar on mobile for cleaner look */
+  @media (max-width: 768px) {
+    .hide-scrollbar-mobile {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    
+    .hide-scrollbar-mobile::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  /* Mobile drawer animation */
+  .mobile-drawer-enter {
+    animation: slideInFromLeft 0.3s ease-out;
+  }
+
+  .mobile-drawer-exit {
+    animation: slideOutToLeft 0.3s ease-out;
+  }
+
+  @keyframes slideInFromLeft {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideOutToLeft {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+
+  /* Mobile bottom sheet */
+  .bottom-sheet {
+    @apply fixed inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl;
+    max-height: 90vh;
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  /* Google Maps/Waze style animations */
+  .animate-slide-up {
+    animation: slideUpSmooth 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideUpSmooth {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in-scale {
+    animation: fadeInScale 0.3s ease-out;
+  }
+
+  @keyframes fadeInScale {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Floating elements shadow */
+  .floating-shadow {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .floating-shadow-lg {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Map overlay styles */
+  .map-overlay {
+    backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.95);
+  }
+
+  .map-overlay-dark {
+    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  /* Pulse animation for live indicators */
+  .pulse-ring {
+    animation: pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulseRing {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.2);
+    }
+  }
+
+  /* Smooth bounce for markers */
+  .marker-bounce {
+    animation: markerBounce 0.6s ease-out;
+  }
+
+  @keyframes markerBounce {
+    0% {
+      transform: translateY(-100px);
+      opacity: 0;
+    }
+    60% {
+      transform: translateY(10px);
+      opacity: 1;
+    }
+    80% {
+      transform: translateY(-5px);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  /* Toast notification animation */
+  .toast-enter {
+    animation: toastEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes toastEnter {
+    from {
+      transform: translateY(-100%) scale(0.95);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+
+  /* Mobile-optimized modals */
+  @media (max-width: 640px) {
+    .modal-mobile {
+      @apply fixed inset-0 m-0 rounded-none max-w-none max-h-none;
+    }
+  }
+
+  /* Prevent text selection on mobile for better UX */
+  .no-select-mobile {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  /* Mobile-friendly grid gaps */
+  @media (max-width: 640px) {
+    .grid-mobile-tight {
+      gap: 0.75rem;
+    }
+  }
+
+  /* Sticky mobile header */
+  .sticky-mobile-header {
+    @apply sticky top-0 z-30 bg-white shadow-sm;
+  }
+
+  /* Mobile-optimized button sizes */
+  @media (max-width: 640px) {
+    .btn-mobile-lg {
+      @apply py-3 px-6 text-base;
+    }
+  }
+}

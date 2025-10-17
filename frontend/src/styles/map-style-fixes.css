@@ -1,0 +1,4 @@
+.map-style-open .leaflet-container { pointer-events: none !important; }
+.map-style-open .leaflet-control-container { pointer-events: none !important; }
+.map-style-open .leaflet-pane, .map-style-open .leaflet-top, .map-style-open .leaflet-bottom { pointer-events: none !important; }
+

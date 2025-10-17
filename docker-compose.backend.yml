@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  # Backend API only (using existing XAMPP MySQL)
+  backend:
+    build: ./backend
+    container_name: traffic_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://root:@host.docker.internal:3306/traffic_management
+      SECRET_KEY: your-super-secret-jwt-key-here-change-in-production
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

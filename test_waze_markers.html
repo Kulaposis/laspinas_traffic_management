@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waze Markers Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .test-results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .marker-preview {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+            border: 2px solid white;
+        }
+        .alert-marker { background-color: #ff4444; }
+        .jam-marker { background-color: #ff8800; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚨 Waze Markers Visibility Test</h1>
+        <p>This test will help you verify if Waze traffic data is being loaded and displayed correctly on your map.</p>
+
+        <div id="status" class="status info">
+            Ready to test Waze markers. Make sure your traffic map is open.
+        </div>
+
+        <button onclick="testWazeData()">Test Waze Data Loading</button>
+        <button onclick="checkMapElements()">Check Map Elements</button>
+        <button onclick="showMapInstructions()">Show Map Instructions</button>
+
+        <div id="test-results" class="test-results" style="display: none;">
+            <h3>Test Results:</h3>
+            <div id="results-content"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testWazeData() {
+            const status = document.getElementById('status');
+            const results = document.getElementById('test-results');
+            const resultsContent = document.getElementById('results-content');
+
+            status.className = 'status info';
+            status.textContent = 'Testing Waze data loading...';
+
+            try {
+                // Test Waze service directly
+                const testBounds = {
+                    north: 14.5995,
+                    south: 14.5095,
+                    east: 121.0795,
+                    west: 120.9895
+                };
+
+                console.log('Testing Waze service with bounds:', testBounds);
+
+                const response = await fetch('https://waze.p.rapidapi.com/alerts-and-jams?' + new URLSearchParams({
+                    bottom_left: `${testBounds.south},${testBounds.west}`,
+                    top_right: `${testBounds.north},${testBounds.east}`,
+                    max_alerts: 20,
+                    max_jams: 20
+                }), {
+                    method: 'GET',
+                    headers: {
+                        'x-rapidapi-key': '235e097f00mshc051275a86d4f0ep15bdd8jsn14259f06b9c5',
+                        'x-rapidapi-host': 'waze.p.rapidapi.com'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.text();
+                const jsonData = JSON.parse(data);
+
+                const alerts = jsonData.data?.alerts || [];
+                const jams = jsonData.data?.jams || [];
+
+                results.style.display = 'block';
+                resultsContent.innerHTML = `
+                    <p><strong>✅ Waze API Test Successful!</strong></p>
+                    <p>Found <strong>${alerts.length}</strong> alerts and <strong>${jams.length}</strong> traffic jams</p>
+                    <p>Response status: ${response.status}</p>
+                    <p>Data size: ${data.length} characters</p>
+
+                    <h4>📋 Sample Data:</h4>
+                    ${alerts.length > 0 ? `
+                        <h5>🚨 Recent Alerts:</h5>
+                        <ul>
+                            ${alerts.slice(0, 3).map(alert => `
+                                <li><span class="marker-preview alert-marker"></span>
+                                    ${alert.type} - ${alert.city}, ${alert.street || 'Unknown street'}
+                                    (${alert.latitude.toFixed(4)}, ${alert.longitude.toFixed(4)})
+                                </li>
+                            `).join('')}
+                        </ul>
+                    ` : '<p>No alerts found</p>'}
+
+                    ${jams.length > 0 ? `
+                        <h5>🚗 Recent Traffic Jams:</h5>
+                        <ul>
+                            ${jams.slice(0, 3).map(jam => `
+                                <li><span class="marker-preview jam-marker"></span>
+                                    ${jam.level} level jam - ${jam.street || 'Unknown street'}
+                                    (${jam.line_coordinates?.[0]?.lat?.toFixed(4) || 'N/A'}, ${jam.line_coordinates?.[0]?.lon?.toFixed(4) || 'N/A'})
+                                </li>
+                            `).join('')}
+                        </ul>
+                    ` : '<p>No jams found</p>'}
+
+                    <h4>🎯 Expected on Map:</h4>
+                    <p>• <span class="marker-preview alert-marker"></span> ${alerts.length} red alert markers</p>
+                    <p>• <span class="marker-preview jam-marker"></span> ${jams.length} orange jam markers</p>
+                    <p>• Markers should appear within the tested area</p>
+                `;
+
+                status.className = 'status success';
+                status.textContent = `✅ Waze data loaded! Found ${alerts.length + jams.length} incidents.`;
+
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = `❌ Error: ${error.message}`;
+
+                results.style.display = 'block';
+                resultsContent.innerHTML = `
+                    <p><strong>❌ Test Failed</strong></p>
+                    <p>Error: ${error.message}</p>
+                    <p>Please check your API key and network connection.</p>
+                `;
+            }
+        }
+
+        function checkMapElements() {
+            const status = document.getElementById('status');
+            const results = document.getElementById('test-results');
+            const resultsContent = document.getElementById('results-content');
+
+            status.className = 'status info';
+            status.textContent = 'Checking map elements...';
+
+            // Check if we're on the traffic map page
+            const isTrafficMap = window.location.href.includes('TrafficMap') ||
+                                document.querySelector('[data-testid="traffic-map"]') ||
+                                document.querySelector('.leaflet-container');
+
+            if (!isTrafficMap) {
+                results.style.display = 'block';
+                resultsContent.innerHTML = `
+                    <p><strong>⚠️ Not on Traffic Map Page</strong></p>
+                    <p>Please open your traffic map page first, then run this test.</p>
+                    <p>Expected URL should contain "TrafficMap" or have map elements.</p>
+                `;
+                return;
+            }
+
+            // Check for Waze markers
+            const wazeMarkers = document.querySelectorAll('.custom-marker');
+            const redMarkers = document.querySelectorAll('[style*="background-color: rgb(255, 68, 68)"]');
+            const orangeMarkers = document.querySelectorAll('[style*="background-color: rgb(255, 136, 0)"]');
+
+            results.style.display = 'block';
+            resultsContent.innerHTML = `
+                <p><strong>🔍 Map Elements Check:</strong></p>
+                <ul>
+                    <li>Total custom markers: ${wazeMarkers.length}</li>
+                    <li>Red markers (alerts): ${redMarkers.length}</li>
+                    <li>Orange markers (jams): ${orangeMarkers.length}</li>
+                    <li>Map container found: ${!!document.querySelector('.leaflet-container')}</li>
+                </ul>
+
+                <h4>🎯 What to Look For:</h4>
+                <p>• Red circular markers = Traffic alerts (accidents, road closures)</p>
+                <p>• Orange circular markers = Traffic jams</p>
+                <p>• Markers should be visible on the map surface</p>
+                <p>• Click markers to see detailed information</p>
+            `;
+
+            if (redMarkers.length > 0 || orangeMarkers.length > 0) {
+                status.className = 'status success';
+                status.textContent = `✅ Found ${redMarkers.length + orangeMarkers.length} Waze markers on map!`;
+            } else {
+                status.className = 'status error';
+                status.textContent = '⚠️ No Waze markers found on map. Check toggle settings.';
+            }
+        }
+
+        function showMapInstructions() {
+            const results = document.getElementById('test-results');
+            const resultsContent = document.getElementById('results-content');
+
+            results.style.display = 'block';
+            resultsContent.innerHTML = `
+                <h3>🗺️ How to See Waze Data on Your Map:</h3>
+
+                <h4>1. Enable Waze Data</h4>
+                <p>• Open side panel (hamburger menu ☰ in top-left)</p>
+                <p>• Find "Waze Live Data" toggle and turn it <strong>ON</strong> (green)</p>
+
+                <h4>2. Load Traffic Data</h4>
+                <p>• Plan a route between two locations</p>
+                <p>• Or pan around the map to load data for current area</p>
+
+                <h4>3. Look for Markers</h4>
+                <div style="margin: 15px 0;">
+                    <p><span class="marker-preview alert-marker"></span> <strong>Red markers</strong> = Traffic alerts</p>
+                    <p><span class="marker-preview jam-marker"></span> <strong>Orange markers</strong> = Traffic jams</p>
+                </div>
+
+                <h4>4. Check Console</h4>
+                <p>• Press F12 to open browser console</p>
+                <p>• Look for messages like:</p>
+                <div style="background: #f0f0f0; padding: 10px; margin: 10px 0; font-family: monospace;">
+🚨 Displaying Waze incident: Road Closed at 14.5293, 121.0122<br>
+🚗 Displaying Waze jam: Traffic Jam - 746m at 14.5659, 121.0771
+                </div>
+
+                <h4>5. Troubleshooting</h4>
+                <ul>
+                    <li><strong>No markers:</strong> Check if "Waze Live Data" toggle is enabled</li>
+                    <li><strong>No data:</strong> Try planning a route or panning to a different area</li>
+                    <li><strong>API errors:</strong> Check browser console for network errors</li>
+                    <li><strong>Styling issues:</strong> Markers might be hidden behind other elements</li>
+                </ul>
+
+                <h4>6. Test Results</h4>
+                <p>• Run "Test Waze Data Loading" above to verify API connectivity</p>
+                <p>• Run "Check Map Elements" to verify markers are being rendered</p>
+            `;
+
+            const status = document.getElementById('status');
+            status.className = 'status info';
+            status.textContent = 'Instructions loaded above.';
+        }
+
+        // Auto-check when page loads
+        window.addEventListener('load', () => {
+            console.log('Waze Markers Test Page Loaded');
+        });
+    </script>
+</body>
+</html>

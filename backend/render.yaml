@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: traffic-management-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./data/traffic_management.db
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        value: https://your-frontend-domain.onrender.com,https://your-custom-domain.com
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+    buildCommand: ""
+    startCommand: ""
+    autoDeploy: false
+    healthCheckPath: /health
+    envSecrets:
+      - SECRET_KEY
+    disk:
+      name: traffic-data
+      mountPath: /data
+      sizeGB: 1

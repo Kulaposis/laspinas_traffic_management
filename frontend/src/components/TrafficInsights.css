@@ -1,0 +1,427 @@
+/* Enhanced Traffic Insights Styling */
+
+.traffic-insights-container {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+/* Emoji focus states for accessibility */
+.condition-emoji:focus-visible,
+.recommendation-card .text-xl:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .condition-emoji,
+  .advisory-icon-container,
+  .recommendation-card .text-xl {
+    animation: none;
+  }
+  
+  .condition-emoji::before,
+  .recommendation-card .text-xl::before {
+    animation: none;
+  }
+}
+
+.traffic-insights-header {
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 50%, #f3e8ff 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.traffic-insights-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(59, 130, 246, 0.05) 50%, transparent 70%);
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+.condition-emoji {
+  font-size: 4rem;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.15));
+  animation: pulse 2s ease-in-out infinite;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.8) 100%);
+  border-radius: 50%;
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Condition emoji interactive effects */
+.condition-emoji::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(59, 130, 246, 0.1) 50%, transparent 70%);
+  border-radius: 50%;
+  opacity: 0;
+  animation: shimmer-emoji 3s ease-in-out infinite;
+}
+
+.condition-emoji:hover {
+  transform: scale(1.05);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  animation-play-state: paused;
+}
+
+@keyframes shimmer-emoji {
+  0%, 100% {
+    opacity: 0;
+    transform: translateX(-100%) rotate(45deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(100%) rotate(45deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.main-insight-box {
+  background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+  border: 1px solid #bfdbfe;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-insight-box::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #3b82f6, #06b6d4, #3b82f6);
+  border-radius: 12px;
+  z-index: -1;
+  opacity: 0.1;
+}
+
+.stat-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.5s;
+}
+
+.stat-card:hover::before {
+  left: 100%;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.advisory-card {
+  position: relative;
+  backdrop-filter: blur(5px);
+}
+
+.advisory-icon-container {
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40%, 43% {
+    transform: translateY(-8px);
+  }
+  70% {
+    transform: translateY(-4px);
+  }
+  90% {
+    transform: translateY(-2px);
+  }
+}
+
+.recommendation-card {
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Recommendation emoji styling */
+.recommendation-card .text-xl {
+  font-size: 1.75rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.7) 100%);
+  border-radius: 50%;
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.recommendation-card .text-xl::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent 30%, rgba(59, 130, 246, 0.1) 50%, transparent 70%);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.recommendation-card:hover .text-xl {
+  transform: scale(1.1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.recommendation-card:hover .text-xl::before {
+  opacity: 1;
+  animation: rotate-shimmer 1s ease-in-out;
+}
+
+@keyframes rotate-shimmer {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.recommendation-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(59, 130, 246, 0.02) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+.recommendation-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+.route-suggestion-card {
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.route-suggestion-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+}
+
+.show-route-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.show-route-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.show-route-button:hover::before {
+  left: 100%;
+}
+
+.show-route-button:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+}
+
+.next-update-badge {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 1px solid #cbd5e1;
+  transition: all 0.3s ease;
+}
+
+.next-update-badge:hover {
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  transform: scale(1.02);
+}
+
+/* Loading animation */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .condition-emoji {
+    font-size: 3rem;
+    padding: 0.75rem;
+  }
+  
+  .recommendation-card .text-xl {
+    font-size: 1.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .condition-emoji {
+    font-size: 2.5rem;
+    padding: 0.5rem;
+  }
+  
+  .recommendation-card .text-xl {
+    font-size: 1.25rem;
+    width: 2rem;
+    height: 2rem;
+  }
+  
+  .stat-card {
+    padding: 1rem;
+  }
+  
+  .recommendation-card:hover {
+    transform: translateX(2px);
+  }
+  
+  .recommendation-card:hover .text-xl {
+    transform: scale(1.05);
+  }
+  
+  .route-suggestion-card:hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 480px) {
+  .condition-emoji {
+    font-size: 2rem;
+    padding: 0.5rem;
+  }
+  
+  .recommendation-card .text-xl {
+    font-size: 1rem;
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+}
+
+/* Enhanced Route Visualization */
+.selected-route-line {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-outline {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* Custom route marker animations */
+.custom-route-marker {
+  animation: markerPulse 2s ease-in-out infinite;
+}
+
+.custom-waypoint-marker {
+  animation: waypointBounce 1.5s ease-in-out infinite;
+}
+
+@keyframes markerPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes waypointBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Route polyline hover effects */
+.leaflet-interactive:hover {
+  filter: brightness(1.1) saturate(1.2);
+  transition: filter 0.2s ease-in-out;
+}
+
+/* Smooth transitions for route changes */
+.leaflet-pane svg path {
+  transition: stroke-width 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
