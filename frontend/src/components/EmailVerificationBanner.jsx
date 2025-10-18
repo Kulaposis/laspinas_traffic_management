@@ -61,7 +61,7 @@ const EmailVerificationBanner = ({ className = '' }) => {
         <div className="ml-3 flex-1">
           <p className="text-sm text-amber-700">
             <strong>Email Verification Required:</strong> Please verify your email address to access all features.
-            A verification link was sent to <strong>{user.email}</strong> during registration.
+            We've sent a verification link to <strong>{user.email}</strong>.
           </p>
         </div>
         <div className="ml-auto pl-3">

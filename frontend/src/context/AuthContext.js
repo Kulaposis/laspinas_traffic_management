@@ -62,20 +62,6 @@ export const AuthProvider = ({ children }) => {
 
             // Update localStorage
             localStorage.setItem('user', JSON.stringify(mappedUser));
-
-            // Try to sync with backend if no backend token exists
-            if (!authService.getToken()) {
-              try {
-                await authService.syncFirebaseUser({
-                  uid: mappedUser.uid,
-                  email: mappedUser.email,
-                  display_name: mappedUser.displayName || mappedUser.email.split('@')[0],
-                  email_verified: mappedUser.emailVerified
-                });
-              } catch (syncError) {
-                console.warn('Failed to sync Firebase user with backend:', syncError);
-              }
-            }
           } catch (error) {
             console.error('Error reloading Firebase user:', error);
           }
@@ -150,21 +136,6 @@ export const AuthProvider = ({ children }) => {
       if (result.success) {
         setUser(result.user);
         setAuthMethod('firebase');
-
-        // Try to sync with backend if no backend token exists
-        if (!authService.getToken()) {
-          try {
-            await authService.syncFirebaseUser({
-              uid: result.user.uid,
-              email: result.user.email,
-              display_name: result.user.displayName || result.user.email.split('@')[0],
-              email_verified: result.user.emailVerified
-            });
-          } catch (syncError) {
-            console.warn('Failed to sync Firebase user with backend:', syncError);
-          }
-        }
-
         return result;
       } else {
         throw new Error(result.error);
@@ -189,19 +160,6 @@ export const AuthProvider = ({ children }) => {
       if (result.success) {
         setUser(result.user);
         setAuthMethod('firebase');
-
-        // Try to sync with backend
-        try {
-          await authService.syncFirebaseUser({
-            uid: result.user.uid,
-            email: result.user.email,
-            display_name: result.user.displayName || result.user.email.split('@')[0],
-            email_verified: result.user.emailVerified
-          });
-        } catch (syncError) {
-          console.warn('Failed to sync Firebase user with backend:', syncError);
-        }
-
         return result;
       } else {
         throw new Error(result.error);

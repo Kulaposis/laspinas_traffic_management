@@ -33,7 +33,7 @@ import AdminUserManagement from './pages/AdminUserManagement';
 import AdminSystemSettings from './pages/AdminSystemSettings';
 
 const AppContent = () => {
-  const { isAuthenticated, user, authMethod } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -89,8 +89,8 @@ const AppContent = () => {
     );
   }
 
-  // Check if user is authenticated via Firebase but email not verified
-  if (user && authMethod === 'firebase' && user.hasOwnProperty('emailVerified') && user.emailVerified === false) {
+  // Check if user is authenticated but email not verified
+  if (user && !user.emailVerified) {
     return (
       <Routes>
         <Route path="/verify-email" element={<EmailVerification />} />

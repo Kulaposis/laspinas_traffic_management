@@ -17,34 +17,16 @@ import {
 } from 'firebase/auth';
 
 // Firebase configuration object
-// Using environment variables for security
+// Using your Firebase project credentials
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyAUgpqB3LoCDjpKNBN-Xec-TUHAKszlQVY",
+  authDomain: "traffic-management-9c2f4.firebaseapp.com",
+  projectId: "traffic-management-9c2f4",
+  storageBucket: "traffic-management-9c2f4.firebasestorage.app",
+  messagingSenderId: "870304007603",
+  appId: "1:870304007603:web:9d347421d1ea2abcc977c6",
+  measurementId: "G-MWNPN4MPQH"
 };
-
-// Validate that all required environment variables are present
-const requiredEnvVars = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID'
-];
-
-const missingEnvVars = requiredEnvVars.filter(envVar => !import.meta.env[envVar]);
-
-if (missingEnvVars.length > 0) {
-  console.error('Missing required Firebase environment variables:', missingEnvVars);
-  console.error('Please check your .env file and ensure all Firebase configuration values are set.');
-  throw new Error(`Missing Firebase configuration: ${missingEnvVars.join(', ')}`);
-}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

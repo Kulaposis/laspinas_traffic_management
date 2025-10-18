@@ -40,27 +40,6 @@ class AuthService {
     }
   }
 
-  async syncFirebaseUser(firebaseUserData) {
-    try {
-      const response = await api.post('/auth/sync-firebase-user', firebaseUserData);
-      const { access_token } = response.data;
-
-      // Store token
-      localStorage.setItem('access_token', access_token);
-
-      // Get user info (this will include the generated username)
-      const userResponse = await api.get('/users/me');
-      localStorage.setItem('user', JSON.stringify(userResponse.data));
-
-      return {
-        token: access_token,
-        user: userResponse.data,
-      };
-    } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to sync Firebase user');
-    }
-  }
-
   async logout() {
     try {
       // Call logout endpoint to log the activity

@@ -2,32 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "src": "dist/index.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|manifest.json).*)",
-      "dest": "/dist/index.html"
+      "src": "/(.*)",
+      "dest": "dist/index.html"
     }
   ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
-      ]
-    }
-  ]
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "framework": "vite"
 }
