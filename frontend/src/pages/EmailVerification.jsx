@@ -173,8 +173,9 @@ const EmailVerification = () => {
             Verify Your Email
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            We've sent a verification link to{' '}
+            A verification link was sent to{' '}
             <span className="font-medium text-gray-900">{user.email}</span>
+            {' '}during registration. Please check your email to verify your account.
           </p>
         </div>
 

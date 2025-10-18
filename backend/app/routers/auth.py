@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
 from ..db import get_db
 from ..schemas.user_schema import UserCreate, UserResponse, Token
 from ..services.auth_service import AuthService
@@ -9,6 +10,72 @@ from ..auth import get_current_user
 from ..models.user import User
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+class FirebaseUserCreate(BaseModel):
+    uid: str
+    email: EmailStr
+    display_name: str
+    email_verified: bool = False
+
+@router.post("/sync-firebase-user", response_model=Token)
+def sync_firebase_user(
+    firebase_user: FirebaseUserCreate,
+    db: Session = Depends(get_db)
+):
+    """Sync Firebase user with backend database and return access token."""
+    auth_service = AuthService(db)
+
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == firebase_user.email).first()
+
+    if existing_user:
+        # User exists, just return token
+        access_token = auth_service.create_access_token_for_user(existing_user)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+
+    # Determine user role - check if this should be an admin user
+    user_role = "citizen"  # Default role
+
+    # Check if no admin exists and this is the first Firebase user, or if email matches known admin patterns
+    existing_admin = db.query(User).filter(User.role.in_(["admin", "lgu_staff"])).first()
+    admin_emails = ["admin@example.com", "admin@traffic.com"]  # Add known admin emails
+
+    if not existing_admin and (firebase_user.email in admin_emails or "admin" in firebase_user.email.lower()):
+        user_role = "admin"
+    elif "staff" in firebase_user.email.lower() or "lgu" in firebase_user.email.lower():
+        user_role = "lgu_staff"
+
+    # Generate unique username for Firebase user
+    base_username = firebase_user.email.split('@')[0]
+    username = base_username
+    counter = 1
+
+    # Ensure username is unique
+    while db.query(User).filter(User.username == username).first():
+        username = f"{base_username}_{counter}"
+        counter += 1
+
+    # Create new user
+    user_data = UserCreate(
+        email=firebase_user.email,
+        username=username,
+        full_name=firebase_user.display_name,
+        password="firebase_user",  # Dummy password for Firebase users
+        role=user_role
+    )
+
+    user = auth_service.register_user(user_data)
+
+    # Create access token
+    access_token = auth_service.create_access_token_for_user(user)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):

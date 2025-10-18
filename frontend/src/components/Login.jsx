@@ -22,6 +22,21 @@ const Login = ({ onLoginSuccess }) => {
     setLoading(false);
 
     if (result.success) {
+      // Try to sync with backend if no backend token exists
+      try {
+        const authService = (await import('../services/authService')).default;
+        if (!authService.getToken()) {
+          await authService.syncFirebaseUser({
+            uid: result.user.uid,
+            email: result.user.email,
+            display_name: result.user.displayName || result.user.email.split('@')[0],
+            email_verified: result.user.emailVerified
+          });
+        }
+      } catch (syncError) {
+        console.warn('Failed to sync Google user with backend:', syncError);
+      }
+
       toast.success(`Welcome, ${result.user.displayName}!`);
       onLoginSuccess(result.user);
     } else {

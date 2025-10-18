@@ -32,26 +32,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration based on environment
-cors_origins = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
-).split(",")
-
-# In production, only allow specific origins
-if os.getenv("ENVIRONMENT") == "production":
-    cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
-    allow_credentials = True
-else:
-    # Development: allow all origins for easier testing
-    cors_origins = ["*"]
-    allow_credentials = True
-
 # CORS middleware - Comprehensive configuration for Emergency Center
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=allow_credentials,
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://localhost:5173", 
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",  # Alternative Vite port
+        "http://127.0.0.1:5174",
+        "*"  # Allow all origins for development
+    ],
+    allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"]

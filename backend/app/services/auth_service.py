@@ -67,3 +67,11 @@ class AuthService:
             "token_type": "bearer",
             "user": user
         }
+
+    def create_access_token_for_user(self, user: User) -> str:
+        """Create access token for existing user."""
+        access_token_expires = timedelta(minutes=30)
+        access_token = create_access_token(
+            data={"sub": user.username}, expires_delta=access_token_expires
+        )
+        return access_token

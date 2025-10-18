@@ -29,10 +29,12 @@ class WebSocketService {
   }
 
   connectWithBackendAuth(user) {
-    // Ensure we pass a numeric user id expected by the backend WS route
-    const numericUserId = Number(user.id);
-    if (!Number.isInteger(numericUserId)) {
-      console.warn('Cannot connect to WebSocket: User id is not numeric');
+    // Check if user has a numeric ID (backend user) or string ID (Firebase user)
+    const userId = user.id;
+    const isNumericId = Number.isInteger(Number(userId));
+
+    if (!isNumericId) {
+      console.warn('Cannot connect to WebSocket: Firebase users are not supported for WebSocket connections');
       return;
     }
 
@@ -40,7 +42,7 @@ class WebSocketService {
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
 
     try {
-      this.socket = new WebSocket(`${wsUrl}/ws/${numericUserId}`);
+      this.socket = new WebSocket(`${wsUrl}/ws/${userId}`);
 
       this.setupSocketHandlers();
     } catch (error) {

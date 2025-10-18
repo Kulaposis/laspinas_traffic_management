@@ -8,7 +8,7 @@ const ProtectedRoute = ({
   requiredRoles = null,
   requireEmailVerification = true
 }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, authMethod } = useAuth();
   const location = useLocation();
   const [isChecking, setIsChecking] = useState(false);
 
@@ -34,8 +34,8 @@ const ProtectedRoute = ({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check email verification if required
-  if (requireEmailVerification && !user.emailVerified) {
+  // Check email verification if required (only for Firebase users)
+  if (requireEmailVerification && authMethod === 'firebase' && user.hasOwnProperty('emailVerified') && user.emailVerified === false) {
     // Redirect to email verification page
     return <Navigate to="/verify-email" state={{ from: location }} replace />;
   }
