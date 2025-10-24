@@ -1,0 +1,36 @@
+name: traffic-management-backend
+runtime: python3.11
+framework: fastapi
+port: 8000
+
+# Environment variables
+env:
+  ENVIRONMENT: production
+  LOG_LEVEL: INFO
+  WEATHER_UPDATE_INTERVAL: "300"
+
+# Database configuration will be set via Leapcell PostgreSQL service
+services:
+  - name: leapcell_db
+    type: postgresql
+    version: "15"
+
+build:
+  commands:
+    - pip install -r requirements.txt
+
+start:
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+
+# Health check endpoint
+healthcheck:
+  path: /health
+  method: GET
+  timeout: 30s
+
+# Resource allocation
+resources:
+  memory: 512Mi
+  cpu: 0.5
+  max_memory: 1Gi
+  max_cpu: 1.0

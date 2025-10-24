@@ -9,7 +9,7 @@ load_dotenv()
 # Database configuration
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "sqlite:///./data/traffic_management.db" if os.getenv("ENVIRONMENT") == "production" else "sqlite:///./traffic_management.db"
+    "sqlite:///./traffic_management.db"
 )
 
 # Handle different database types

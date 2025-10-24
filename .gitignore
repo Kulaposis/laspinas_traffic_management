@@ -10,6 +10,8 @@ ENV/
 .env.production.local
 .env.*
 !.env.example
+backend/.env.*
+!backend/.env.example
 
 # Node.js modules and build outputs
 node_modules/
@@ -123,3 +125,4 @@ lib-cov
 *.jar
 *.war
 *.ear
+.vercel

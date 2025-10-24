@@ -1,0 +1,37 @@
+{
+  "name": "traffic-management-backend",
+  "version": "1.0.0",
+  "description": "Traffic Management System Backend for LGU Operations",
+  "main": "app/main.py",
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "start": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "prod": "gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000",
+    "deploy": "leapcell deploy",
+    "logs": "leapcell logs --follow",
+    "db:migrate": "alembic upgrade head",
+    "db:shell": "leapcell service shell leapcell_db",
+    "test": "python -m pytest",
+    "lint": "flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics"
+  },
+  "keywords": [
+    "traffic-management",
+    "fastapi",
+    "lgu",
+    "emergency-response",
+    "real-time"
+  ],
+  "author": "Traffic Management Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0",
+    "python": ">=3.11"
+  },
+  "dependencies": {
+    "uvicorn": "^0.24.0",
+    "gunicorn": "^21.2.0"
+  },
+  "devDependencies": {
+    "@leapcell/cli": "latest"
+  }
+}
