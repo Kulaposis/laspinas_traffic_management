@@ -1,0 +1,125 @@
+# Dependencies and virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+!.env.example
+
+# Node.js modules and build outputs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.next/
+out/
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+traffic_management.db
+
+# Testing files
+test_*.py
+test_*.js
+test_*.html
+test_*.ts
+test_*.tsx
+tests/
+spec/
+**/*.test.js
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.js
+**/*.spec.ts
+**/*.spec.tsx
+
+# Backend specific test files
+backend/test_*.py
+backend/simple_cors_test.py
+backend/check_*.py
+backend/fix_*.py
+backend/test_admin_api.py
+backend/test_db_schema.py
+backend/test_emergency_debug.py
+backend/test_emergency_final.py
+backend/test_emergency_moderation.py
+backend/test_emergency_with_auth.py
+backend/test_model_db.py
+backend/test_moderation_api.py
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.tmp/
+
+# Mobile folder (as requested)
+mobile/
+
+# Documentation that might be generated
+*.md.bak
+docs/_build/
+
+# Coverage reports
+coverage/
+.coverage
+*.cover
+.pytest_cache/
+.tox/
+
+# Deployment and configuration
+docker-compose.override.yml
+.env.local
+.env.*.local
+
+# Railway deployment
+.railway/
+
+# Other common ignore patterns
+*.pid
+*.seed
+*.pid.lock
+lib-cov
+*.jar
+*.war
+*.ear
