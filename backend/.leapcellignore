@@ -1,0 +1,69 @@
+# Git and version control
+.git
+.gitignore
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+traffic_management.db
+
+# Testing files
+test_*.py
+test_*.js
+test_*.html
+test_*.ts
+test_*.tsx
+
+# Development files
+README.md
+*.md
+!requirements.txt
+
+# Build and deployment scripts
+deploy-*.ps1
+deploy-*.sh
+Dockerfile*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.tmp/
+
+# Mobile folder
+mobile/
