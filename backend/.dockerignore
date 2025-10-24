@@ -1,9 +1,5 @@
-# Version control
-.git
-.gitignore
-
 # Python
-__pycache__
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -28,6 +24,8 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
+.env
 
 # IDE
 .vscode/
@@ -38,44 +36,45 @@ ENV/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+docs/
 
 # Logs
 *.log
 logs/
 
-# Environment files
-.env
-.env.local
-.env.production
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Documentation
-README.md
-*.md
+# Temporary files
+*.tmp
+*.temp
 
-# Docker files (exclude if not needed)
-Dockerfile.*
-docker-compose*
-.dockerignore
-
-# Test files
+# Tests
 tests/
 test_*.py
 *_test.py
 
-# Temporary files
-tmp/
-temp/
-
 # Node modules (if any)
 node_modules/
 
-# Coverage reports
+# Other
+.cache/
+.pytest_cache/
 .coverage
 htmlcov/
-.pytest_cache/
