@@ -34,13 +34,15 @@ app = FastAPI(
 )
 
 # CORS configuration based on environment
-default_cors_origins = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+default_cors_origins = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,https://laspinas-traffic-management-4pdac0hrq-kulaposis-projects.vercel.app"
 cors_origins_env = os.getenv("CORS_ORIGINS", default_cors_origins)
-cors_origins = [origin.strip() for origin in cors_origins_env.split(",")]
+cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
-# In production, only allow specific origins
+# In production, use configured origins or allow all for flexibility
 if os.getenv("ENVIRONMENT") == "production":
-    cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+    # If no specific origins are configured, allow all for deployment flexibility
+    if not cors_origins:
+        cors_origins = ["*"]
     allow_credentials = True
 else:
     # Development: allow all origins for easier testing
