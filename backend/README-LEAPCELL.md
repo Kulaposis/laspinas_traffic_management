@@ -10,11 +10,14 @@ This guide explains how to deploy your Traffic Management System backend to Leap
 
 ## Quick Start
 
-### 1. Install Leapcell CLI
+### 1. Web-Based Deployment (Recommended)
 
-```bash
-npm install -g @leapcell/cli
-```
+Since CLI is not available via npm, use Leapcell's web interface:
+
+1. Go to https://leapcell.io
+2. Sign up/Login with GitHub
+3. Connect your repository: `https://github.com/Kulaposis/laspinas_traffic_management`
+4. Select the `backend` directory as project root
 
 ### 2. Login to Leapcell
 
@@ -36,18 +39,25 @@ cd backend
 .\deploy-to-leapcell.ps1
 ```
 
-#### Option B: Manual Deployment
+### 2. Configure Build Settings
 
-```bash
-# Create PostgreSQL database
-leapcell service create postgres --name leapcell_db --version 15
+```
+Runtime: Python 3.11
+Framework: FastAPI
+Build Command: pip install -r requirements.txt
+Start Command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Port: 8000
+```
 
-# Get database connection URL
-leapcell service info leapcell_db --format json
+### 3. Add Environment Variables
 
-# Copy the connection URL and update .env file
-# Then deploy
-leapcell deploy --config leapcell-config.yaml
+Copy these from `backend/.env.example`:
+
+```
+DATABASE_URL=postgresql://username:password@hostname:5432/database_name
+ENVIRONMENT=production
+CORS_ORIGINS=https://your-frontend-domain.leapcell.dev
+SECRET_KEY=your-super-secret-key-change-this-in-production
 ```
 
 ### 4. Configure Environment Variables

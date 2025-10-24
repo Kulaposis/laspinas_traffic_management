@@ -33,6 +33,7 @@ echo "🔧 Updated .env file with database connection"
 
 # Deploy the service
 echo "🚀 Deploying to Leapcell..."
+echo "📋 Using corrected start command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 leapcell deploy --config leapcell-config.yaml
 
 echo "✅ Deployment complete!"

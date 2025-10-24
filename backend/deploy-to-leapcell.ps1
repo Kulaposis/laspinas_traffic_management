@@ -47,6 +47,7 @@ Write-Host "🔧 Updated .env file with database connection" -ForegroundColor Gr
 
 # Deploy the service
 Write-Host "🚀 Deploying to Leapcell..." -ForegroundColor Blue
+Write-Host "📋 Using corrected start command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" -ForegroundColor Cyan
 leapcell deploy --config leapcell-config.yaml
 
 Write-Host "✅ Deployment complete!" -ForegroundColor Green
