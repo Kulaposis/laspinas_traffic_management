@@ -1,0 +1,29 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="traffic-management-backend",
+    version="1.0.0",
+    description="Traffic Management System Backend for LGU Operations",
+    packages=find_packages(),
+    install_requires=[
+        "fastapi==0.104.1",
+        "uvicorn[standard]==0.24.0",
+        "sqlalchemy==2.0.23",
+        "alembic==1.12.1",
+        "psycopg2-binary==2.9.9",
+        "websockets==12.0",
+        "python-dotenv==1.0.0",
+        "pydantic==2.5.0",
+        "python-multipart==0.0.6",
+        "httpx==0.25.2",
+        "requests==2.31.0",
+        "polyline==1.4.0",
+        "email-validator==2.2.0",
+        "gunicorn==21.2.0"
+    ],
+    entry_points={
+        "console_scripts": [
+            "traffic-management=app.main:app",
+        ],
+    },
+)

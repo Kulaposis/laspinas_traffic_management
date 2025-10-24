@@ -1,0 +1,18 @@
+[build]
+command = "bash build.sh"
+
+[deploy]
+command = "python app.py"
+port = 8000
+
+[service]
+name = "traffic-management-backend"
+runtime = "python3.11"
+
+[healthcheck]
+path = "/health"
+method = "GET"
+
+[environment]
+ENVIRONMENT = "production"
+PYTHONPATH = "/app"

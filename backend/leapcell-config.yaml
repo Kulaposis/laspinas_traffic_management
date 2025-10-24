@@ -1,9 +1,10 @@
 name: traffic-management-backend
 runtime: python3.11
+framework: fastapi
 build:
   command: bash build.sh
 start:
-  command: python app.py
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 port: 8000
 healthcheck:
   path: /health

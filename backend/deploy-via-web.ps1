@@ -12,8 +12,8 @@ Write-Host "5. Select the backend directory as root" -ForegroundColor White
 Write-Host "6. Configure build settings:" -ForegroundColor White
 Write-Host "   - Runtime: Python 3.11" -ForegroundColor White
 Write-Host "   - Framework: FastAPI" -ForegroundColor White
-Write-Host "   - Build Command: pip install -r requirements.txt" -ForegroundColor White
-Write-Host "   - Start Command: uvicorn app.main:app --host 0.0.0.0 --port 8000" -ForegroundColor White
+Write-Host "   - Build Command: bash build.sh" -ForegroundColor White
+Write-Host "   - Start Command: python app.py" -ForegroundColor White
 Write-Host "7. Add environment variables from .env.example" -ForegroundColor White
 Write-Host "8. Deploy!" -ForegroundColor White
 Write-Host ""
