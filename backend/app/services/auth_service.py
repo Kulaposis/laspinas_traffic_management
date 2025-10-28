@@ -4,6 +4,20 @@ from ..models.user import User, UserRole
 from ..schemas.user_schema import UserCreate
 from ..auth import get_password_hash, authenticate_user, create_access_token
 from datetime import timedelta, datetime
+import logging
+
+# Optional Firebase Admin SDK (used for verifying ID tokens)
+try:
+    import firebase_admin
+    from firebase_admin import auth as firebase_auth
+    if not firebase_admin._apps:
+        # Initialize default app. Credentials are picked from env if provided
+        firebase_admin.initialize_app()
+except Exception as _firebase_err:  # noqa: F841
+    # Do not fail if Firebase Admin is not available; we'll skip verification
+    firebase_admin = None
+    firebase_auth = None
+    logging.getLogger(__name__).warning("Firebase Admin SDK not initialized: proceeding without server-side verification")
 
 class AuthService:
     def __init__(self, db: Session):
@@ -73,6 +87,21 @@ class AuthService:
         Sync Firebase user with backend database.
         Creates or updates user and returns access token.
         """
+        # If a Firebase ID token is provided, verify it server-side when possible
+        provided_token = firebase_data.get('firebase_token') or firebase_data.get('idToken')
+        if provided_token and firebase_auth:
+            try:
+                decoded = firebase_auth.verify_id_token(provided_token)
+                # Trust claims from verified token
+                firebase_data['uid'] = decoded.get('uid')
+                firebase_data['email'] = decoded.get('email') or firebase_data.get('email')
+                firebase_data['email_verified'] = decoded.get('email_verified', firebase_data.get('email_verified', False))
+            except Exception as verify_err:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Invalid Firebase ID token: {verify_err}"
+                )
+
         firebase_uid = firebase_data.get('uid')
         email = firebase_data.get('email')
         

@@ -75,9 +75,9 @@ export const AuthProvider = ({ children }) => {
                 setAuthMethod('firebase');
                 localStorage.setItem('user', JSON.stringify(mappedBackendUser));
                 
-                // Store backend token for API calls
+                // Store backend token for API calls (consistent with api.js)
                 if (syncResponse.token) {
-                  localStorage.setItem('token', syncResponse.token);
+                  localStorage.setItem('access_token', syncResponse.token);
                 }
               } else {
                 // Fallback to Firebase user data
