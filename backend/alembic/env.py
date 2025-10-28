@@ -15,6 +15,17 @@ from app.models import *  # Import all models
 # access to the values within the .ini file in use.
 config = context.config
 
+# Override sqlalchemy.url from DATABASE_URL if provided
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    # Ensure sslmode is present for managed providers
+    if "supabase.co" in database_url and "sslmode=" not in database_url:
+        sep = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{sep}sslmode=require"
+    # Escape percent for ConfigParser interpolation
+    safe_url = database_url.replace('%', '%%')
+    config.set_main_option("sqlalchemy.url", safe_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
