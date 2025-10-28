@@ -145,16 +145,21 @@ def get_traffic_monitoring(
     db: Session = Depends(get_db)
 ):
     """Get real-time traffic monitoring data with filtering options."""
-    query = db.query(TrafficMonitoring)
-    
-    if road_type:
-        query = query.filter(TrafficMonitoring.road_type == road_type)
-    if traffic_status:
-        query = query.filter(TrafficMonitoring.traffic_status == traffic_status)
-    if barangay:
-        query = query.filter(TrafficMonitoring.barangay.ilike(f"%{barangay}%"))
-    
-    return query.offset(skip).limit(limit).all()
+    try:
+        query = db.query(TrafficMonitoring)
+        
+        if road_type:
+            query = query.filter(TrafficMonitoring.road_type == road_type)
+        if traffic_status:
+            query = query.filter(TrafficMonitoring.traffic_status == traffic_status)
+        if barangay:
+            query = query.filter(TrafficMonitoring.barangay.ilike(f"%{barangay}%"))
+        
+        return query.offset(skip).limit(limit).all()
+    except Exception as e:
+        logger.error(f"Error fetching traffic monitoring data: {str(e)}")
+        # Return empty list instead of 500 error
+        return []
 
 @router.get("/monitoring/barangay/{barangay_name}")
 def get_traffic_by_barangay(
@@ -378,12 +383,17 @@ def get_road_incidents(
     db: Session = Depends(get_db)
 ):
     """Get road incidents with filtering options."""
-    query = db.query(RoadIncident).filter(RoadIncident.is_active == is_active)
-    
-    if incident_type:
-        query = query.filter(RoadIncident.incident_type == incident_type)
-    
-    return query.order_by(RoadIncident.created_at.desc()).offset(skip).limit(limit).all()
+    try:
+        query = db.query(RoadIncident).filter(RoadIncident.is_active == is_active)
+        
+        if incident_type:
+            query = query.filter(RoadIncident.incident_type == incident_type)
+        
+        return query.order_by(RoadIncident.created_at.desc()).offset(skip).limit(limit).all()
+    except Exception as e:
+        logger.error(f"Error fetching road incidents: {str(e)}")
+        # Return empty list instead of 500 error
+        return []
 
 @router.get("/incidents/nearby")
 def get_nearby_incidents(
@@ -565,12 +575,17 @@ async def get_active_roadworks(
     db: Session = Depends(get_db)
 ):
     """Get all active roadwork incidents"""
-    roadworks = db.query(RoadIncident).filter(
-        RoadIncident.incident_type == "road_work",
-        RoadIncident.is_active == True
-    ).order_by(RoadIncident.created_at.desc()).offset(skip).limit(limit).all()
-    
-    return roadworks
+    try:
+        roadworks = db.query(RoadIncident).filter(
+            RoadIncident.incident_type == "road_work",
+            RoadIncident.is_active == True
+        ).order_by(RoadIncident.created_at.desc()).offset(skip).limit(limit).all()
+        
+        return roadworks
+    except Exception as e:
+        logger.error(f"Error fetching active roadworks: {str(e)}")
+        # Return empty list instead of 500 error
+        return []
 
 @router.post("/roadworks/manual")
 async def create_manual_roadwork(

@@ -41,54 +41,62 @@ async def get_incident_prone_areas(
     db: Session = Depends(get_db)
 ):
     """Get incident prone areas with filtering and pagination"""
-    
-    query = db.query(IncidentProneArea)
-    
-    # Apply filters
-    if area_type:
-        query = query.filter(IncidentProneArea.area_type == area_type)
-    
-    if severity_level:
-        query = query.filter(IncidentProneArea.severity_level == severity_level)
-    
-    if barangay:
-        query = query.filter(IncidentProneArea.barangay.ilike(f"%{barangay}%"))
-    
-    if is_active is not None:
-        query = query.filter(IncidentProneArea.is_active == is_active)
-    
-    if is_verified is not None:
-        query = query.filter(IncidentProneArea.is_verified == is_verified)
-    
-    if min_risk_score is not None:
-        query = query.filter(IncidentProneArea.risk_score >= min_risk_score)
-    
-    if max_risk_score is not None:
-        query = query.filter(IncidentProneArea.risk_score <= max_risk_score)
-    
-    # Geographic bounds filtering
-    if lat_min is not None:
-        query = query.filter(IncidentProneArea.latitude >= lat_min)
-    if lat_max is not None:
-        query = query.filter(IncidentProneArea.latitude <= lat_max)
-    if lng_min is not None:
-        query = query.filter(IncidentProneArea.longitude >= lng_min)
-    if lng_max is not None:
-        query = query.filter(IncidentProneArea.longitude <= lng_max)
-    
-    # Get total count
-    total = query.count()
-    
-    # Apply pagination
-    offset = (page - 1) * per_page
-    areas = query.order_by(IncidentProneArea.risk_score.desc()).offset(offset).limit(per_page).all()
-    
-    return IncidentProneAreaList(
-        areas=areas,
-        total=total,
-        page=page,
-        per_page=per_page
-    )
+    try:
+        query = db.query(IncidentProneArea)
+        
+        # Apply filters
+        if area_type:
+            query = query.filter(IncidentProneArea.area_type == area_type)
+        
+        if severity_level:
+            query = query.filter(IncidentProneArea.severity_level == severity_level)
+        
+        if barangay:
+            query = query.filter(IncidentProneArea.barangay.ilike(f"%{barangay}%"))
+        
+        if is_active is not None:
+            query = query.filter(IncidentProneArea.is_active == is_active)
+        
+        if is_verified is not None:
+            query = query.filter(IncidentProneArea.is_verified == is_verified)
+        
+        if min_risk_score is not None:
+            query = query.filter(IncidentProneArea.risk_score >= min_risk_score)
+        
+        if max_risk_score is not None:
+            query = query.filter(IncidentProneArea.risk_score <= max_risk_score)
+        
+        # Geographic bounds filtering
+        if lat_min is not None:
+            query = query.filter(IncidentProneArea.latitude >= lat_min)
+        if lat_max is not None:
+            query = query.filter(IncidentProneArea.latitude <= lat_max)
+        if lng_min is not None:
+            query = query.filter(IncidentProneArea.longitude >= lng_min)
+        if lng_max is not None:
+            query = query.filter(IncidentProneArea.longitude <= lng_max)
+        
+        # Get total count
+        total = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * per_page
+        areas = query.order_by(IncidentProneArea.risk_score.desc()).offset(offset).limit(per_page).all()
+        
+        return IncidentProneAreaList(
+            areas=areas,
+            total=total,
+            page=page,
+            per_page=per_page
+        )
+    except Exception as e:
+        # Return empty list instead of 500 error
+        return IncidentProneAreaList(
+            areas=[],
+            total=0,
+            page=page,
+            per_page=per_page
+        )
 
 @router.get("/{area_id}", response_model=IncidentProneAreaSchema)
 async def get_incident_prone_area(

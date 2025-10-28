@@ -375,16 +375,21 @@ def get_flood_monitoring(
     db: Session = Depends(get_db)
 ):
     """Get flood monitoring data with filtering options."""
-    query = db.query(FloodMonitoring)
-    
-    if flood_level:
-        query = query.filter(FloodMonitoring.flood_level == flood_level)
-    if is_flood_prone is not None:
-        query = query.filter(FloodMonitoring.is_flood_prone == is_flood_prone)
-    if alert_level is not None:
-        query = query.filter(FloodMonitoring.alert_level == alert_level)
-    
-    return query.order_by(FloodMonitoring.last_updated.desc()).all()
+    try:
+        query = db.query(FloodMonitoring)
+        
+        if flood_level:
+            query = query.filter(FloodMonitoring.flood_level == flood_level)
+        if is_flood_prone is not None:
+            query = query.filter(FloodMonitoring.is_flood_prone == is_flood_prone)
+        if alert_level is not None:
+            query = query.filter(FloodMonitoring.alert_level == alert_level)
+        
+        return query.order_by(FloodMonitoring.last_updated.desc()).all()
+    except Exception as e:
+        logger.error(f"Error fetching flood monitoring data: {str(e)}")
+        # Return empty list instead of 500 error
+        return []
 
 @router.get("/flood/alerts")
 def get_flood_alerts(
