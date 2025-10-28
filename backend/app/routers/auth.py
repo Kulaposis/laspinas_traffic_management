@@ -7,6 +7,9 @@ from ..services.auth_service import AuthService
 from ..services.activity_logger import get_activity_logger
 from ..auth import get_current_user
 from ..models.user import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -83,14 +86,18 @@ def firebase_sync(firebase_data: FirebaseSync, db: Session = Depends(get_db)):
     Sync Firebase user with backend database.
     Creates or updates user from Firebase authentication.
     """
+    logger.info(f"Firebase sync request received for UID: {firebase_data.uid}, Email: {firebase_data.email}")
+    
     auth_service = AuthService(db)
     
     try:
         # Convert Pydantic model to dict for service
         firebase_dict = firebase_data.dict()
+        logger.info(f"Firebase data dict: {firebase_dict}")
         
         # Sync user and get token
         result = auth_service.sync_firebase_user(firebase_dict)
+        logger.info(f"Firebase sync successful for user: {result['user'].email}")
         
         return {
             "access_token": result["access_token"],
@@ -107,8 +114,10 @@ def firebase_sync(firebase_data: FirebaseSync, db: Session = Depends(get_db)):
             }
         }
     except HTTPException as e:
+        logger.error(f"HTTPException in Firebase sync: {e.detail}")
         raise e
     except Exception as e:
+        logger.error(f"Unexpected error in Firebase sync: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Firebase sync failed: {str(e)}"

@@ -96,11 +96,15 @@ class AuthService:
                 firebase_data['uid'] = decoded.get('uid')
                 firebase_data['email'] = decoded.get('email') or firebase_data.get('email')
                 firebase_data['email_verified'] = decoded.get('email_verified', firebase_data.get('email_verified', False))
+                logging.getLogger(__name__).info(f"Firebase token verified for UID: {firebase_data['uid']}")
             except Exception as verify_err:
+                logging.getLogger(__name__).error(f"Firebase token verification failed: {verify_err}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail=f"Invalid Firebase ID token: {verify_err}"
                 )
+        else:
+            logging.getLogger(__name__).warning("No Firebase token provided or Firebase Admin not available - proceeding without verification")
 
         firebase_uid = firebase_data.get('uid')
         email = firebase_data.get('email')
@@ -116,40 +120,51 @@ class AuthService:
             (User.firebase_uid == firebase_uid) | (User.email == email)
         ).first()
         
-        if user:
-            # Update existing user
-            user.firebase_uid = firebase_uid
-            user.email = email
-            user.full_name = firebase_data.get('full_name', user.full_name)
-            user.photo_url = firebase_data.get('photo_url')
-            user.email_verified = firebase_data.get('email_verified', False)
-            user.updated_at = datetime.utcnow()
-        else:
-            # Create new user from Firebase data
-            username = email.split('@')[0]  # Generate username from email
+        try:
+            if user:
+                # Update existing user
+                logging.getLogger(__name__).info(f"Updating existing user: {user.email}")
+                user.firebase_uid = firebase_uid
+                user.email = email
+                user.full_name = firebase_data.get('full_name', user.full_name)
+                user.photo_url = firebase_data.get('photo_url')
+                user.email_verified = firebase_data.get('email_verified', False)
+                user.updated_at = datetime.utcnow()
+            else:
+                # Create new user from Firebase data
+                username = email.split('@')[0]  # Generate username from email
+                
+                # Ensure username is unique
+                base_username = username
+                counter = 1
+                while self.db.query(User).filter(User.username == username).first():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+                
+                logging.getLogger(__name__).info(f"Creating new user: {email} with username: {username}")
+                user = User(
+                    firebase_uid=firebase_uid,
+                    email=email,
+                    username=username,
+                    full_name=firebase_data.get('full_name', email.split('@')[0]),
+                    photo_url=firebase_data.get('photo_url'),
+                    email_verified=firebase_data.get('email_verified', False),
+                    hashed_password=None,  # No password for Firebase users
+                    role=UserRole.CITIZEN,  # Default role
+                    is_active=True
+                )
+                self.db.add(user)
             
-            # Ensure username is unique
-            base_username = username
-            counter = 1
-            while self.db.query(User).filter(User.username == username).first():
-                username = f"{base_username}{counter}"
-                counter += 1
-            
-            user = User(
-                firebase_uid=firebase_uid,
-                email=email,
-                username=username,
-                full_name=firebase_data.get('full_name', email.split('@')[0]),
-                photo_url=firebase_data.get('photo_url'),
-                email_verified=firebase_data.get('email_verified', False),
-                hashed_password=None,  # No password for Firebase users
-                role=UserRole.CITIZEN,  # Default role
-                is_active=True
+            self.db.commit()
+            self.db.refresh(user)
+            logging.getLogger(__name__).info(f"User operation successful: {user.email}")
+        except Exception as db_err:
+            self.db.rollback()
+            logging.getLogger(__name__).error(f"Database error during user sync: {db_err}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(db_err)}"
             )
-            self.db.add(user)
-        
-        self.db.commit()
-        self.db.refresh(user)
         
         # Generate access token
         access_token_expires = timedelta(minutes=30)
