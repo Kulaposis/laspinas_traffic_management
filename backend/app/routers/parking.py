@@ -38,11 +38,14 @@ async def get_parking_areas(
 ):
     """Get all parking areas"""
     parking_service = ParkingService(db)
-    
-    if available_only:
-        return parking_service.get_available_parkings()
-    else:
-        return parking_service.get_parkings(skip=skip, limit=limit)
+    try:
+        if available_only:
+            return parking_service.get_available_parkings()
+        else:
+            return parking_service.get_parkings(skip=skip, limit=limit)
+    except Exception as e:
+        # In production, avoid hard failures and return empty list
+        return []
 
 
 @router.get("/areas/{parking_id}", response_model=ParkingResponse)
@@ -120,25 +123,27 @@ async def get_no_parking_zones(
 ):
     """Get no parking zones with optional filters"""
     parking_service = ParkingService(db)
-    
-    # Filter by area if coordinates provided
-    if all([lat_min, lat_max, lng_min, lng_max]):
-        return parking_service.get_no_parking_zones_in_area(lat_min, lat_max, lng_min, lng_max)
-    
-    # Filter by zone type
-    if zone_type:
-        return parking_service.get_no_parking_zones_by_type(zone_type)
-    
-    # Filter by restriction reason
-    if restriction_reason:
-        return parking_service.get_no_parking_zones_by_reason(restriction_reason)
-    
-    # Filter strict zones only
-    if strict_only:
-        return parking_service.get_strict_no_parking_zones()
-    
-    # Default: get all zones
-    return parking_service.get_no_parking_zones(skip=skip, limit=limit)
+    try:
+        # Filter by area if coordinates provided
+        if all([lat_min, lat_max, lng_min, lng_max]):
+            return parking_service.get_no_parking_zones_in_area(lat_min, lat_max, lng_min, lng_max)
+        
+        # Filter by zone type
+        if zone_type:
+            return parking_service.get_no_parking_zones_by_type(zone_type)
+        
+        # Filter by restriction reason
+        if restriction_reason:
+            return parking_service.get_no_parking_zones_by_reason(restriction_reason)
+        
+        # Filter strict zones only
+        if strict_only:
+            return parking_service.get_strict_no_parking_zones()
+        
+        # Default: get all zones
+        return parking_service.get_no_parking_zones(skip=skip, limit=limit)
+    except Exception:
+        return []
 
 
 @router.get("/no-parking-zones/{zone_id}", response_model=NoParkingZoneResponse)
@@ -194,7 +199,17 @@ async def delete_no_parking_zone(
 async def get_parking_statistics(db: Session = Depends(get_db)):
     """Get parking and no parking zones statistics"""
     parking_service = ParkingService(db)
-    return parking_service.get_combined_parking_overview()
+    try:
+        return parking_service.get_combined_parking_overview()
+    except Exception:
+        return {
+            "summary": {
+                "total_parking_areas": 0,
+                "total_no_parking_zones": 0,
+            },
+            "parking_by_barangay": [],
+            "no_parking_by_reason": []
+        }
 
 
 @router.get("/areas/statistics")

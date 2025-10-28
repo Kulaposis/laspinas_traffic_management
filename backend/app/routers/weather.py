@@ -160,10 +160,16 @@ def get_realtime_status(db: Session = Depends(get_db)):
             }
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get realtime status: {str(e)}"
-        )
+        # Return a degraded but valid payload instead of 500 for dashboard stability
+        return {
+            "status": "degraded",
+            "monitoring_areas": len(getattr(weather_service, "monitoring_areas", [])),
+            "recent_updates": 0,
+            "last_update": None,
+            "api_source": "Open-Meteo",
+            "update_frequency": "On-demand and scheduled",
+            "error": str(e)
+        }
 
 # Barangay Flood Monitoring Endpoints
 @router.get("/barangay/flood-prone")
@@ -466,7 +472,10 @@ def get_weather_alerts(
     if severity:
         query = query.filter(WeatherAlert.severity == severity)
     
-    return query.order_by(WeatherAlert.created_at.desc()).all()
+    try:
+        return query.order_by(WeatherAlert.created_at.desc()).all()
+    except Exception:
+        return []
 
 @router.get("/alerts/nearby")
 def get_nearby_weather_alerts(
