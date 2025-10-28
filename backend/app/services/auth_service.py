@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from ..models.user import User
+from ..models.user import User, UserRole
 from ..schemas.user_schema import UserCreate
 from ..auth import get_password_hash, authenticate_user, create_access_token
 from datetime import timedelta, datetime
@@ -114,7 +114,7 @@ class AuthService:
                 photo_url=firebase_data.get('photo_url'),
                 email_verified=firebase_data.get('email_verified', False),
                 hashed_password=None,  # No password for Firebase users
-                role='citizen',  # Default role
+                role=UserRole.CITIZEN,  # Default role
                 is_active=True
             )
             self.db.add(user)
