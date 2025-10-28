@@ -35,7 +35,7 @@ Since the CLI is not available via npm, use Leapcell's web interface:
 Runtime: Python 3.11
 Framework: FastAPI
 Build Command: pip install -r requirements.txt
-Start Command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+Start Command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Port: 8000
 ```
 

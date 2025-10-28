@@ -7,8 +7,8 @@ import sys
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import the FastAPI app and wrap it for WSGI
-from app import application
+# Import the FastAPI app directly from main
+from app.main import app
 
 # This provides the WSGI application object
-app = application
+application = app
