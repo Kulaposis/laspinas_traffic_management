@@ -9,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from sqlalchemy.orm import Session
 from app.db import SessionLocal, engine
 from app.models import *
+from app.models.traffic import RoadType, TrafficStatus
+from app.db import Base
 from datetime import datetime, timedelta
 import random
 
@@ -18,33 +20,33 @@ def create_sample_traffic_data():
         # Las Piñas City major roads and intersections
         traffic_points = [
             # Alabang-Zapote Road
-            {"road_name": "Alabang-Zapote Road (near Festival Mall)", "latitude": 14.4194, "longitude": 121.0433, "road_type": "main_road"},
-            {"road_name": "Alabang-Zapote Road (near Southmall)", "latitude": 14.4589, "longitude": 121.0367, "road_type": "main_road"},
-            {"road_name": "Alabang-Zapote Road (Pulang Lupa)", "latitude": 14.4756, "longitude": 121.0289, "road_type": "main_road"},
+            {"road_name": "Alabang-Zapote Road (near Festival Mall)", "latitude": 14.4194, "longitude": 121.0433, "road_type": RoadType.MAIN_ROAD, "barangay": "Pulang Lupa Uno"},
+            {"road_name": "Alabang-Zapote Road (near Southmall)", "latitude": 14.4589, "longitude": 121.0367, "road_type": RoadType.MAIN_ROAD, "barangay": "Pulang Lupa Dos"},
+            {"road_name": "Alabang-Zapote Road (Pulang Lupa)", "latitude": 14.4756, "longitude": 121.0289, "road_type": RoadType.MAIN_ROAD, "barangay": "Pulang Lupa Uno"},
             
             # Marcos Alvarez Avenue
-            {"road_name": "Marcos Alvarez Avenue (Talon)", "latitude": 14.4983, "longitude": 121.0067, "road_type": "main_road"},
-            {"road_name": "Marcos Alvarez Avenue (near City Hall)", "latitude": 14.4547, "longitude": 121.0178, "road_type": "main_road"},
+            {"road_name": "Marcos Alvarez Avenue (Talon)", "latitude": 14.4983, "longitude": 121.0067, "road_type": RoadType.MAIN_ROAD, "barangay": "Talon Uno"},
+            {"road_name": "Marcos Alvarez Avenue (near City Hall)", "latitude": 14.4547, "longitude": 121.0178, "road_type": RoadType.MAIN_ROAD, "barangay": "Pamplona Uno"},
             
             # CAA Road
-            {"road_name": "CAA Road (near Robinsons)", "latitude": 14.4478, "longitude": 121.0311, "road_type": "main_road"},
-            {"road_name": "CAA Road (Pilar Village)", "latitude": 14.4333, "longitude": 121.0378, "road_type": "residential"},
+            {"road_name": "CAA Road (near Robinsons)", "latitude": 14.4478, "longitude": 121.0311, "road_type": RoadType.MAIN_ROAD, "barangay": "CAA"},
+            {"road_name": "CAA Road (Pilar Village)", "latitude": 14.4333, "longitude": 121.0378, "road_type": RoadType.RESIDENTIAL, "barangay": "Pilar"},
             
             # Real Street
-            {"road_name": "Real Street (Pamplona)", "latitude": 14.4667, "longitude": 121.0456, "road_type": "side_street"},
-            {"road_name": "Real Street (near Public Market)", "latitude": 14.4578, "longitude": 121.0489, "road_type": "side_street"},
+            {"road_name": "Real Street (Pamplona)", "latitude": 14.4667, "longitude": 121.0456, "road_type": RoadType.SIDE_STREET, "barangay": "Pamplona Dos"},
+            {"road_name": "Real Street (near Public Market)", "latitude": 14.4578, "longitude": 121.0489, "road_type": RoadType.SIDE_STREET, "barangay": "Pamplona Tres"},
             
             # Daang Hari Road
-            {"road_name": "Daang Hari Road (Almanza)", "latitude": 14.4122, "longitude": 121.0256, "road_type": "highway"},
-            {"road_name": "Daang Hari Road (BF Homes)", "latitude": 14.4344, "longitude": 121.0089, "road_type": "highway"},
+            {"road_name": "Daang Hari Road (Almanza)", "latitude": 14.4122, "longitude": 121.0256, "road_type": RoadType.HIGHWAY, "barangay": "Almanza Uno"},
+            {"road_name": "Daang Hari Road (BF Homes)", "latitude": 14.4344, "longitude": 121.0089, "road_type": RoadType.HIGHWAY, "barangay": "B.F. International Village"},
             
             # CAVITEX
-            {"road_name": "CAVITEX (Las Piñas Exit)", "latitude": 14.4456, "longitude": 121.0022, "road_type": "highway"},
+            {"road_name": "CAVITEX (Las Piñas Exit)", "latitude": 14.4456, "longitude": 121.0022, "road_type": RoadType.HIGHWAY, "barangay": "CAA"},
             
             # Local streets
-            {"road_name": "Elias Aldana Street", "latitude": 14.4611, "longitude": 121.0244, "road_type": "residential"},
-            {"road_name": "Bamboo Street (Moonwalk)", "latitude": 14.4389, "longitude": 121.0556, "road_type": "residential"},
-            {"road_name": "Admiral Street (BF Homes)", "latitude": 14.4278, "longitude": 121.0111, "road_type": "residential"},
+            {"road_name": "Elias Aldana Street", "latitude": 14.4611, "longitude": 121.0244, "road_type": RoadType.RESIDENTIAL, "barangay": "Elias Aldana"},
+            {"road_name": "Bamboo Street (Moonwalk)", "latitude": 14.4389, "longitude": 121.0556, "road_type": RoadType.RESIDENTIAL, "barangay": "Moonwalk"},
+            {"road_name": "Admiral Street (BF Homes)", "latitude": 14.4278, "longitude": 121.0111, "road_type": RoadType.RESIDENTIAL, "barangay": "B.F. International Village"},
         ]
         
         # Create traffic monitoring entries
@@ -55,29 +57,29 @@ def create_sample_traffic_data():
             
             # Simulate rush hour traffic (7-9 AM, 5-7 PM Philippine time = 23-1, 9-11 UTC)
             if hour in [23, 0, 1, 9, 10, 11]:  # Rush hours
-                if point["road_type"] == "highway":
-                    traffic_status = random.choice(["moderate", "heavy", "heavy"])
+                if point["road_type"] == RoadType.HIGHWAY:
+                    traffic_status = random.choice([TrafficStatus.MODERATE, TrafficStatus.HEAVY, TrafficStatus.HEAVY])
                     congestion = random.randint(60, 90)
                     speed = random.randint(15, 30)
-                elif point["road_type"] == "main_road":
-                    traffic_status = random.choice(["light", "moderate", "heavy"])
+                elif point["road_type"] == RoadType.MAIN_ROAD:
+                    traffic_status = random.choice([TrafficStatus.LIGHT, TrafficStatus.MODERATE, TrafficStatus.HEAVY])
                     congestion = random.randint(40, 75)
                     speed = random.randint(20, 40)
                 else:
-                    traffic_status = random.choice(["free_flow", "light", "moderate"])
+                    traffic_status = random.choice([TrafficStatus.FREE_FLOW, TrafficStatus.LIGHT, TrafficStatus.MODERATE])
                     congestion = random.randint(20, 50)
                     speed = random.randint(25, 45)
             else:  # Off-peak hours
-                if point["road_type"] == "highway":
-                    traffic_status = random.choice(["free_flow", "light"])
+                if point["road_type"] == RoadType.HIGHWAY:
+                    traffic_status = random.choice([TrafficStatus.FREE_FLOW, TrafficStatus.LIGHT])
                     congestion = random.randint(10, 35)
                     speed = random.randint(50, 80)
-                elif point["road_type"] == "main_road":
-                    traffic_status = random.choice(["free_flow", "light"])
+                elif point["road_type"] == RoadType.MAIN_ROAD:
+                    traffic_status = random.choice([TrafficStatus.FREE_FLOW, TrafficStatus.LIGHT])
                     congestion = random.randint(15, 40)
                     speed = random.randint(35, 60)
                 else:
-                    traffic_status = "free_flow"
+                    traffic_status = TrafficStatus.FREE_FLOW
                     congestion = random.randint(5, 25)
                     speed = random.randint(30, 50)
             
@@ -101,6 +103,7 @@ def create_sample_traffic_data():
                     road_type=point["road_type"],
                     latitude=point["latitude"],
                     longitude=point["longitude"],
+                    barangay=point["barangay"],
                     traffic_status=traffic_status,
                     average_speed_kmh=speed,
                     vehicle_count=random.randint(5, 50),
@@ -183,15 +186,15 @@ def create_sample_weather_data():
             wind_speed = random.uniform(5, 25)
             rainfall = random.uniform(0, 5) if random.random() < 0.3 else 0  # 30% chance of rain
             
-            weather_condition = "clear"
+            weather_condition = "CLEAR"
             if rainfall > 2:
-                weather_condition = "heavy_rain"
+                weather_condition = "HEAVY_RAIN"
             elif rainfall > 0.5:
-                weather_condition = "light_rain"
+                weather_condition = "LIGHT_RAIN"
             elif humidity > 85:
-                weather_condition = "cloudy"
+                weather_condition = "CLOUDY"
             elif temp > 32:
-                weather_condition = "clear"
+                weather_condition = "CLEAR"
             
             # Check if data already exists for this area
             existing = db.query(WeatherData).filter(

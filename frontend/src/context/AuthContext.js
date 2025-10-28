@@ -45,25 +45,78 @@ export const AuthProvider = ({ children }) => {
             // Wait for Firebase to fully load user data
             await firebaseUser.reload();
 
-            // User is signed in with Firebase
-            const mappedUser = {
-              id: firebaseUser.uid,
-              uid: firebaseUser.uid,
-              full_name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-              displayName: firebaseUser.displayName,
-              email: firebaseUser.email,
-              photoURL: firebaseUser.photoURL,
-              emailVerified: firebaseUser.emailVerified || false,
-              role: 'citizen', // default role for Firebase users
-            };
+            // Get Firebase ID token to authenticate with backend
+            const idToken = await firebaseUser.getIdToken();
 
-            setUser(mappedUser);
-            setAuthMethod('firebase');
+            // Sync Firebase user with backend database
+            try {
+              const syncResponse = await authService.syncFirebaseUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+                emailVerified: firebaseUser.emailVerified,
+                idToken: idToken
+              });
 
-            // Update localStorage
-            localStorage.setItem('user', JSON.stringify(mappedUser));
+              // Use backend user data if sync successful
+              if (syncResponse && syncResponse.user) {
+                // Map backend user data to match frontend format (snake_case to camelCase)
+                const mappedBackendUser = {
+                  ...syncResponse.user,
+                  emailVerified: syncResponse.user.email_verified !== undefined 
+                    ? syncResponse.user.email_verified 
+                    : firebaseUser.emailVerified, // Fallback to Firebase value
+                  photoURL: syncResponse.user.photo_url,
+                  displayName: syncResponse.user.full_name
+                };
+                
+                setUser(mappedBackendUser);
+                setAuthMethod('firebase');
+                localStorage.setItem('user', JSON.stringify(mappedBackendUser));
+                
+                // Store backend token for API calls
+                if (syncResponse.token) {
+                  localStorage.setItem('token', syncResponse.token);
+                }
+              } else {
+                // Fallback to Firebase user data
+                const mappedUser = {
+                  id: firebaseUser.uid,
+                  uid: firebaseUser.uid,
+                  full_name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                  displayName: firebaseUser.displayName,
+                  email: firebaseUser.email,
+                  photoURL: firebaseUser.photoURL,
+                  emailVerified: firebaseUser.emailVerified || false,
+                  role: 'citizen',
+                };
+
+                setUser(mappedUser);
+                setAuthMethod('firebase');
+                localStorage.setItem('user', JSON.stringify(mappedUser));
+              }
+            } catch (syncError) {
+              console.error('Error syncing Firebase user with backend:', syncError);
+              
+              // Fallback: Use Firebase user data without backend sync
+              const mappedUser = {
+                id: firebaseUser.uid,
+                uid: firebaseUser.uid,
+                full_name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+                displayName: firebaseUser.displayName,
+                email: firebaseUser.email,
+                photoURL: firebaseUser.photoURL,
+                emailVerified: firebaseUser.emailVerified || false,
+                role: 'citizen',
+              };
+
+              setUser(mappedUser);
+              setAuthMethod('firebase');
+              localStorage.setItem('user', JSON.stringify(mappedUser));
+            }
           } catch (error) {
-            console.error('Error reloading Firebase user:', error);
+            console.error('Error processing Firebase user:', error);
           }
         } else {
           // User is signed out from Firebase, also check backend auth

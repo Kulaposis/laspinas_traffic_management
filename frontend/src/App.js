@@ -32,7 +32,7 @@ import AdminUserManagement from './pages/AdminUserManagement';
 import AdminSystemSettings from './pages/AdminSystemSettings';
 
 const AppContent = () => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, authMethod } = useAuth();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -55,7 +55,7 @@ const AppContent = () => {
   const isMobileOnlyView = false; // Removed mobile-only traffic monitoring
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && authMethod === 'backend') {
       websocketService.connect();
     } else {
       websocketService.disconnect();
@@ -64,7 +64,7 @@ const AppContent = () => {
     return () => {
       websocketService.disconnect();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authMethod]);
 
   // Close mobile sidebar when route changes
   useEffect(() => {
@@ -89,6 +89,9 @@ const AppContent = () => {
   }
 
   // Check if user is authenticated but email not verified
+  // Only redirect to email verification for email/password sign-ups (not Google sign-in)
+  // Google sign-in users have their email already verified by Google, so emailVerified will be true
+  // This condition will only be true for email/password registrations that need verification
   if (user && !user.emailVerified) {
     return (
       <Routes>

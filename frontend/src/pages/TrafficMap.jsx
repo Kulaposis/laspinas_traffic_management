@@ -133,6 +133,31 @@ const createCustomIcon = (color, iconType = 'pin') => {
   });
 };
 
+// Best-effort display helpers for saved trips
+const formatCoords = (lat, lng) => {
+  if (typeof lat === 'number' && typeof lng === 'number') {
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+  return 'Unknown';
+};
+
+const getTripPlaceName = (trip, which = 'origin') => {
+  try {
+    const isOrigin = which === 'origin';
+    const nameField = isOrigin ? trip?.origin_name : trip?.destination_name;
+    if (nameField && String(nameField).trim() !== '') return nameField;
+
+    const obj = isOrigin ? trip?.origin : trip?.destination;
+    if (obj?.name && String(obj.name).trim() !== '') return obj.name;
+
+    const lat = isOrigin ? (trip?.origin_lat ?? obj?.lat) : (trip?.destination_lat ?? obj?.lat);
+    const lng = isOrigin ? (trip?.origin_lng ?? obj?.lng) : (trip?.destination_lng ?? obj?.lng);
+    return formatCoords(lat, lng);
+  } catch {
+    return 'Unknown';
+  }
+};
+
 const TrafficMap = () => {
   const { user } = useAuth();
   const mapRef = useRef(null);
@@ -201,9 +226,20 @@ const TrafficMap = () => {
   const [routeTrafficData, setRouteTrafficData] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
+  // Simulation states
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationProgress, setSimulationProgress] = useState(0);
+  const [simulationSpeed, setSimulationSpeed] = useState(1); // 1x, 2x, 5x, 10x
+  const [simulatedLocation, setSimulatedLocation] = useState(null);
+  const [simulationStartTime, setSimulationStartTime] = useState(null);
+  const [simulationPaused, setSimulationPaused] = useState(false);
+  const [simulationMinimized, setSimulationMinimized] = useState(false);
+  const [currentSimulationIndex, setCurrentSimulationIndex] = useState(0);
+
   // Refs
   const searchTimeoutRef = useRef(null);
   const navigationTimeoutRef = useRef(null);
+  const simulationIntervalRef = useRef(null);
 
   // Load user's personalized data
   useEffect(() => {
@@ -390,7 +426,7 @@ const TrafficMap = () => {
   }, [recentSearches, searchMode]);
 
   // Get current location
-  const getCurrentLocation = useCallback(() => {
+  const getCurrentLocation = useCallback((mode = searchMode) => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -402,7 +438,7 @@ const TrafficMap = () => {
           };
           setCurrentLocation(location);
 
-          if (searchMode === 'origin') {
+          if (mode === 'origin') {
             setSelectedOrigin(location);
             setOriginQuery(location.name || 'Current Location'); // Set the query to show the location name
           } else {
@@ -540,10 +576,14 @@ const TrafficMap = () => {
         const processedRouteData = { ...routeData, routes: validRoutes };
         setCurrentRoute(processedRouteData);
 
-        // If we got multiple routes, show route selection
+        // Store all route alternatives
+        setRouteAlternatives(validRoutes);
+        
+        // If we got multiple routes, show route selection panel
         if (validRoutes.length > 1) {
           setShowRouteAlternatives(true);
-          setRouteAlternatives(validRoutes);
+          // Select the recommended route by default
+          setSelectedRoute(processedRouteData.recommended_route || validRoutes[0]);
         } else {
           // Single route, select it directly
           setSelectedRoute(processedRouteData.recommended_route || validRoutes[0]);
@@ -626,6 +666,9 @@ const TrafficMap = () => {
 
     // Stop GPS tracking
     stopLocationTracking();
+    
+    // Stop simulation if active
+    stopSimulation();
   };
 
   // Start GPS location tracking
@@ -767,6 +810,197 @@ const TrafficMap = () => {
     }
   };
 
+  // Start travel simulation
+  const startSimulation = () => {
+    if (!selectedRoute || !selectedRoute.route_coordinates || selectedRoute.route_coordinates.length < 2) {
+      alert('Please select a valid route first');
+      return;
+    }
+
+    setIsSimulating(true);
+    setSimulationProgress(0);
+    setSimulationPaused(false);
+    setSimulationStartTime(new Date());
+    
+    // Set initial simulated location to origin
+    const startCoords = selectedRoute.route_coordinates[0];
+    setSimulatedLocation({
+      lat: startCoords[0],
+      lng: startCoords[1],
+      timestamp: Date.now()
+    });
+
+    // Center map on starting point
+    setMapCenter([startCoords[0], startCoords[1]]);
+    setMapZoom(16);
+
+    // Start simulation animation
+    runSimulation();
+  };
+
+  // Run simulation animation
+  const runSimulation = () => {
+    if (!selectedRoute || !selectedRoute.route_coordinates) return;
+
+    const totalPoints = selectedRoute.route_coordinates.length;
+    let currentIndex = currentSimulationIndex;
+
+    // Calculate interval based on speed (faster = shorter interval)
+    const baseInterval = 100; // milliseconds
+    const interval = baseInterval / simulationSpeed;
+
+    simulationIntervalRef.current = setInterval(() => {
+      if (simulationPaused) return;
+
+      currentIndex++;
+      
+      if (currentIndex >= totalPoints) {
+        // Simulation complete
+        completeSimulation();
+        return;
+      }
+
+      const coords = selectedRoute.route_coordinates[currentIndex];
+      const progress = (currentIndex / totalPoints) * 100;
+
+      setCurrentSimulationIndex(currentIndex);
+      setSimulatedLocation({
+        lat: coords[0],
+        lng: coords[1],
+        timestamp: Date.now()
+      });
+
+      setSimulationProgress(progress);
+
+      // Auto-center map on simulated location
+      setMapCenter([coords[0], coords[1]]);
+
+      // Update navigation step based on progress
+      if (selectedRoute.steps) {
+        const stepIndex = Math.floor((currentIndex / totalPoints) * selectedRoute.steps.length);
+        setNavigationStep(Math.min(stepIndex, selectedRoute.steps.length - 1));
+      }
+    }, interval);
+  };
+
+  // Pause/Resume simulation
+  const toggleSimulationPause = () => {
+    setSimulationPaused(!simulationPaused);
+  };
+
+  // Stop simulation
+  const stopSimulation = () => {
+    if (simulationIntervalRef.current) {
+      clearInterval(simulationIntervalRef.current);
+      simulationIntervalRef.current = null;
+    }
+    setIsSimulating(false);
+    setSimulationProgress(0);
+    setSimulatedLocation(null);
+    setSimulationPaused(false);
+    setSimulationMinimized(false);
+    setCurrentSimulationIndex(0);
+  };
+
+  // Complete simulation and save to history
+  const completeSimulation = async () => {
+    if (simulationIntervalRef.current) {
+      clearInterval(simulationIntervalRef.current);
+      simulationIntervalRef.current = null;
+    }
+
+    const endTime = new Date();
+    const durationMinutes = simulationStartTime 
+      ? (endTime - simulationStartTime) / 1000 / 60 
+      : selectedRoute.estimated_duration_minutes;
+
+    // Save to travel history (only if user is logged in)
+    if (user && selectedOrigin && selectedDestination && selectedRoute) {
+      try {
+        await travelHistoryService.saveTravelSession({
+          origin: {
+            name: selectedOrigin.name || 'Unknown Origin',
+            lat: selectedOrigin.lat,
+            lng: selectedOrigin.lng,
+            address: selectedOrigin.address || { full: '' }
+          },
+          destination: {
+            name: selectedDestination.name || 'Unknown Destination',
+            lat: selectedDestination.lat,
+            lng: selectedDestination.lng,
+            address: selectedDestination.address || { full: '' }
+          },
+          routeData: {
+            route_id: selectedRoute.route_id || 'simulated',
+            route_name: selectedRoute.route_name || 'Simulated Route',
+            distance_km: selectedRoute.distance_km || 0,
+            estimated_duration_minutes: selectedRoute.estimated_duration_minutes || 0
+          },
+          durationMinutes: durationMinutes,
+          distanceKm: selectedRoute.distance_km || 0,
+          startTime: simulationStartTime ? simulationStartTime.toISOString() : new Date().toISOString(),
+          endTime: endTime.toISOString(),
+          travelMode: 'car',
+          trafficConditions: selectedRoute.traffic_conditions || 'light',
+          notes: 'Simulated trip'
+        });
+
+        // Refresh travel history
+        await loadUserData();
+
+        alert('✅ Simulation complete! Trip saved to your travel history.');
+      } catch (error) {
+        console.error('Error saving simulated trip:', error);
+        // Check if it's an authentication error
+        if (error.response?.status === 401) {
+          alert('✅ Simulation complete!\n\n⚠️ Note: You need to be logged in to save trips to your travel history.');
+        } else {
+          alert('✅ Simulation complete!\n\n⚠️ Could not save to travel history: ' + (error.message || 'Unknown error'));
+        }
+      }
+    } else if (!user) {
+      // User not logged in
+      alert('✅ Simulation complete!\n\n💡 Tip: Log in to save your simulated trips to travel history.');
+    } else {
+      alert('✅ Simulation complete!');
+    }
+
+    // Reset simulation state
+    setIsSimulating(false);
+    setSimulationProgress(100);
+    setSimulationPaused(false);
+    setSimulationMinimized(false);
+    setCurrentSimulationIndex(0);
+    
+    // Keep simulated location at destination for a moment
+    setTimeout(() => {
+      setSimulatedLocation(null);
+      setSimulationProgress(0);
+    }, 3000);
+  };
+
+  // Change simulation speed
+  const changeSimulationSpeed = (speed) => {
+    setSimulationSpeed(speed);
+    
+    // Restart simulation with new speed if currently running
+    if (isSimulating && !simulationPaused) {
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+      }
+      runSimulation();
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current);
+      }
+    };
+  }, []);
+
   // Map event handlers
   const MapEvents = () => {
     useMapEvents({
@@ -799,6 +1033,10 @@ const TrafficMap = () => {
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
           ref={mapRef}
+          minZoom={3}
+          maxZoom={18}
+          maxBounds={[[-90, -180], [90, 180]]}
+          maxBoundsViscosity={1.0}
         >
           <MapEvents />
           
@@ -844,7 +1082,7 @@ const TrafficMap = () => {
           )}
 
           {/* User Location Marker */}
-          {userLocation && (
+          {userLocation && !isSimulating && (
             <Marker
               position={[userLocation.lat, userLocation.lng]}
               icon={createCustomIcon('#4285f4', 'navigation')}
@@ -863,14 +1101,37 @@ const TrafficMap = () => {
             </Marker>
           )}
 
-          {/* Route Display */}
+          {/* Simulated Location Marker */}
+          {simulatedLocation && isSimulating && (
+            <Marker
+              position={[simulatedLocation.lat, simulatedLocation.lng]}
+              icon={createCustomIcon('#10b981', 'navigation')}
+            >
+              <Popup>
+                <div className="p-2">
+                  <h3 className="font-semibold text-sm">🚗 Simulated Position</h3>
+                  <p className="text-xs text-gray-600">
+                    Progress: {Math.round(simulationProgress)}%
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Speed: {simulationSpeed}x
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+
+          {/* Route Display - Show all alternatives like Google Maps */}
           {selectedRoute && (
             <RouteLayer
-              routes={currentRoute ? currentRoute.routes || [] : []}
+              routes={routeAlternatives.length > 0 ? routeAlternatives : (currentRoute ? currentRoute.routes || [] : [])}
               selectedRoute={selectedRoute}
-              showAllRoutes={false}
+              showAllRoutes={routeAlternatives.length > 1}
+              onRouteClick={selectRoute}
               origin={selectedOrigin}
               destination={selectedDestination}
+              simulationProgress={isSimulating ? currentSimulationIndex : null}
+              totalPoints={selectedRoute.route_coordinates ? selectedRoute.route_coordinates.length : 0}
             />
           )}
 
@@ -883,7 +1144,9 @@ const TrafficMap = () => {
       <div className={`absolute z-40 transition-all duration-300 ${
         showSidePanel
           ? 'top-2 left-80 right-2 sm:top-4 sm:left-96 sm:right-4'
-          : 'top-2 left-2 right-2 sm:top-4 sm:left-4 sm:right-4'
+          : (showHistoryPanel
+            ? 'top-2 left-72 right-2 sm:top-4 sm:left-80 sm:right-4'
+            : 'top-2 left-2 right-2 sm:top-4 sm:left-4 sm:right-4')
       }`}>
         <div className="flex items-center justify-center space-x-1 sm:space-x-2 max-w-4xl mx-auto">
           {/* Hamburger Menu - Left Side */}
@@ -926,7 +1189,7 @@ const TrafficMap = () => {
               <button
                 onClick={() => {
                   setSearchMode('origin');
-                  getCurrentLocation();
+                  getCurrentLocation('origin');
                 }}
                 className="p-2 hover:bg-blue-100 rounded-full flex-shrink-0 mr-3 transition-colors group"
                 title="Use current location as starting point"
@@ -965,7 +1228,7 @@ const TrafficMap = () => {
               <button
                 onClick={() => {
                   setSearchMode('destination');
-                  getCurrentLocation();
+                  getCurrentLocation('destination');
                 }}
                 className="p-2 hover:bg-blue-100 rounded-full flex-shrink-0 mr-3 transition-colors group"
                 title="Use current location"
@@ -993,7 +1256,7 @@ const TrafficMap = () => {
                 {/* Quick Actions Section */}
                 <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200/50">
                   <button
-                    onClick={() => getCurrentLocation()}
+                    onClick={() => getCurrentLocation(searchMode)}
                     className="w-full flex items-center space-x-3 p-3 hover:bg-white rounded-xl transition-all duration-200 text-left group"
                   >
                     <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center group-hover:bg-blue-600 transition-colors shadow-md">
@@ -1073,24 +1336,38 @@ const TrafficMap = () => {
 
       {/* Bottom Right Controls - GPS & Navigation - Modern Design - Responsive */}
       <div className="absolute bottom-4 right-2 sm:bottom-6 sm:right-6 z-40 flex flex-col space-y-3">
-        {/* GPS Status Indicator */}
-        <div className={`bg-white rounded-xl shadow-xl p-3 transition-all duration-200 border-2 ${
-          isTrackingLocation
-            ? 'text-green-700 border-green-300 bg-green-50'
-            : 'text-gray-700 border-gray-300'
-        }`}>
-          <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full shadow-md ${
-              isTrackingLocation ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-            }`}></div>
-            <span className="text-xs font-semibold">
-              {isTrackingLocation ? 'GPS Active' : 'GPS Off'}
-            </span>
+        {/* Simulation Status Indicator */}
+        {isSimulating && (
+          <div className="bg-white rounded-xl shadow-xl p-3 transition-all duration-200 border-2 text-green-700 border-green-300 bg-green-50">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full shadow-md bg-green-500 animate-pulse"></div>
+              <span className="text-xs font-semibold">
+                Simulating {simulationSpeed}x
+              </span>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* GPS Status Indicator */}
+        {!isSimulating && (
+          <div className={`bg-white rounded-xl shadow-xl p-3 transition-all duration-200 border-2 ${
+            isTrackingLocation
+              ? 'text-green-700 border-green-300 bg-green-50'
+              : 'text-gray-700 border-gray-300'
+          }`}>
+            <div className="flex items-center space-x-2">
+              <div className={`w-3 h-3 rounded-full shadow-md ${
+                isTrackingLocation ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+              }`}></div>
+              <span className="text-xs font-semibold">
+                {isTrackingLocation ? 'GPS Active' : 'GPS Off'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Navigation Toggle */}
-        {selectedRoute && (
+        {selectedRoute && !isSimulating && (
           <button
             onClick={isNavigationActive ? stopNavigation : startNavigation}
             className={`bg-white rounded-xl shadow-xl p-3 transition-all duration-200 border-2 ${
@@ -1104,8 +1381,167 @@ const TrafficMap = () => {
         )}
       </div>
 
+      {/* Simulation Control Panel */}
+      {isSimulating && (
+        <div className={`absolute left-2 right-2 sm:left-4 sm:right-4 z-40 transition-all duration-300 ${
+          simulationMinimized ? 'bottom-4' : 'bottom-20 sm:bottom-24'
+        }`}>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+                  <Car className="w-5 h-5 text-green-600" />
+                  <span>Travel Simulation</span>
+                </h3>
+                {!simulationMinimized && (
+                  <div className="text-sm text-gray-600 mt-1 truncate">
+                    {selectedOrigin?.name} → {selectedDestination?.name}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setSimulationMinimized(!simulationMinimized)}
+                  className="p-2 hover:bg-green-200 rounded-full transition-colors"
+                  title={simulationMinimized ? 'Maximize' : 'Minimize'}
+                >
+                  {simulationMinimized ? <ChevronUp className="w-5 h-5 text-gray-600" /> : <ChevronDown className="w-5 h-5 text-gray-600" />}
+                </button>
+                <button
+                  onClick={stopSimulation}
+                  className="p-2 hover:bg-green-200 rounded-full transition-colors"
+                  title="Stop simulation"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            {!simulationMinimized && (
+            <div className="p-4">
+              <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                <span>Progress</span>
+                <span>{Math.round(simulationProgress)}%</span>
+              </div>
+              <div className="bg-gray-200 rounded-full h-3 overflow-hidden mb-4">
+                <div
+                  className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-300 ease-out relative"
+                  style={{ width: `${simulationProgress}%` }}
+                >
+                  <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={toggleSimulationPause}
+                    className={`p-3 rounded-lg transition-colors border-2 ${
+                      simulationPaused
+                        ? 'bg-green-50 border-green-300 text-green-600 hover:bg-green-100'
+                        : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                    }`}
+                    title={simulationPaused ? 'Resume' : 'Pause'}
+                  >
+                    {simulationPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {/* Speed Controls */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-600 mr-2">Speed:</span>
+                  {[1, 2, 5, 10].map(speed => (
+                    <button
+                      key={speed}
+                      onClick={() => changeSimulationSpeed(speed)}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                        simulationSpeed === speed
+                          ? 'bg-green-600 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Current Step Info */}
+              {currentStep && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center border border-green-200">
+                      <span className="text-xl">
+                        {enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type)}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">{currentStep.instruction}</p>
+                      {currentStep.street_name && (
+                        <p className="text-xs text-gray-600">on {currentStep.street_name}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trip Info */}
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <div className="text-lg font-semibold text-gray-900">
+                    {enhancedRoutingService.formatDistance(selectedRoute.distance_km * 1000)}
+                  </div>
+                  <div className="text-xs text-gray-500">Distance</div>
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-gray-900">
+                    {enhancedRoutingService.formatDuration(selectedRoute.estimated_duration_minutes)}
+                  </div>
+                  <div className="text-xs text-gray-500">Duration</div>
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-green-600">
+                    {Math.round(simulationProgress)}%
+                  </div>
+                  <div className="text-xs text-gray-500">Complete</div>
+                </div>
+              </div>
+            </div>
+            )}
+            
+            {/* Minimized View - Just Progress Bar */}
+            {simulationMinimized && (
+              <div className="p-3">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-1">
+                    <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${simulationProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700 min-w-[3rem] text-right">
+                    {Math.round(simulationProgress)}%
+                  </span>
+                  <button
+                    onClick={toggleSimulationPause}
+                    className="p-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200"
+                  >
+                    {simulationPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Enhanced Navigation Panel - Modern Google Maps Style - Responsive */}
-      {isNavigationActive && currentStep && (
+      {isNavigationActive && !isSimulating && currentStep && (
         <div className="absolute bottom-20 sm:bottom-24 left-2 right-2 sm:left-4 sm:right-4 z-40">
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
             {/* Header */}
@@ -1226,66 +1662,82 @@ const TrafficMap = () => {
             </div>
 
             <div className="max-h-80 overflow-y-auto">
-              {routeAlternatives.map((route, index) => (
-                <button
-                  key={route.route_id || index}
-                  onClick={() => selectRoute(route)}
-                  className="w-full p-4 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      index === 0 ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-                    }`}>
-                      {index === 0 ? '🏆' : index + 1}
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-4 mb-2">
-                        <div className="flex items-center space-x-2">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-900">
-                            {enhancedRoutingService.formatDuration(route.estimated_duration_minutes)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center space-x-2">
-                          <Route className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-700">
-                            {enhancedRoutingService.formatDistance(route.distance_km * 1000)}
-                          </span>
-                        </div>
-
-                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          route.traffic_conditions === 'heavy' ? 'bg-red-100 text-red-700' :
-                          route.traffic_conditions === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {route.traffic_conditions || 'Light'} traffic
-                        </div>
+              {routeAlternatives.map((route, index) => {
+                const isSelected = selectedRoute && selectedRoute.route_id === route.route_id;
+                return (
+                  <button
+                    key={route.route_id || index}
+                    onClick={() => selectRoute(route)}
+                    className={`w-full p-4 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors ${
+                      isSelected ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
+                    }`}
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        isSelected ? 'bg-blue-600 text-white' :
+                        index === 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {isSelected ? '✓' : index === 0 ? '🏆' : index + 1}
                       </div>
 
-                      {route.hasTolls && (
-                        <div className="flex items-center space-x-1 mb-1">
-                          <span className="text-xs text-gray-500">💰 Has tolls</span>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <span className="text-sm font-semibold text-gray-900">
+                            {route.route_name || `Alternative ${index + 1}`}
+                          </span>
+                          {isSelected && (
+                            <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                              Selected
+                            </span>
+                          )}
                         </div>
-                      )}
+                        <div className="flex items-center space-x-4 mb-2">
+                          <div className="flex items-center space-x-2">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-900">
+                              {enhancedRoutingService.formatDuration(route.estimated_duration_minutes)}
+                            </span>
+                          </div>
 
-                      {route.has_highways && (
-                        <div className="flex items-center space-x-1">
-                          <span className="text-xs text-gray-500">🛣️ Highway route</span>
+                          <div className="flex items-center space-x-2">
+                            <Route className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-700">
+                              {enhancedRoutingService.formatDistance(route.distance_km * 1000)}
+                            </span>
+                          </div>
+
+                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            route.traffic_conditions === 'heavy' ? 'bg-red-100 text-red-700' :
+                            route.traffic_conditions === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {route.traffic_conditions || 'Light'} traffic
+                          </div>
                         </div>
-                      )}
+
+                        {route.hasTolls && (
+                          <div className="flex items-center space-x-1 mb-1">
+                            <span className="text-xs text-gray-500">💰 Has tolls</span>
+                          </div>
+                        )}
+
+                        {route.has_highways && (
+                          <div className="flex items-center space-x-1">
+                            <span className="text-xs text-gray-500">🛣️ Highway route</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
       {/* Enhanced Route Information Panel with Real-time Traffic - Modern Design - Responsive */}
-      {selectedRoute && !isNavigationActive && (
+      {selectedRoute && !isNavigationActive && !isSimulating && (
         <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
             <div className="p-4">
@@ -1301,12 +1753,38 @@ const TrafficMap = () => {
                 </div>
 
                 <div className="flex items-center space-x-2">
+                  {/* Show alternatives button if multiple routes available */}
+                  {routeAlternatives.length > 1 && (
+                    <button
+                      onClick={() => setShowRouteAlternatives(true)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                      title="View alternative routes"
+                    >
+                      <Layers className="w-5 h-5 text-gray-600" />
+                    </button>
+                  )}
+                  {/* Close button */}
+                  <button
+                    onClick={clearLocations}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                    title="Close route"
+                  >
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
                   <button
                     onClick={saveAsFavorite}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
                     title="Save as favorite"
                   >
                     <Heart className="w-5 h-5 text-gray-600" />
+                  </button>
+                  <button
+                    onClick={startSimulation}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
+                    title="Simulate this trip"
+                  >
+                    <Play className="w-4 h-4" />
+                    <span className="hidden sm:inline">Simulate</span>
                   </button>
                   <button
                     onClick={startNavigation}
@@ -1548,15 +2026,23 @@ const TrafficMap = () => {
         </div>
       )}
 
+      {/* History Panel Backdrop */}
+      {showHistoryPanel && (
+        <div
+          className="fixed top-16 sm:top-20 left-0 right-0 bottom-0 bg-transparent z-40"
+          onClick={() => setShowHistoryPanel(false)}
+        />
+      )}
+
       {/* History Panel - Modern Design - Responsive */}
       {showHistoryPanel && (
         <div
-          className={`fixed top-0 left-0 h-full w-72 sm:w-80 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out rounded-r-2xl border-r border-gray-200 ${
+          className={`fixed top-16 sm:top-20 left-0 bottom-0 w-72 sm:w-80 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out border-r border-gray-200 flex flex-col ${
             showHistoryPanel ? 'translate-x-0' : '-translate-x-full'
           }`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 rounded-tr-2xl">
+          <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 flex-shrink-0">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Travel History</h2>
               <button
@@ -1568,7 +2054,7 @@ const TrafficMap = () => {
             </div>
           </div>
 
-          <div className="p-4 overflow-y-auto h-full pb-20">
+          <div className="flex-1 overflow-y-auto p-4">
             {/* Frequent Locations */}
             {frequentLocations.length > 0 && (
               <div className="mb-6">
@@ -1599,27 +2085,62 @@ const TrafficMap = () => {
               {travelHistory.length > 0 ? (
                 <div className="space-y-3">
                   {travelHistory.slice(0, 5).map((trip, index) => (
-                    <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-medium text-gray-900">
-                          {trip.origin?.name} → {trip.destination?.name}
+                    <div key={index} className="p-4 bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200">
+                      {/* Route Title */}
+                      <div className="mb-3 pb-2 border-b border-gray-200">
+                        <h4 className="text-sm font-semibold text-gray-800 truncate">
+                          From {getTripPlaceName(trip, 'origin')} to {getTripPlaceName(trip, 'destination')}
                         </h4>
                         <span className="text-xs text-gray-500">
-                          {new Date(trip.start_time).toLocaleDateString()}
+                          {new Date(trip.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>{travelHistoryService.formatTravelTime(trip.duration_minutes)}</span>
-                        <span>{travelHistoryService.formatDistance(trip.distance_km)}</span>
+                      
+                      {/* Route Visual */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                            <p className="text-xs text-gray-600 truncate">
+                              {getTripPlaceName(trip, 'origin')}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2 ml-1">
+                            <div className="w-1 h-3 border-l-2 border-dashed border-gray-300"></div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0"></div>
+                            <p className="text-xs text-gray-600 truncate">
+                              {getTripPlaceName(trip, 'destination')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                        <div className="flex items-center space-x-1 text-xs text-gray-600">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{travelHistoryService.formatTravelTime(trip.duration_minutes)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1 text-xs text-gray-600">
+                          <Route className="w-3.5 h-3.5" />
+                          <span>{travelHistoryService.formatDistance(trip.distance_km)}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500">No travel history yet</p>
-                  <p className="text-xs text-gray-400">Your trips will appear here</p>
+                <div className="text-center py-12 px-4">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <History className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">No travel history yet</p>
+                  <p className="text-xs text-gray-500 mb-4">Your trips will appear here</p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-xs text-blue-700">
+                      💡 Complete a simulation to add your first trip!
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

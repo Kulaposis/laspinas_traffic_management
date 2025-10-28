@@ -31,34 +31,34 @@ const HeatmapLayer = ({ points, options = {} }) => {
       if (zoom >= 16) {
         // Very close zoom - reduce intensity and radius to avoid clutter
         return {
-          radius: Math.max(5, (options.radius || 20) * 0.3),
-          blur: Math.max(3, (options.blur || 12) * 0.3),
-          max: (options.max || 0.8) * 0.6,
-          minOpacity: Math.max(0.1, (options.minOpacity || 0.2) * 0.5)
+          radius: Math.max(8, (options.radius || 25) * 0.4),
+          blur: Math.max(15, (options.blur || 20) * 0.8),
+          max: (options.max || 0.5) * 0.5,
+          minOpacity: Math.max(0.05, (options.minOpacity || 0.1) * 0.4)
         };
       } else if (zoom >= 14) {
         // Close zoom - moderate settings
         return {
-          radius: Math.max(8, (options.radius || 20) * 0.5),
-          blur: Math.max(5, (options.blur || 12) * 0.5),
-          max: (options.max || 0.8) * 0.7,
-          minOpacity: (options.minOpacity || 0.2) * 0.6
+          radius: Math.max(12, (options.radius || 25) * 0.6),
+          blur: Math.max(18, (options.blur || 20) * 0.9),
+          max: (options.max || 0.5) * 0.6,
+          minOpacity: (options.minOpacity || 0.1) * 0.5
         };
       } else if (zoom >= 12) {
         // Medium zoom - balanced settings
         return {
-          radius: Math.max(12, (options.radius || 20) * 0.7),
-          blur: Math.max(8, (options.blur || 12) * 0.7),
-          max: (options.max || 0.8) * 0.8,
-          minOpacity: (options.minOpacity || 0.2) * 0.8
+          radius: Math.max(15, (options.radius || 25) * 0.8),
+          blur: Math.max(20, (options.blur || 20)),
+          max: (options.max || 0.5) * 0.7,
+          minOpacity: (options.minOpacity || 0.1) * 0.6
         };
       } else {
         // Far zoom - full intensity for overview
         return {
-          radius: options.radius || 20,
-          blur: options.blur || 12,
-          max: options.max || 0.8,
-          minOpacity: options.minOpacity || 0.2
+          radius: options.radius || 25,
+          blur: options.blur || 20,
+          max: options.max || 0.5,
+          minOpacity: options.minOpacity || 0.1
         };
       }
     };

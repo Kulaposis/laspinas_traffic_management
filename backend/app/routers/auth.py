@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from ..db import get_db
-from ..schemas.user_schema import UserCreate, UserResponse, Token
+from ..schemas.user_schema import UserCreate, UserResponse, Token, FirebaseSync
 from ..services.auth_service import AuthService
 from ..services.activity_logger import get_activity_logger
 from ..auth import get_current_user
@@ -76,3 +76,51 @@ def logout(
     )
     
     return {"message": "Logged out successfully"}
+
+@router.post("/firebase-sync", status_code=status.HTTP_200_OK)
+def firebase_sync(firebase_data: FirebaseSync, db: Session = Depends(get_db)):
+    """
+    Sync Firebase user with backend database.
+    Creates or updates user from Firebase authentication.
+    """
+    auth_service = AuthService(db)
+    
+    try:
+        # Convert Pydantic model to dict for service
+        firebase_dict = firebase_data.dict()
+        
+        # Sync user and get token
+        result = auth_service.sync_firebase_user(firebase_dict)
+        
+        return {
+            "access_token": result["access_token"],
+            "token_type": result["token_type"],
+            "user": {
+                "id": result["user"].id,
+                "email": result["user"].email,
+                "full_name": result["user"].full_name,
+                "username": result["user"].username,
+                "role": result["user"].role.value,
+                "photo_url": result["user"].photo_url,
+                "email_verified": result["user"].email_verified,
+                "firebase_uid": result["user"].firebase_uid
+            }
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Firebase sync failed: {str(e)}"
+        )
+
+@router.post("/firebase_sync", status_code=status.HTTP_200_OK)
+def firebase_sync_alias(firebase_data: FirebaseSync, db: Session = Depends(get_db)):
+    """
+    Alias endpoint for compatibility: /auth/firebase_sync
+    """
+    return firebase_sync(firebase_data, db)
+
+@router.get("/test")
+def test_endpoint():
+    return {"message": "Auth router is working"}

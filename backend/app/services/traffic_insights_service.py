@@ -18,49 +18,57 @@ class TrafficInsightsService:
         
     def get_daily_traffic_insights(self, db: Session) -> Dict:
         """Generate daily traffic insights with personalized messages."""
-        current_time = datetime.now()
-        cache_key = f"daily_insights_{current_time.strftime('%Y-%m-%d-%H')}"
-        
-        # Check cache
-        if cache_key in self.insights_cache:
-            cached_time, cached_data = self.insights_cache[cache_key]
-            if (current_time - cached_time).seconds < self.cache_duration:
-                return cached_data
-        
-        # Get current traffic data
-        traffic_data = db.query(TrafficMonitoring).all()
-        active_incidents = db.query(RoadIncident).filter(RoadIncident.is_active == True).all()
-        
-        # Calculate traffic metrics
-        total_roads = len(traffic_data)
-        if total_roads == 0:
+        try:
+            current_time = datetime.now()
+            cache_key = f"daily_insights_{current_time.strftime('%Y-%m-%d-%H')}"
+            
+            # Check cache
+            if cache_key in self.insights_cache:
+                cached_time, cached_data = self.insights_cache[cache_key]
+                if (current_time - cached_time).seconds < self.cache_duration:
+                    return cached_data
+            
+            # Get current traffic data with error handling
+            try:
+                traffic_data = db.query(TrafficMonitoring).all()
+                active_incidents = db.query(RoadIncident).filter(RoadIncident.is_active == True).all()
+            except Exception as e:
+                print(f"Database query error: {e}")
+                return self._get_default_insights()
+            
+            # Calculate traffic metrics
+            total_roads = len(traffic_data)
+            if total_roads == 0:
+                return self._get_default_insights()
+            
+            free_flow_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.FREE_FLOW])
+            light_traffic_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.LIGHT])
+            moderate_traffic_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.MODERATE])
+            heavy_traffic_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.HEAVY])
+            standstill_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.STANDSTILL])
+            
+            # Calculate overall traffic score (0-100, where 100 is best)
+            traffic_score = (
+                (free_flow_count * 100) +
+                (light_traffic_count * 80) +
+                (moderate_traffic_count * 60) +
+                (heavy_traffic_count * 30) +
+                (standstill_count * 0)
+            ) / total_roads
+            
+            # Generate insights based on current conditions
+            insights = self._generate_insights(
+                traffic_score, current_time, total_roads, free_flow_count, 
+                heavy_traffic_count + standstill_count, len(active_incidents)
+            )
+            
+            # Cache the results
+            self.insights_cache[cache_key] = (current_time, insights)
+            
+            return insights
+        except Exception as e:
+            print(f"Error in get_daily_traffic_insights: {e}")
             return self._get_default_insights()
-        
-        free_flow_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.FREE_FLOW])
-        light_traffic_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.LIGHT])
-        moderate_traffic_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.MODERATE])
-        heavy_traffic_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.HEAVY])
-        standstill_count = len([t for t in traffic_data if t.traffic_status == TrafficStatus.STANDSTILL])
-        
-        # Calculate overall traffic score (0-100, where 100 is best)
-        traffic_score = (
-            (free_flow_count * 100) +
-            (light_traffic_count * 80) +
-            (moderate_traffic_count * 60) +
-            (heavy_traffic_count * 30) +
-            (standstill_count * 0)
-        ) / total_roads
-        
-        # Generate insights based on current conditions
-        insights = self._generate_insights(
-            traffic_score, current_time, total_roads, free_flow_count, 
-            heavy_traffic_count + standstill_count, len(active_incidents)
-        )
-        
-        # Cache the results
-        self.insights_cache[cache_key] = (current_time, insights)
-        
-        return insights
     
     def _generate_insights(self, traffic_score: float, current_time: datetime, 
                           total_roads: int, free_flow_count: int, 

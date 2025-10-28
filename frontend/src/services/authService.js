@@ -40,6 +40,34 @@ class AuthService {
     }
   }
 
+  async syncFirebaseUser(firebaseData) {
+    try {
+      // Send Firebase user data to backend to create/update user and get backend token
+      const response = await api.post('/auth/firebase-sync', {
+        uid: firebaseData.uid,
+        email: firebaseData.email,
+        full_name: firebaseData.displayName || firebaseData.email?.split('@')[0] || 'User',
+        photo_url: firebaseData.photoURL,
+        email_verified: firebaseData.emailVerified,
+        firebase_token: firebaseData.idToken
+      });
+
+      // Store backend token
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token);
+      }
+
+      return {
+        user: response.data.user,
+        token: response.data.access_token
+      };
+    } catch (error) {
+      console.error('Firebase sync error:', error);
+      // Don't throw - allow fallback to Firebase-only auth
+      return null;
+    }
+  }
+
   async logout() {
     try {
       // Call logout endpoint to log the activity

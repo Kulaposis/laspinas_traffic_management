@@ -9,7 +9,7 @@ load_dotenv()
 # Database configuration
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "sqlite:///./traffic_management.db"
+    "postgresql://traffic_user:traffic_password@localhost:5432/traffic_management"  # Default PostgreSQL for production
 )
 
 # Handle different database types

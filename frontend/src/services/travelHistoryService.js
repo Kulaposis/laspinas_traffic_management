@@ -15,9 +15,18 @@ class TravelHistoryService {
    */
   async saveTravelSession(sessionData) {
     try {
-      const response = await api.post(`${this.baseEndpoint}/sessions`, {
-        origin: sessionData.origin,
-        destination: sessionData.destination,
+      const origin = sessionData.origin || {};
+      const destination = sessionData.destination || {};
+
+      const payload = {
+        // Flattened fields expected by backend (TravelSessionCreate)
+        origin_name: origin.name || '',
+        origin_lat: origin.lat,
+        origin_lng: origin.lng,
+        destination_name: destination.name || '',
+        destination_lat: destination.lat,
+        destination_lng: destination.lng,
+
         route_data: sessionData.routeData,
         duration_minutes: sessionData.durationMinutes,
         distance_km: sessionData.distanceKm,
@@ -26,7 +35,9 @@ class TravelHistoryService {
         travel_mode: sessionData.travelMode || 'car',
         traffic_conditions: sessionData.trafficConditions,
         notes: sessionData.notes
-      });
+      };
+
+      const response = await api.post(`${this.baseEndpoint}/sessions`, payload);
       
       return response.data;
     } catch (error) {
@@ -108,13 +119,23 @@ class TravelHistoryService {
    */
   async saveFavoriteRoute(routeData) {
     try {
-      const response = await api.post(`${this.baseEndpoint}/favorites`, {
+      const origin = routeData.origin || {};
+      const destination = routeData.destination || {};
+
+      const payload = {
         name: routeData.name,
-        origin: routeData.origin,
-        destination: routeData.destination,
+        // Flattened fields expected by backend (FavoriteRouteCreate)
+        origin_name: origin.name || '',
+        origin_lat: origin.lat,
+        origin_lng: origin.lng,
+        destination_name: destination.name || '',
+        destination_lat: destination.lat,
+        destination_lng: destination.lng,
         route_summary: routeData.routeSummary,
         is_default: routeData.isDefault || false
-      });
+      };
+
+      const response = await api.post(`${this.baseEndpoint}/favorites`, payload);
       
       return response.data;
     } catch (error) {

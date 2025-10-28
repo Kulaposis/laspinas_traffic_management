@@ -1,44 +1,77 @@
 #!/bin/bash
+# Quick deployment script for Leapcell
 
-echo "🚀 Deploying Traffic Management Backend to Leapcell..."
+set -e
 
-# Check if leapcell CLI is installed
+echo "🚀 Deploying Traffic Management System to Leapcell..."
+
+# Check if Leapcell CLI is installed
 if ! command -v leapcell &> /dev/null; then
     echo "❌ Leapcell CLI not found. Please install it first:"
-    echo "npm install -g @leapcell/cli"
+    echo "   npm install -g @leapcell/cli"
+    echo "   or"
+    echo "   pip install leapcell-cli"
     exit 1
 fi
 
-# Login to Leapcell (if not already logged in)
-echo "🔐 Please login to Leapcell:"
-leapcell login
-
-# Create PostgreSQL database
-echo "🗄️ Creating PostgreSQL database..."
-leapcell service create postgres --name leapcell_db --version 15
-
-# Get database connection details
-DB_URL=$(leapcell service info leapcell_db --format json | jq -r '.connection_url')
-echo "📝 Database URL: $DB_URL"
-
-# Update .env file with database URL (create if doesn't exist)
-if [ ! -f .env ]; then
-    cp .env.example .env
+# Check if user is logged in
+if ! leapcell whoami &> /dev/null; then
+    echo "🔐 Please login to Leapcell first:"
+    echo "   leapcell login"
+    exit 1
 fi
 
-# Replace database URL in .env
-sed -i.bak "s|DATABASE_URL=.*|DATABASE_URL=$DB_URL|g" .env
+echo "✅ Leapcell CLI found and user is logged in"
 
-echo "🔧 Updated .env file with database connection"
+# Check if leapcell.toml exists
+if [ ! -f "leapcell.toml" ]; then
+    echo "❌ leapcell.toml not found. Please run this script from the backend directory."
+    exit 1
+fi
 
-# Deploy the service
-echo "🚀 Deploying to Leapcell..."
-echo "📋 Using corrected start command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
-leapcell deploy --config leapcell-config.yaml
+echo "📋 Configuration file found"
 
-echo "✅ Deployment complete!"
-echo "📋 Your backend will be available at: https://your-service-name.leapcell.dev"
-echo "🔗 Update your frontend env.example with the new backend URL"
+# Deploy the application
+echo "🚀 Deploying application..."
+leapcell deploy --config leapcell.toml
 
-# Show service info
-leapcell service info
+# Wait for deployment to complete
+echo "⏳ Waiting for deployment to complete..."
+sleep 10
+
+# Check deployment status
+echo "🔍 Checking deployment status..."
+leapcell status
+
+# Get deployment URL
+echo "🌐 Getting deployment URL..."
+DEPLOYMENT_URL=$(leapcell info | grep -o 'https://[^[:space:]]*' | head -1)
+
+if [ -n "$DEPLOYMENT_URL" ]; then
+    echo "✅ Deployment successful!"
+    echo "🌐 Your application is available at: $DEPLOYMENT_URL"
+    echo ""
+    echo "🔍 Testing health endpoint..."
+    curl -s "$DEPLOYMENT_URL/health" && echo "✅ Health check passed!"
+    echo ""
+    echo "📊 Testing traffic monitoring endpoint..."
+    curl -s "$DEPLOYMENT_URL/traffic/monitoring" | head -c 100 && echo "..."
+    echo ""
+    echo "🎉 Deployment completed successfully!"
+    echo ""
+    echo "📋 Next steps:"
+    echo "   1. Update your frontend to use: $DEPLOYMENT_URL"
+    echo "   2. Set up your PostgreSQL database"
+    echo "   3. Migrate your data to production"
+    echo "   4. Configure your domain (optional)"
+else
+    echo "⚠️  Deployment completed but couldn't get URL"
+    echo "   Run 'leapcell info' to get your deployment URL"
+fi
+
+echo ""
+echo "🔧 Useful commands:"
+echo "   leapcell logs --follow    # View logs"
+echo "   leapcell status           # Check status"
+echo "   leapcell env get          # View environment variables"
+echo "   leapcell restart          # Restart application"

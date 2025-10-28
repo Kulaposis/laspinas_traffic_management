@@ -16,11 +16,14 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     username = Column(String(255), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)  # Nullable for Firebase users
     full_name = Column(String(255), nullable=False)
     phone_number = Column(String(20), nullable=True)
     role = Column(Enum(UserRole), default=UserRole.CITIZEN, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    firebase_uid = Column(String(128), unique=True, nullable=True, index=True)  # Firebase UID
+    photo_url = Column(String(512), nullable=True)  # Profile photo URL
+    email_verified = Column(Boolean, default=False, nullable=False)  # Email verification status
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

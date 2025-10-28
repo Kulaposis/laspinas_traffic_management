@@ -39,3 +39,11 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+class FirebaseSync(BaseModel):
+    uid: str
+    email: EmailStr
+    full_name: Optional[str] = None
+    photo_url: Optional[str] = None
+    email_verified: Optional[bool] = False
+    firebase_token: Optional[str] = None

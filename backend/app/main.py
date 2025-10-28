@@ -34,9 +34,10 @@ app = FastAPI(
 )
 
 # CORS configuration based on environment
-default_cors_origins = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,https://laspinas-traffic-management-4pdac0hrq-kulaposis-projects.vercel.app"
-cors_origins_env = os.getenv("CORS_ORIGINS", default_cors_origins)
-cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+).split(",")
 
 # In production, use configured origins or allow all for flexibility
 if os.getenv("ENVIRONMENT") == "production":
@@ -69,6 +70,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, User-Agent, Cache-Control"
         response.headers["Access-Control-Allow-Credentials"] = "true"
+        # Add COOP headers to fix Cross-Origin-Opener-Policy issues
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+        response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
+        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
         return response
     except Exception as exc:
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
@@ -79,7 +84,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, User-Agent, Cache-Control",
-                "Access-Control-Allow-Credentials": "true"
+                "Access-Control-Allow-Credentials": "true",
+                "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+                "Cross-Origin-Embedder-Policy": "unsafe-none",
+                "Cross-Origin-Resource-Policy": "cross-origin"
             }
         )
 
@@ -120,14 +128,10 @@ def read_root():
 def health_check():
     return {"status": "healthy"}
 
-# Manual OPTIONS handler for emergency endpoints
-@app.options("/emergency/{path:path}")
-async def emergency_options():
-    return {"message": "OK"}
+# Firebase sync endpoint is now handled by auth router
 
-@app.options("/{path:path}")
-async def options_handler():
-    return {"message": "OK"}
+# Note: Global catch-all OPTIONS handlers removed.
+# CORSMiddleware already handles preflight requests across all routes.
 
 if __name__ == "__main__":
     import uvicorn

@@ -33,7 +33,9 @@ const RouteLayer = ({
   onRouteClick = null,
   showAllRoutes = false,
   origin = null,
-  destination = null
+  destination = null,
+  simulationProgress = null,
+  totalPoints = 0
 }) => {
   const map = useMap();
 
@@ -204,6 +206,15 @@ const RouteLayer = ({
           const vs = processedSelectedRoute.visualStyle || {};
           const mainColor = vs.color || (smartRoutingService.getRoutePolylineColor ? smartRoutingService.getRoutePolylineColor(processedSelectedRoute) : '#ff0000');
 
+          // Split route into passed and remaining sections if simulation is active
+          const isSimulating = simulationProgress !== null && simulationProgress >= 0;
+          const passedCoordinates = isSimulating && simulationProgress > 0 
+            ? safeCoordinates.slice(0, simulationProgress + 1) 
+            : [];
+          const remainingCoordinates = isSimulating && simulationProgress < safeCoordinates.length 
+            ? safeCoordinates.slice(simulationProgress) 
+            : safeCoordinates;
+
           return (
             <>
               {/* Outline for visibility */}
@@ -219,17 +230,33 @@ const RouteLayer = ({
                 lineJoin={vs.lineJoin || "round"}
               />
 
-              {/* Main route */}
-              <Polyline
-                positions={safeCoordinates.map(toLatLng)}
-                color={mainColor}
-                weight={vs.weight || 8}
-                opacity={vs.opacity || 0.9}
-                className="selected-route-line"
-                smoothFactor={vs.smoothFactor || 1}
-                lineCap={vs.lineCap || "round"}
-                lineJoin={vs.lineJoin || "round"}
-              >
+              {/* Passed section (gray) - only show during simulation */}
+              {isSimulating && passedCoordinates.length >= 2 && (
+                <Polyline
+                  positions={passedCoordinates.map(toLatLng)}
+                  color="#9ca3af"
+                  weight={vs.weight || 8}
+                  opacity={0.7}
+                  className="passed-route-line"
+                  smoothFactor={vs.smoothFactor || 1}
+                  lineCap={vs.lineCap || "round"}
+                  lineJoin={vs.lineJoin || "round"}
+                  interactive={false}
+                />
+              )}
+
+              {/* Remaining route (red or original color) */}
+              {remainingCoordinates.length >= 2 && (
+                <Polyline
+                  positions={remainingCoordinates.map(toLatLng)}
+                  color={mainColor}
+                  weight={vs.weight || 8}
+                  opacity={vs.opacity || 0.9}
+                  className="selected-route-line"
+                  smoothFactor={vs.smoothFactor || 1}
+                  lineCap={vs.lineCap || "round"}
+                  lineJoin={vs.lineJoin || "round"}
+                >
                 <Popup>
                   <div className="p-3">
                     <div className="flex items-center space-x-2 mb-2">
@@ -285,6 +312,7 @@ const RouteLayer = ({
                   </div>
                 </Popup>
               </Polyline>
+              )}
 
               {/* Waypoints */}
               {safeCoordinates.length > 2 && safeCoordinates.slice(1, -1).map((coord, idx) => {

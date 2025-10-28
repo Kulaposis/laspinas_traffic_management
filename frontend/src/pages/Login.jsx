@@ -3,7 +3,7 @@ import { signInWithGoogle, signInWithEmailPassword, registerWithEmailPassword } 
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
-const Login = ({ onLoginSuccess }) => {
+const Login = ({ onLoginSuccess = () => {} }) => {
   const { firebaseLogin, firebaseRegister } = useAuth();
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);

@@ -2,6 +2,25 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { 
+  Cloud, 
+  Droplets, 
+  Wind, 
+  Thermometer, 
+  Eye, 
+  AlertTriangle, 
+  RefreshCw, 
+  MapPin, 
+  Shield, 
+  Activity,
+  TrendingUp,
+  Sun,
+  Zap,
+  Navigation,
+  Settings,
+  Filter,
+  Search
+} from 'lucide-react';
 import weatherService from '../services/weatherService';
 import { useAuth } from '../context/AuthContext';
 import WeatherAnalytics from '../components/WeatherAnalytics';
@@ -167,171 +186,247 @@ const WeatherMonitoring = () => {
   const currentWeather = (uniqueWeatherStations.find(w => (w.area_name || '').includes('Las Piñas')) || uniqueWeatherStations[0]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <div className="space-y-8 p-6">
+        {/* Modern Header */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="p-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                  <Cloud className="w-8 h-8 text-white" />
+                </div>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Weather Monitoring</h1>
-          <div className="flex items-center space-x-4 mt-2">
-            <p className="text-gray-600">Real-time weather and flood conditions</p>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
+                    Weather Monitoring
+                  </h1>
+                  <p className="text-gray-600 text-lg font-medium">Real-time weather and flood conditions</p>
+                </div>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-4">
             {realtimeStatus && (
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${
+                  <div className="flex items-center space-x-3 bg-white/60 backdrop-blur-sm rounded-full px-4 py-2 shadow-sm border border-white/40">
+                    <div className={`w-3 h-3 rounded-full animate-pulse ${
                   realtimeStatus.status === 'active' ? 'bg-green-500' : 'bg-red-500'
                 }`}></div>
-                <span className="text-sm text-gray-500">
-                  {realtimeStatus.status === 'active' ? 'Live' : 'Offline'} • 
+                    <span className="text-sm font-medium text-gray-700">
+                      {realtimeStatus.status === 'active' ? 'Live' : 'Offline'}
+                    </span>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                   {realtimeStatus.api_source}
                 </span>
               </div>
             )}
             {lastUpdate && (
-              <span className="text-xs text-gray-400">
-                Last updated: {lastUpdate.toLocaleTimeString()}
+                  <div className="flex items-center space-x-2 bg-white/60 backdrop-blur-sm rounded-full px-4 py-2 shadow-sm border border-white/40">
+                    <Activity className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      Updated: {lastUpdate.toLocaleTimeString()}
               </span>
+                  </div>
             )}
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
+            {/* Modern Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {user && (user.role === 'admin' || user.role === 'operator') && (
             <button
               onClick={handleRealtimeUpdate}
               disabled={isUpdating}
-              className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                  className={`group relative overflow-hidden px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300 ${
                 isUpdating
                   ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-green-600 text-white hover:bg-green-700'
+                      : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 hover:shadow-lg hover:shadow-green-500/25 hover:-translate-y-0.5'
               }`}
             >
               {isUpdating ? (
-                <div className="flex items-center space-x-1">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                    <div className="flex items-center space-x-2">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Updating...</span>
                 </div>
               ) : (
-                '🔄 Update Live Data'
+                    <div className="flex items-center space-x-2">
+                      <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                      <span>Update Live Data</span>
+                    </div>
               )}
             </button>
           )}
           
+              {/* View Mode Toggle */}
+              <div className="flex bg-white/60 backdrop-blur-sm rounded-xl p-1 shadow-sm border border-white/40">
           <button
             onClick={() => setViewMode('current')}
-            className={`px-4 py-2 rounded-lg ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               viewMode === 'current' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
             }`}
           >
-            🌤️ Current
+                  <Sun className="w-4 h-4" />
+                  <span>Current</span>
           </button>
           <button
             onClick={() => setViewMode('alerts')}
-            className={`px-4 py-2 rounded-lg ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               viewMode === 'alerts' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
             }`}
           >
-            ⚠️ Alerts
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Alerts</span>
           </button>
           <button
             onClick={() => setViewMode('flood')}
-            className={`px-4 py-2 rounded-lg ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               viewMode === 'flood' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
             }`}
           >
-            🌊 Flood
+                  <Droplets className="w-4 h-4" />
+                  <span>Flood</span>
           </button>
           <button
             onClick={() => setViewMode('barangays')}
-            className={`px-4 py-2 rounded-lg ${
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
               viewMode === 'barangays' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' 
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
             }`}
           >
-            🏘️ Barangays
+                  <MapPin className="w-4 h-4" />
+                  <span>Barangays</span>
           </button>
+              </div>
+            </div>
         </div>
       </div>
 
+        {/* Modern Error Alert */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error}
+          <div className="bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500 rounded-xl p-6 shadow-lg">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-semibold text-red-800">Error</h3>
+                <p className="text-red-700">{error}</p>
+              </div>
+            </div>
         </div>
       )}
 
-      {/* Current Weather Summary */}
+        {/* Modern Current Weather Summary */}
       {currentWeather && (
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-6">
-          <div className="flex items-center justify-between">
+          <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white rounded-2xl p-8 shadow-2xl border border-white/20">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div className="flex-1">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
+                    <span className="text-4xl">{getWeatherIcon(currentWeather.weather_condition)}</span>
+                  </div>
             <div>
-              <h2 className="text-2xl font-bold">{currentWeather.area_name}</h2>
-              <p className="text-blue-100">
+                    <h2 className="text-3xl font-bold">{currentWeather.area_name}</h2>
+                    <p className="text-blue-100 text-lg">
                 {new Date(currentWeather.recorded_at).toLocaleString()}
               </p>
             </div>
-            <div className="text-right">
-              <div className="flex items-center text-4xl">
-                <span className="mr-2">{getWeatherIcon(currentWeather.weather_condition)}</span>
-                <span>{Math.round(currentWeather.temperature_celsius)}°C</span>
               </div>
-              <p className="text-blue-100 capitalize">
+                
+                <div className="text-6xl font-bold mb-2">
+                  {Math.round(currentWeather.temperature_celsius)}°C
+                </div>
+                <p className="text-xl text-blue-100 capitalize">
                 {currentWeather.weather_condition.replace('_', ' ')}
               </p>
-            </div>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-            <div>
-              <p className="text-blue-200 text-sm">Humidity</p>
-              <p className="text-xl font-semibold">{currentWeather.humidity_percent}%</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <Droplets className="w-8 h-8 mx-auto mb-2 text-blue-200" />
+                  <p className="text-blue-200 text-sm font-medium">Humidity</p>
+                  <p className="text-2xl font-bold">{Math.round(currentWeather.humidity_percent)}%</p>
             </div>
-            <div>
-              <p className="text-blue-200 text-sm">Wind Speed</p>
-              <p className="text-xl font-semibold">{currentWeather.wind_speed_kmh || 0} km/h</p>
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <Wind className="w-8 h-8 mx-auto mb-2 text-blue-200" />
+                  <p className="text-blue-200 text-sm font-medium">Wind Speed</p>
+                  <p className="text-2xl font-bold">{Math.round(currentWeather.wind_speed_kmh || 0)} km/h</p>
             </div>
-            <div>
-              <p className="text-blue-200 text-sm">Rainfall</p>
-              <p className="text-xl font-semibold">{currentWeather.rainfall_mm} mm</p>
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <Cloud className="w-8 h-8 mx-auto mb-2 text-blue-200" />
+                  <p className="text-blue-200 text-sm font-medium">Rainfall</p>
+                  <p className="text-2xl font-bold">{Math.round(currentWeather.rainfall_mm)} mm</p>
             </div>
-            <div>
-              <p className="text-blue-200 text-sm">Visibility</p>
-              <p className="text-xl font-semibold">{currentWeather.visibility_km || 'N/A'} km</p>
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center">
+                  <Eye className="w-8 h-8 mx-auto mb-2 text-blue-200" />
+                  <p className="text-blue-200 text-sm font-medium">Visibility</p>
+                  <p className="text-2xl font-bold">{currentWeather.visibility_km ? Math.round(currentWeather.visibility_km) : 'N/A'} km</p>
+                </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Alert Notifications */}
+        {/* Modern Alert Notifications */}
       {weatherAlerts.length > 0 && (
-        <div className="space-y-2">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Active Weather Alerts</h3>
+            </div>
           {weatherAlerts.slice(0, 3).map((alert) => (
             <div 
               key={alert.id}
-              className={`p-4 rounded-lg border-l-4 ${
-                alert.severity === 'critical' ? 'bg-red-50 border-red-500' :
-                alert.severity === 'warning' ? 'bg-orange-50 border-orange-500' :
-                alert.severity === 'watch' ? 'bg-yellow-50 border-yellow-500' :
-                'bg-blue-50 border-blue-500'
-              }`}
-            >
+                className={`group relative overflow-hidden rounded-2xl border-l-4 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                  alert.severity === 'critical' ? 'bg-gradient-to-r from-red-50 to-pink-50 border-red-500' :
+                  alert.severity === 'warning' ? 'bg-gradient-to-r from-orange-50 to-yellow-50 border-orange-500' :
+                  alert.severity === 'watch' ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-500' :
+                  'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-500'
+                }`}
+              >
+                <div className="p-6">
               <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{alert.title}</h3>
-                  <p className="text-gray-600 text-sm mt-1">{alert.message}</p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {alert.affected_areas} • {alert.severity.toUpperCase()}
-                  </p>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className={`p-2 rounded-lg ${
+                          alert.severity === 'critical' ? 'bg-red-100' :
+                          alert.severity === 'warning' ? 'bg-orange-100' :
+                          alert.severity === 'watch' ? 'bg-yellow-100' :
+                          'bg-blue-100'
+                        }`}>
+                          {alert.alert_type === 'flood' ? <Droplets className="w-5 h-5 text-blue-600" /> : 
+                           alert.alert_type === 'rain' ? <Cloud className="w-5 h-5 text-blue-600" /> : 
+                           alert.alert_type === 'storm' ? <Zap className="w-5 h-5 text-yellow-600" /> : 
+                           <AlertTriangle className="w-5 h-5 text-orange-600" />}
                 </div>
-                <span className="text-2xl">
-                  {alert.alert_type === 'flood' ? '🌊' : 
-                   alert.alert_type === 'rain' ? '🌧️' : 
-                   alert.alert_type === 'storm' ? '⛈️' : '⚠️'}
+                        <h3 className="text-lg font-bold text-gray-900">{alert.title}</h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          alert.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                          alert.severity === 'warning' ? 'bg-orange-100 text-orange-800' :
+                          alert.severity === 'watch' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {alert.severity.toUpperCase()}
                 </span>
+                      </div>
+                      <p className="text-gray-700 mb-3 leading-relaxed">{alert.message}</p>
+                      <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <div className="flex items-center space-x-1">
+                          <MapPin className="w-4 h-4" />
+                          <span>{alert.affected_areas}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Activity className="w-4 h-4" />
+                          <span>{alert.alert_type}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
               </div>
             </div>
           ))}
@@ -339,10 +434,10 @@ const WeatherMonitoring = () => {
       )}
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Map */}
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
             <div className="h-96">
               <MapContainer
                 center={defaultCenter}
@@ -400,9 +495,9 @@ const WeatherMonitoring = () => {
                       <div className="p-2">
                         <h3 className="font-semibold">{flood.location_name}</h3>
                         <div className="space-y-1 text-sm">
-                          <p>Water Level: {flood.water_level_cm} cm</p>
+                          <p>Water Level: {Math.round(flood.water_level_cm)} cm</p>
                           <p>Flood Level: {flood.flood_level}</p>
-                          <p>Alert Level: {flood.alert_level}/4</p>
+                          <p>Alert Level: {Math.round(flood.alert_level)}/4</p>
                           <p>Passable: {flood.estimated_passable ? '✅ Yes' : '❌ No'}</p>
                           {flood.evacuation_center_nearby && (
                             <p>Evacuation: {flood.evacuation_center_nearby}</p>
@@ -528,54 +623,56 @@ const WeatherMonitoring = () => {
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
+          {/* Modern Sidebar */}
+          <div className="space-y-6">
           {/* Real-time Status Panel */}
           {realtimeStatus && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold flex items-center">
-                  <div className={`w-3 h-3 rounded-full mr-2 ${
-                    realtimeStatus.status === 'active' ? 'bg-green-500' : 'bg-red-500'
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full animate-pulse ${
+                      realtimeStatus.status === 'active' ? 'bg-green-400' : 'bg-red-400'
                   }`}></div>
-                  Real-time Status
-                </h3>
+                    <h3 className="text-xl font-bold text-white">Real-time Status</h3>
               </div>
-              <div className="p-4 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Status:</span>
-                  <span className={`font-medium ${
-                    realtimeStatus.status === 'active' ? 'text-green-600' : 'text-red-600'
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-600 font-medium">Status:</span>
+                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                        realtimeStatus.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
                     {realtimeStatus.status === 'active' ? 'Active' : 'Inactive'}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">API Source:</span>
-                  <span className="font-medium">{realtimeStatus.api_source}</span>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-600 font-medium">API Source:</span>
+                      <span className="font-semibold text-gray-900">{realtimeStatus.api_source}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Monitoring Areas:</span>
-                  <span className="font-medium">{realtimeStatus.monitoring_areas}</span>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-600 font-medium">Monitoring Areas:</span>
+                      <span className="font-semibold text-gray-900">{realtimeStatus.monitoring_areas}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Recent Updates:</span>
-                  <span className="font-medium">{realtimeStatus.recent_updates}</span>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-600 font-medium">Recent Updates:</span>
+                      <span className="font-semibold text-gray-900">{realtimeStatus.recent_updates}</span>
                 </div>
                 {realtimeStatus.last_update && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Last Update:</span>
-                    <span className="font-medium text-xs">
+                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                        <span className="text-gray-600 font-medium">Last Update:</span>
+                        <span className="font-semibold text-gray-900 text-sm">
                       {new Date(realtimeStatus.last_update).toLocaleString()}
                     </span>
                   </div>
                 )}
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Update Frequency:</span>
-                    <span className="font-medium text-xs">
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                        <span className="text-gray-600 font-medium">Update Frequency:</span>
+                        <span className="font-semibold text-gray-900 text-sm">
                       {realtimeStatus.update_frequency}
                     </span>
+                      </div>
                   </div>
                 </div>
               </div>
@@ -584,33 +681,52 @@ const WeatherMonitoring = () => {
 
           {/* Flood Alerts */}
           {viewMode === 'flood' && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold">Flood Monitoring</h3>
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6">
+                  <div className="flex items-center space-x-3">
+                    <Droplets className="w-6 h-6 text-white" />
+                    <h3 className="text-xl font-bold text-white">Flood Monitoring</h3>
+                  </div>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {floodData.filter(f => f.alert_level > 0).length === 0 ? (
-                  <p className="p-4 text-gray-500 text-center">No flood alerts</p>
-                ) : (
-                  floodData.filter(f => f.alert_level > 0).map((flood) => (
-                    <div key={flood.id} className="p-4 border-b border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm">{flood.location_name}</span>
+                    <div className="p-8 text-center">
+                      <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                        <Shield className="w-8 h-8 text-green-600" />
+                      </div>
+                      <p className="text-gray-500 font-medium">No flood alerts</p>
+                      <p className="text-gray-400 text-sm">All areas are safe</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-3">
+                      {floodData.filter(f => f.alert_level > 0).map((flood) => (
+                        <div key={flood.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-gray-900">{flood.location_name}</span>
                         <span 
-                          className="px-2 py-1 rounded text-xs text-white"
+                              className="px-3 py-1 rounded-full text-xs font-semibold text-white"
                           style={{ backgroundColor: getFloodLevelColor(flood.flood_level) }}
                         >
                           {flood.flood_level}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Level: {flood.water_level_cm} cm • Alert: {flood.alert_level}/4
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-600">
+                              Level: <span className="font-semibold">{Math.round(flood.water_level_cm)} cm</span>
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Alert: <span className="font-semibold">{Math.round(flood.alert_level)}/4</span>
                       </p>
                       {!flood.estimated_passable && (
-                        <p className="text-xs text-red-600 mt-1">⚠️ Not passable</p>
+                              <div className="flex items-center space-x-1 text-red-600 text-sm font-medium">
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>Not passable</span>
+                              </div>
                       )}
                     </div>
-                  ))
+                        </div>
+                      ))}
+                    </div>
                 )}
               </div>
             </div>
@@ -618,29 +734,46 @@ const WeatherMonitoring = () => {
 
           {/* Weather Alerts List */}
           {viewMode === 'alerts' && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold">Active Alerts</h3>
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-500 to-red-500 p-6">
+                  <div className="flex items-center space-x-3">
+                    <AlertTriangle className="w-6 h-6 text-white" />
+                    <h3 className="text-xl font-bold text-white">Active Alerts</h3>
+                  </div>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {weatherAlerts.length === 0 ? (
-                  <p className="p-4 text-gray-500 text-center">No active alerts</p>
-                ) : (
-                  weatherAlerts.map((alert) => (
-                    <div key={alert.id} className="p-4 border-b border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm">{alert.title}</span>
+                    <div className="p-8 text-center">
+                      <div className="p-4 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                        <Shield className="w-8 h-8 text-green-600" />
+                      </div>
+                      <p className="text-gray-500 font-medium">No active alerts</p>
+                      <p className="text-gray-400 text-sm">Weather conditions are normal</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-3">
+                      {weatherAlerts.map((alert) => (
+                        <div key={alert.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-gray-900">{alert.title}</span>
                         <span 
-                          className="px-2 py-1 rounded text-xs text-white"
+                              className="px-3 py-1 rounded-full text-xs font-semibold text-white"
                           style={{ backgroundColor: getSeverityColor(alert.severity) }}
                         >
                           {alert.severity}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-600 mt-1">{alert.alert_type}</p>
-                      <p className="text-xs text-gray-500">{alert.affected_areas}</p>
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-600">
+                              Type: <span className="font-semibold capitalize">{alert.alert_type}</span>
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Areas: <span className="font-semibold">{alert.affected_areas}</span>
+                            </p>
                     </div>
-                  ))
+                        </div>
+                      ))}
+                    </div>
                 )}
               </div>
             </div>
@@ -648,32 +781,52 @@ const WeatherMonitoring = () => {
 
           {/* Weather Conditions (deduplicated) */}
           {viewMode === 'current' && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold">Weather Stations</h3>
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6">
+                  <div className="flex items-center space-x-3">
+                    <Thermometer className="w-6 h-6 text-white" />
+                    <h3 className="text-xl font-bold text-white">Weather Stations</h3>
+                  </div>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {uniqueWeatherStations.length === 0 ? (
-                  <p className="p-4 text-gray-500 text-center">No weather data available</p>
-                ) : (
-                  uniqueWeatherStations.map((weather) => (
-                    <div key={weather.id} className="p-4 border-b border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm">{weather.area_name}</span>
-                        <div className="flex items-center space-x-1">
-                          <span>{getWeatherIcon(weather.weather_condition)}</span>
-                          <span className="text-sm font-semibold">
+                    <div className="p-8 text-center">
+                      <div className="p-4 bg-gray-100 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                        <Cloud className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 font-medium">No weather data available</p>
+                      <p className="text-gray-400 text-sm">Check back later</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-3">
+                      {uniqueWeatherStations.map((weather) => (
+                        <div key={weather.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="font-semibold text-gray-900">{weather.area_name}</span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-2xl">{getWeatherIcon(weather.weather_condition)}</span>
+                              <span className="text-lg font-bold text-gray-900">
                             {Math.round(weather.temperature_celsius)}°C
                           </span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>💧 {weather.humidity_percent}%</span>
-                        <span>🌧️ {weather.rainfall_mm}mm</span>
-                        <span>💨 {weather.wind_speed_kmh || 0}km/h</span>
+                          <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div className="flex items-center space-x-1 text-gray-600">
+                              <Droplets className="w-4 h-4 text-blue-500" />
+                              <span>{Math.round(weather.humidity_percent)}%</span>
                       </div>
+                            <div className="flex items-center space-x-1 text-gray-600">
+                              <Cloud className="w-4 h-4 text-blue-500" />
+                              <span>{Math.round(weather.rainfall_mm)}mm</span>
                     </div>
-                  ))
+                            <div className="flex items-center space-x-1 text-gray-600">
+                              <Wind className="w-4 h-4 text-blue-500" />
+                              <span>{Math.round(weather.wind_speed_kmh || 0)}km/h</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                 )}
               </div>
             </div>
@@ -681,27 +834,43 @@ const WeatherMonitoring = () => {
 
           {/* Barangay Information */}
           {viewMode === 'barangays' && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold">Las Piñas Barangays</h3>
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+                <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6">
+                  <div className="flex items-center space-x-3">
+                    <MapPin className="w-6 h-6 text-white" />
+                    <h3 className="text-xl font-bold text-white">Las Piñas Barangays</h3>
+                  </div>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {barangayData.criticalAreas.length > 0 ? (
-                  <>
-                    <div className="p-3 bg-red-50 border-b border-gray-100">
-                      <h4 className="font-medium text-red-800 text-sm mb-2">Critical Risk Areas</h4>
+                    <div className="p-4 space-y-4">
+                      <div className="p-4 bg-red-50 rounded-xl border border-red-200">
+                        <h4 className="font-semibold text-red-800 text-sm mb-3 flex items-center">
+                          <AlertTriangle className="w-4 h-4 mr-2" />
+                          Critical Risk Areas
+                        </h4>
+                        <div className="space-y-2">
                       {barangayData.criticalAreas.slice(0, 3).map((barangay, index) => (
-                        <div key={index} className="text-xs text-red-700 mb-1">
-                          📍 {barangay.name} - {barangay.historical_flood_level} risk
+                            <div key={index} className="flex items-center space-x-2 text-sm text-red-700">
+                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                              <span className="font-medium">{barangay.name}</span>
+                              <span className="text-xs bg-red-100 px-2 py-1 rounded-full">
+                                {barangay.historical_flood_level} risk
+                              </span>
                         </div>
                       ))}
                     </div>
-                    <div className="p-3">
-                      <h4 className="font-medium text-gray-800 text-sm mb-2">All Flood-Prone Areas</h4>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-xl">
+                        <h4 className="font-semibold text-gray-800 text-sm mb-3 flex items-center">
+                          <Shield className="w-4 h-4 mr-2" />
+                          All Flood-Prone Areas
+                        </h4>
+                        <div className="space-y-2">
                       {barangayData.floodProne.slice(0, 5).map((barangay, index) => (
-                        <div key={index} className="flex justify-between items-center py-1 text-xs">
-                          <span>{barangay.name}</span>
-                          <span className={`px-2 py-1 rounded ${
+                            <div key={index} className="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-gray-200">
+                              <span className="text-sm font-medium text-gray-700">{barangay.name}</span>
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                             barangay.historical_flood_level === 'critical' ? 'bg-red-100 text-red-700' :
                             barangay.historical_flood_level === 'high' ? 'bg-orange-100 text-orange-700' :
                             barangay.historical_flood_level === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
@@ -712,14 +881,21 @@ const WeatherMonitoring = () => {
                         </div>
                       ))}
                       {barangayData.floodProne.length > 5 && (
-                        <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-gray-500 mt-2 text-center">
                           +{barangayData.floodProne.length - 5} more barangays...
                         </p>
                       )}
                     </div>
-                  </>
-                ) : (
-                  <p className="p-4 text-gray-500 text-center text-sm">Loading barangay data...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <div className="p-4 bg-gray-100 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                        <Activity className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 font-medium">Loading barangay data...</p>
+                      <p className="text-gray-400 text-sm">Please wait</p>
+                    </div>
                 )}
               </div>
             </div>
@@ -727,29 +903,32 @@ const WeatherMonitoring = () => {
 
           {/* Legend for Barangays */}
           {viewMode === 'barangays' && (
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold mb-3">Flood Risk Legend</h3>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                  <Shield className="w-5 h-5 mr-2 text-blue-600" />
+                  Flood Risk Legend
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-red-600"></div>
-                  <span className="text-sm">Critical Risk</span>
+                    <span className="text-sm font-medium text-gray-700">Critical Risk</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-orange-600"></div>
-                  <span className="text-sm">High Risk</span>
+                    <span className="text-sm font-medium text-gray-700">High Risk</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-yellow-600"></div>
-                  <span className="text-sm">Moderate Risk</span>
+                    <span className="text-sm font-medium text-gray-700">Moderate Risk</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-green-600"></div>
-                  <span className="text-sm">Low Risk</span>
+                    <span className="text-sm font-medium text-gray-700">Low Risk</span>
                 </div>
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="flex items-center space-x-2">
+                  <div className="pt-3 border-t border-gray-200">
+                    <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                     <div className="w-4 h-4 rounded-full bg-gray-800"></div>
-                    <span className="text-sm">🏥 Evacuation Centers</span>
+                      <span className="text-sm font-medium text-gray-700">🏥 Evacuation Centers</span>
                   </div>
                 </div>
               </div>
@@ -758,28 +937,31 @@ const WeatherMonitoring = () => {
 
           {/* Temperature Legend */}
           {viewMode === 'current' && (
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold mb-3">Temperature Scale</h3>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                  <Thermometer className="w-5 h-5 mr-2 text-blue-600" />
+                  Temperature Scale
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                  <span className="text-sm">Cold (&lt; 20°C)</span>
+                    <span className="text-sm font-medium text-gray-700">Cold (&lt; 20°C)</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                  <span className="text-sm">Cool (20-25°C)</span>
+                    <span className="text-sm font-medium text-gray-700">Cool (20-25°C)</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-                  <span className="text-sm">Warm (25-30°C)</span>
+                    <span className="text-sm font-medium text-gray-700">Warm (25-30°C)</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-                  <span className="text-sm">Hot (30-35°C)</span>
+                    <span className="text-sm font-medium text-gray-700">Hot (30-35°C)</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                   <div className="w-4 h-4 rounded-full bg-red-500"></div>
-                  <span className="text-sm">Very Hot (&gt; 35°C)</span>
+                    <span className="text-sm font-medium text-gray-700">Very Hot (&gt; 35°C)</span>
                 </div>
               </div>
             </div>
@@ -794,6 +976,7 @@ const WeatherMonitoring = () => {
         weatherAlerts={weatherAlerts}
         barangayData={barangayData}
       />
+      </div>
     </div>
   );
 };

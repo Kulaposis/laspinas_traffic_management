@@ -10,6 +10,7 @@ from ..schemas.travel_history import (
     FavoriteRouteResponse, TravelStatsResponse, FrequentLocationResponse
 )
 from ..auth import get_current_user
+from typing import Optional
 
 router = APIRouter()
 
@@ -53,13 +54,14 @@ async def get_travel_history(
 ):
     """Get user's travel history with optional filtering"""
     query = db.query(TravelSession).filter(TravelSession.user_id == current_user.id)
-
+    
     if start_date:
         query = query.filter(TravelSession.start_time >= start_date)
+    
     if end_date:
         query = query.filter(TravelSession.start_time <= end_date)
-
-    sessions = query.order_by(desc(TravelSession.start_time)).offset(offset).limit(limit).all()
+    
+    sessions = query.order_by(TravelSession.start_time.desc()).offset(offset).limit(limit).all()
     return sessions
 
 @router.get("/frequent-locations", response_model=List[FrequentLocationResponse])
@@ -69,65 +71,26 @@ async def get_frequent_locations(
     current_user: User = Depends(get_current_user)
 ):
     """Get user's most frequently visited locations"""
-    # Get destination locations with visit counts
-    destinations = db.query(
-        TravelSession.destination_name,
-        TravelSession.destination_lat,
-        TravelSession.destination_lng,
-        func.count(TravelSession.id).label('visit_count')
-    ).filter(
-        TravelSession.user_id == current_user.id,
-        TravelSession.destination_name.isnot(None)
-    ).group_by(
-        TravelSession.destination_name,
-        TravelSession.destination_lat,
-        TravelSession.destination_lng
-    ).order_by(desc('visit_count')).limit(limit).all()
-
-    # Get origin locations with visit counts
-    origins = db.query(
-        TravelSession.origin_name,
-        TravelSession.origin_lat,
-        TravelSession.origin_lng,
-        func.count(TravelSession.id).label('visit_count')
-    ).filter(
-        TravelSession.user_id == current_user.id,
-        TravelSession.origin_name.isnot(None)
-    ).group_by(
-        TravelSession.origin_name,
-        TravelSession.origin_lat,
-        TravelSession.origin_lng
-    ).order_by(desc('visit_count')).limit(limit).all()
-
-    # Combine and deduplicate
-    location_map = {}
-    for dest in destinations:
-        key = (dest.destination_name, dest.destination_lat, dest.destination_lng)
-        if key not in location_map or dest.visit_count > location_map[key]['count']:
-            location_map[key] = {
-                'name': dest.destination_name,
-                'lat': dest.destination_lat,
-                'lng': dest.destination_lng,
-                'count': dest.visit_count,
-                'type': 'destination'
-            }
-
-    for origin in origins:
-        key = (origin.origin_name, origin.origin_lat, origin.origin_lng)
-        if key not in location_map or origin.visit_count > location_map[key]['count']:
-            location_map[key] = {
-                'name': origin.origin_name,
-                'lat': origin.origin_lat,
-                'lng': origin.origin_lng,
-                'count': origin.visit_count,
-                'type': 'origin'
-            }
-
-    # Convert to response format
-    locations = list(location_map.values())
-    locations.sort(key=lambda x: x['count'], reverse=True)
-
-    return locations[:limit]
+    # Get all sessions for the user
+    sessions = db.query(TravelSession).filter(TravelSession.user_id == current_user.id).all()
+    
+    # Count destination occurrences
+    location_counts = {}
+    for session in sessions:
+        if session.destination_name and session.destination_lat and session.destination_lng:
+            key = f"{session.destination_lat},{session.destination_lng}"
+            if key not in location_counts:
+                location_counts[key] = {
+                    "name": session.destination_name,
+                    "lat": session.destination_lat,
+                    "lng": session.destination_lng,
+                    "count": 0
+                }
+            location_counts[key]["count"] += 1
+    
+    # Sort by count and return top locations
+    frequent = sorted(location_counts.values(), key=lambda x: x["count"], reverse=True)[:limit]
+    return frequent
 
 @router.get("/stats", response_model=TravelStatsResponse)
 async def get_travel_stats(
@@ -136,60 +99,42 @@ async def get_travel_stats(
     current_user: User = Depends(get_current_user)
 ):
     """Get travel statistics for the user"""
-    now = datetime.utcnow()
-
     # Calculate date range based on timeframe
+    now = datetime.utcnow()
     if timeframe == 'day':
         start_date = now - timedelta(days=1)
     elif timeframe == 'week':
-        start_date = now - timedelta(weeks=1)
+        start_date = now - timedelta(days=7)
     elif timeframe == 'month':
         start_date = now - timedelta(days=30)
     else:  # year
         start_date = now - timedelta(days=365)
-
-    # Get sessions in timeframe
+    
     sessions = db.query(TravelSession).filter(
         TravelSession.user_id == current_user.id,
         TravelSession.start_time >= start_date
     ).all()
-
-    if not sessions:
-        return {
-            "total_trips": 0,
-            "total_distance_km": 0,
-            "total_time_minutes": 0,
-            "average_speed_kmh": 0,
-            "most_frequent_destination": None,
-            "travel_patterns": []
-        }
-
-    # Calculate stats
+    
+    total_trips = len(sessions)
     total_distance = sum(s.distance_km or 0 for s in sessions)
     total_time = sum(s.duration_minutes or 0 for s in sessions)
-    average_speed = (total_distance / total_time * 60) if total_time > 0 else 0
-
+    avg_speed = (total_distance / (total_time / 60)) if total_time > 0 else 0
+    
     # Find most frequent destination
     dest_counts = {}
-    for session in sessions:
-        if session.destination_name:
-            dest_counts[session.destination_name] = dest_counts.get(session.destination_name, 0) + 1
-
-    most_frequent = max(dest_counts.items(), key=lambda x: x[1]) if dest_counts else None
-
-    # Analyze patterns (simplified)
-    patterns = []
-
+    for s in sessions:
+        if s.destination_name:
+            dest_counts[s.destination_name] = dest_counts.get(s.destination_name, 0) + 1
+    
+    most_frequent = max(dest_counts.items(), key=lambda x: x[1])[0] if dest_counts else None
+    
     return {
-        "total_trips": len(sessions),
+        "total_trips": total_trips,
         "total_distance_km": round(total_distance, 2),
         "total_time_minutes": round(total_time, 2),
-        "average_speed_kmh": round(average_speed, 2),
-        "most_frequent_destination": {
-            "name": most_frequent[0],
-            "count": most_frequent[1]
-        } if most_frequent else None,
-        "travel_patterns": patterns
+        "average_speed_kmh": round(avg_speed, 2),
+        "most_frequent_destination": most_frequent,
+        "travel_patterns": []
     }
 
 @router.post("/favorites", response_model=FavoriteRouteResponse)
@@ -224,7 +169,7 @@ async def get_favorite_routes(
     """Get user's favorite routes"""
     favorites = db.query(FavoriteRoute).filter(
         FavoriteRoute.user_id == current_user.id
-    ).order_by(desc(FavoriteRoute.created_at)).all()
+    ).order_by(FavoriteRoute.created_at.desc()).all()
     return favorites
 
 @router.delete("/sessions/{session_id}")

@@ -1,9 +1,9 @@
 /**
  * Enhanced Geocoding Service
- * Combines TomTom API with OpenStreetMap fallback for optimal performance
+ * Uses backend API as proxy to avoid CORS and API key issues
  */
 
-import tomtomService from './tomtomService';
+import api from './api';
 
 class EnhancedGeocodingService {
   constructor() {
@@ -11,12 +11,17 @@ class EnhancedGeocodingService {
     this.cacheTimeout = 30 * 60 * 1000; // 30 minutes
     this.debounceTimeout = 300; // 300ms debounce
     this.debounceTimer = null;
+    this.baseEndpoint = '/traffic';
   }
 
   /**
-   * Search for locations with intelligent fallback
+   * Search for locations using backend API
    */
   async searchLocations(query, options = {}) {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
     const cacheKey = `search_${query}_${JSON.stringify(options)}`;
     
     // Check cache first
@@ -27,33 +32,31 @@ class EnhancedGeocodingService {
       }
     }
 
-    // Try TomTom first if available
-    if (tomtomService.canMakeRequest()) {
-      try {
-        const tomtomResults = await tomtomService.geocode(query, {
+    try {
+      // Use backend API for geocoding (avoids CORS and API key issues)
+      const response = await api.get(`${this.baseEndpoint}/geocode`, {
+        params: {
+          query: query,
           limit: options.limit || 10,
-          countrySet: 'PH',
-          ...options
-        });
-
-        if (tomtomResults.results && tomtomResults.results.length > 0) {
-          const transformedResults = this.transformTomTomResults(tomtomResults.results);
-          
-          // Cache the results
-          this.cache.set(cacheKey, {
-            data: transformedResults,
-            timestamp: Date.now()
-          });
-
-          return transformedResults;
+          country: options.countrySet || 'PH'
         }
-      } catch (error) {
-        console.warn('TomTom geocoding failed, trying fallback:', error);
-      }
-    }
+      });
 
-    // Fallback to OpenStreetMap
-    return this.fallbackSearch(query, options, cacheKey);
+      const results = response.data || [];
+      
+      // Cache the results
+      this.cache.set(cacheKey, {
+        data: results,
+        timestamp: Date.now()
+      });
+
+      return results;
+    } catch (error) {
+      console.error('Backend geocoding failed:', error);
+      
+      // Return mock results for common locations as fallback
+      return this.getMockResults(query);
+    }
   }
 
   /**
@@ -73,7 +76,41 @@ class EnhancedGeocodingService {
   }
 
   /**
-   * Reverse geocoding with fallback
+   * Get mock results for common Las Piñas locations
+   */
+  getMockResults(query) {
+    const mockLocations = [
+      { name: 'SM Southmall', lat: 14.4504, lng: 121.0170, city: 'Las Piñas' },
+      { name: 'Alabang Town Center', lat: 14.4195, lng: 121.0401, city: 'Muntinlupa' },
+      { name: 'Las Piñas City Hall', lat: 14.4378, lng: 121.0122, city: 'Las Piñas' },
+      { name: 'Zapote Market', lat: 14.4456, lng: 121.0189, city: 'Las Piñas' },
+      { name: 'BF Homes', lat: 14.4389, lng: 121.0344, city: 'Las Piñas' },
+      { name: 'Alabang-Zapote Road', lat: 14.4450, lng: 121.0200, city: 'Las Piñas' },
+      { name: 'University of Perpetual Help', lat: 14.4456, lng: 121.0156, city: 'Las Piñas' }
+    ];
+
+    const lowerQuery = query.toLowerCase();
+    return mockLocations
+      .filter(loc => loc.name.toLowerCase().includes(lowerQuery))
+      .map(loc => ({
+        id: `mock_${loc.lat}_${loc.lng}`,
+        name: loc.name,
+        lat: loc.lat,
+        lng: loc.lng,
+        address: {
+          street: '',
+          city: loc.city,
+          country: 'Philippines',
+          full: `${loc.name}, ${loc.city}, Philippines`
+        },
+        type: 'general',
+        provider: 'Mock',
+        confidence: 0.5
+      }));
+  }
+
+  /**
+   * Reverse geocoding using backend API
    */
   async reverseGeocode(lat, lng, options = {}) {
     const cacheKey = `reverse_${lat}_${lng}_${JSON.stringify(options)}`;
@@ -86,29 +123,43 @@ class EnhancedGeocodingService {
       }
     }
 
-    // Try TomTom first if available
-    if (tomtomService.canMakeRequest()) {
-      try {
-        const tomtomResults = await tomtomService.reverseGeocode(lat, lng, options);
-
-        if (tomtomResults.addresses && tomtomResults.addresses.length > 0) {
-          const transformedResult = this.transformTomTomReverseResult(tomtomResults.addresses[0]);
-          
-          // Cache the result
-          this.cache.set(cacheKey, {
-            data: transformedResult,
-            timestamp: Date.now()
-          });
-
-          return transformedResult;
+    try {
+      // Use backend API for reverse geocoding
+      const response = await api.get(`${this.baseEndpoint}/reverse-geocode`, {
+        params: {
+          lat: lat,
+          lng: lng
         }
-      } catch (error) {
-        console.warn('TomTom reverse geocoding failed, trying fallback:', error);
-      }
-    }
+      });
 
-    // Fallback to OpenStreetMap
-    return this.fallbackReverseGeocode(lat, lng, options, cacheKey);
+      const result = response.data;
+      
+      // Cache the result
+      this.cache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now()
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Backend reverse geocoding failed:', error);
+      // Return a basic result
+      return {
+        id: `${lat}_${lng}`,
+        name: `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        lat: lat,
+        lng: lng,
+        address: {
+          street: '',
+          city: 'Las Piñas',
+          country: 'Philippines',
+          full: `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+        },
+        type: 'general',
+        provider: 'Fallback',
+        confidence: 0.3
+      };
+    }
   }
 
   /**

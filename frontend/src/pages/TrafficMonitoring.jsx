@@ -154,34 +154,85 @@ const TrafficMonitoring = () => {
       setRoadworks(roadworksResponse);
       setFloodData(floodResponse);
       
-      // Try to fetch heatmap data separately to avoid blocking the UI
-      try {
-        const heatmapResponse = await trafficService.getTrafficHeatmap(defaultBounds);
-        setHeatmapData(heatmapResponse.heatmap_data || []);
-      } catch (heatmapError) {
-        console.warn('Heatmap data not available:', heatmapError);
-        // Generate sample heatmap data from traffic monitoring points with deduplication
-        const heatmapMap = new Map();
-
-        trafficResponse.forEach(traffic => {
-          const key = `${traffic.latitude.toFixed(4)},${traffic.longitude.toFixed(4)}`;
-          if (heatmapMap.has(key)) {
-            // Average intensities for nearby points
-            const existing = heatmapMap.get(key);
-            existing.intensity = (existing.intensity + traffic.congestion_percentage / 100) / 2;
-          } else {
-            heatmapMap.set(key, {
-              lat: traffic.latitude,
-              lng: traffic.longitude,
-              intensity: traffic.congestion_percentage / 100
+      // Generate road-aligned heatmap data for Las Piñas major roads
+      // (Bypassing API to ensure road alignment)
+      const roadHeatmapData = [];
+        
+        // Define major roads in Las Piñas with their coordinates (following actual road paths)
+        const majorRoads = [
+          // ALABANG-ZAPOTE ROAD (Main horizontal road at top) - Multiple segments for accuracy
+          { start: [14.4650, 120.9950], end: [14.4650, 121.0100], intensity: 0.8 },
+          { start: [14.4650, 121.0100], end: [14.4650, 121.0250], intensity: 0.85 },
+          { start: [14.4650, 121.0250], end: [14.4650, 121.0400], intensity: 0.8 },
+          { start: [14.4650, 121.0400], end: [14.4650, 121.0500], intensity: 0.75 },
+          
+          // QUIRINO AVENUE / MARCOS ALVAREZ AVE (Diagonal major road)
+          { start: [14.4600, 121.0000], end: [14.4500, 121.0100], intensity: 0.85 },
+          { start: [14.4500, 121.0100], end: [14.4400, 121.0200], intensity: 0.9 },
+          { start: [14.4400, 121.0200], end: [14.4300, 121.0300], intensity: 0.85 },
+          
+          // REAL STREET (Vertical road on left)
+          { start: [14.4700, 121.0000], end: [14.4600, 121.0000], intensity: 0.6 },
+          { start: [14.4600, 121.0000], end: [14.4500, 121.0000], intensity: 0.65 },
+          { start: [14.4500, 121.0000], end: [14.4400, 121.0000], intensity: 0.6 },
+          { start: [14.4400, 121.0000], end: [14.4300, 121.0000], intensity: 0.55 },
+          
+          // DAANG HARI ROAD (Vertical road on right)
+          { start: [14.4700, 121.0400], end: [14.4600, 121.0400], intensity: 0.75 },
+          { start: [14.4600, 121.0400], end: [14.4500, 121.0400], intensity: 0.8 },
+          { start: [14.4500, 121.0400], end: [14.4400, 121.0400], intensity: 0.75 },
+          { start: [14.4400, 121.0400], end: [14.4300, 121.0400], intensity: 0.7 },
+          
+          // CAA ROAD / NAGA ROAD (Horizontal middle)
+          { start: [14.4450, 121.0000], end: [14.4450, 121.0150], intensity: 0.7 },
+          { start: [14.4450, 121.0150], end: [14.4450, 121.0300], intensity: 0.75 },
+          { start: [14.4450, 121.0300], end: [14.4450, 121.0450], intensity: 0.7 },
+          
+          // BF HOMES AREA - Multiple parallel roads
+          { start: [14.4400, 121.0150], end: [14.4400, 121.0350], intensity: 0.7 },
+          { start: [14.4380, 121.0150], end: [14.4380, 121.0350], intensity: 0.65 },
+          { start: [14.4360, 121.0150], end: [14.4360, 121.0350], intensity: 0.6 },
+          
+          // TALON AREA ROADS
+          { start: [14.4300, 121.0100], end: [14.4300, 121.0300], intensity: 0.7 },
+          { start: [14.4280, 121.0100], end: [14.4280, 121.0300], intensity: 0.65 },
+          
+          // PAMPLONA AREA (North)
+          { start: [14.4550, 121.0100], end: [14.4550, 121.0300], intensity: 0.65 },
+          { start: [14.4530, 121.0100], end: [14.4530, 121.0300], intensity: 0.6 },
+          
+          // PULANG LUPA / ALMANZA AREA (South)
+          { start: [14.4250, 121.0200], end: [14.4250, 121.0400], intensity: 0.75 },
+          { start: [14.4230, 121.0200], end: [14.4230, 121.0400], intensity: 0.7 },
+          
+          // ZAPOTE-ALABANG ROAD EXTENSION (Lower section)
+          { start: [14.4350, 121.0000], end: [14.4350, 121.0200], intensity: 0.7 },
+          { start: [14.4350, 121.0200], end: [14.4350, 121.0400], intensity: 0.75 },
+        ];
+        
+        // Generate points along each road
+        majorRoads.forEach(road => {
+          const { start, end, intensity } = road;
+          const numPoints = 15; // Fewer points per segment for cleaner look
+          
+          for (let i = 0; i <= numPoints; i++) {
+            const ratio = i / numPoints;
+            const lat = start[0] + (end[0] - start[0]) * ratio;
+            const lng = start[1] + (end[1] - start[1]) * ratio;
+            
+            // Much lower intensity for subtle effect
+            const randomVariation = (Math.random() - 0.5) * 0.1;
+            const finalIntensity = Math.max(0.1, Math.min(0.4, (intensity * 0.3) + randomVariation));
+            
+            roadHeatmapData.push({
+              lat,
+              lng,
+              intensity: finalIntensity
             });
           }
         });
-
-        // Limit to maximum 200 points for better performance
-        const sampleHeatmapData = Array.from(heatmapMap.values()).slice(0, 200);
-        setHeatmapData(sampleHeatmapData);
-      }
+        
+        setHeatmapData(roadHeatmapData);
       
     } catch (err) {
       setError(err.message);
@@ -785,104 +836,121 @@ const TrafficMonitoring = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-      {/* Enhanced Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                  Traffic Monitoring
-                </h1>
-                <p className="text-gray-500 text-sm lg:text-base mt-1">
-                  Real-time traffic intelligence for Las Piñas City
-                </p>
-                {isScraping && (
-                  <div className="flex items-center gap-2 mt-2 text-blue-600">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-sm font-medium">Scraping roadworks data from DPWH, LGU, and news sources...</span>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 relative overflow-hidden">
+      {/* Animated Background Pattern */}
+      <div className="absolute inset-0 opacity-30">
+        <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+        <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+      </div>
+      
+      {/* Modern Header with Glassmorphism */}
+      <div className="relative bg-white/70 backdrop-blur-xl border-b border-white/20 shadow-lg sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex flex-col space-y-4">
+            {/* Title Section */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3 sm:space-x-4">
+                <div className="relative group">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl blur opacity-75 group-hover:opacity-100 transition duration-300"></div>
+                  <div className="relative p-3 sm:p-4 bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 rounded-2xl transform transition-transform group-hover:scale-110">
+                    <svg className="w-6 h-6 sm:w-8 sm:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </div>
-                )}
+                </div>
+                <div>
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 bg-clip-text text-transparent">
+                    Traffic Intelligence
+                  </h1>
+                  <p className="text-gray-600 text-xs sm:text-sm lg:text-base mt-0.5 sm:mt-1 font-medium">
+                    🚦 Real-time monitoring • Las Piñas City
+                  </p>
+                  {isScraping && (
+                    <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-blue-100/80 backdrop-blur-sm rounded-full">
+                      <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-xs sm:text-sm font-semibold text-blue-700">Fetching data...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Real-time Status Badge - Mobile Optimized */}
+              <div className="flex items-center space-x-2 px-3 py-2 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20">
+                <div className={`relative w-2.5 h-2.5 rounded-full ${
+                  isRealTimeActive ? 'bg-emerald-500' : 'bg-gray-400'
+                }`}>
+                  {isRealTimeActive && (
+                    <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-75"></div>
+                  )}
+                </div>
+                <span className="text-xs font-bold text-gray-700 hidden sm:inline">
+                  {isRealTimeActive ? 'LIVE' : 'PAUSED'}
+                </span>
               </div>
             </div>
             
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Heatmap Overlay Toggle */}
+            {/* Action Buttons - Improved Mobile Layout */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              {/* Heatmap Overlay Toggle - Mobile Friendly */}
               {viewMode !== 'heatmap' && (
                 <button
                   onClick={() => setShowHeatmapOverlay(!showHeatmapOverlay)}
-                  className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
+                  className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 transform hover:scale-105 active:scale-95 ${
                     showHeatmapOverlay
-                      ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-800 border border-gray-200'
+                      ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-xl'
+                      : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white border border-gray-200/50 shadow-md'
                   }`}
                   title={showHeatmapOverlay ? 'Hide heatmap overlay' : 'Show heatmap overlay'}
                 >
                   <span className="mr-1">🌡️</span>
-                  Overlay
+                  <span className="hidden sm:inline">Overlay</span>
                 </button>
               )}
 
-              {/* Enhanced View Mode Tabs */}
-              <div className="flex items-center bg-white rounded-xl p-1 shadow-sm border border-gray-200">
-                {[
-                  { key: 'normal', label: 'Normal', icon: '🗺️', color: 'from-gray-500 to-gray-600' },
-                  { key: 'heatmap', label: 'Heatmap', icon: '🌡️', color: 'from-red-500 to-orange-500' },
-                  { key: 'incidents', label: 'Incidents', icon: '⚠️', color: 'from-yellow-500 to-red-500' },
-                  { key: 'monitoring', label: 'Data', icon: '📊', color: 'from-blue-500 to-cyan-500' },
-                  { key: 'incident_prone', label: 'Risk Areas', icon: '🚨', color: 'from-purple-500 to-pink-500' },
-                  { key: 'roadworks', label: 'Roadworks', icon: '🚧', color: 'from-orange-500 to-yellow-500' },
-                  { key: 'flood', label: 'Flood', icon: '🌊', color: 'from-cyan-500 to-blue-500' }
-                ].map((mode) => (
-                  <button
-                    key={mode.key}
-                    onClick={() => setViewMode(mode.key)}
-                    className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 transform hover:scale-105 ${
-                      viewMode === mode.key
-                        ? `bg-gradient-to-r ${mode.color} text-white shadow-lg`
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
-                    }`}
-                  >
-                    <span className="mr-1">{mode.icon}</span>
-                    <span className="hidden sm:inline">{mode.label}</span>
-                    {viewMode === mode.key && (
-                      <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full opacity-80"></div>
-                    )}
-                  </button>
-                ))}
+              {/* Modern View Mode Tabs - Horizontal Scroll on Mobile */}
+              <div className="flex-1 overflow-x-auto scrollbar-hide">
+                <div className="flex items-center bg-white/80 backdrop-blur-sm rounded-2xl p-1.5 shadow-lg border border-white/20 min-w-max">
+                  {[
+                    { key: 'normal', label: 'Map', icon: '🗺️', color: 'from-slate-500 to-slate-600' },
+                    { key: 'heatmap', label: 'Heat', icon: '🔥', color: 'from-red-500 to-orange-500' },
+                    { key: 'incidents', label: 'Alert', icon: '⚠️', color: 'from-amber-500 to-red-500' },
+                    { key: 'monitoring', label: 'Data', icon: '📊', color: 'from-blue-500 to-cyan-500' },
+                    { key: 'incident_prone', label: 'Risk', icon: '🚨', color: 'from-purple-500 to-pink-500' },
+                    { key: 'roadworks', label: 'Work', icon: '🚧', color: 'from-orange-500 to-yellow-500' },
+                    { key: 'flood', label: 'Flood', icon: '🌊', color: 'from-cyan-500 to-blue-600' }
+                  ].map((mode) => (
+                    <button
+                      key={mode.key}
+                      onClick={() => setViewMode(mode.key)}
+                      className={`relative px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 transform hover:scale-105 active:scale-95 whitespace-nowrap ${
+                        viewMode === mode.key
+                          ? `bg-gradient-to-r ${mode.color} text-white shadow-xl`
+                          : 'text-gray-600 hover:bg-white/50'
+                      }`}
+                    >
+                      <span className="mr-1 text-sm">{mode.icon}</span>
+                      <span>{mode.label}</span>
+                      {viewMode === mode.key && (
+                        <div className="absolute -bottom-0.5 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-white/50 rounded-full"></div>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Enhanced Real-time Status */}
-              <div className="flex items-center space-x-3 px-4 py-2 bg-white rounded-xl shadow-sm border border-gray-200">
-                <div className="flex items-center space-x-2">
-                  <div className={`relative w-3 h-3 rounded-full ${
-                    isRealTimeActive ? 'bg-green-500' : 'bg-gray-400'
-                  }`}>
-                    {isRealTimeActive && (
-                      <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700">
-                    {isRealTimeActive ? 'Live' : 'Paused'}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setIsRealTimeActive(!isRealTimeActive)}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 transform hover:scale-105 ${
-                    isRealTimeActive
-                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-md hover:shadow-lg'
-                      : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-md hover:shadow-lg'
-                  }`}
-                >
-                  {isRealTimeActive ? 'Pause' : 'Resume'}
-                </button>
-              </div>
+              {/* Real-time Control Button */}
+              <button
+                onClick={() => setIsRealTimeActive(!isRealTimeActive)}
+                className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg ${
+                  isRealTimeActive
+                    ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:shadow-emerald-500/50'
+                    : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white hover:shadow-gray-500/50'
+                }`}
+              >
+                <span className="hidden sm:inline">{isRealTimeActive ? '⏸️ Pause' : '▶️ Resume'}</span>
+                <span className="sm:hidden">{isRealTimeActive ? '⏸️' : '▶️'}</span>
+              </button>
 
               {/* Last Update Time */}
               {lastUpdateTime && (
@@ -896,75 +964,75 @@ const TrafficMonitoring = () => {
                 </div>
               )}
 
-              {/* Enhanced Simulation Controls */}
+              {/* Modern Simulation Controls */}
               {user?.role === 'admin' && (
-                <div className="flex items-center space-x-3 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200/60">
+                <div className="flex items-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 backdrop-blur-sm rounded-xl border border-blue-300/30 shadow-lg">
                   <div className="flex items-center space-x-2">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span className="text-sm font-semibold text-blue-700">Simulation</span>
+                    <div className={`w-2 h-2 rounded-full ${
+                      simulationStatus.is_running ? 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50' : 'bg-gray-400'
+                    }`}></div>
+                    <span className="text-xs sm:text-sm font-bold text-blue-700 hidden sm:inline">Simulation</span>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${
-                    simulationStatus.is_running ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-                  }`}></div>
-                  <span className="text-xs text-blue-600 font-medium">
-                    {simulationStatus.is_running ? 'Active' : 'Inactive'} • {simulationStatus.roads_monitored} roads
+                  <span className="text-xs font-semibold text-blue-600">
+                    {simulationStatus.roads_monitored} <span className="hidden sm:inline">roads</span>
                   </span>
                   <button
                     onClick={toggleSimulation}
-                    className={`px-3 py-1 text-xs font-medium rounded-lg transition-all duration-200 transform hover:scale-105 ${
+                    className={`px-2 sm:px-3 py-1 text-xs font-bold rounded-lg transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-md ${
                       simulationStatus.is_running
-                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md hover:shadow-lg'
-                        : 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md hover:shadow-lg'
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:shadow-red-500/50'
+                        : 'bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:shadow-emerald-500/50'
                     }`}
                   >
-                    {simulationStatus.is_running ? 'Stop' : 'Start'}
+                    {simulationStatus.is_running ? '⏹️' : '▶️'}
                   </button>
                 </div>
               )}
               
-              {/* Smart Features Buttons */}
+              {/* Smart Features Buttons - Mobile Optimized */}
               <div className="flex items-center space-x-2">
                 <button
                   onClick={toggleInsights}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 hover:-translate-y-0.5 ${
+                  className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 text-xs sm:text-sm ${
                     showInsights 
-                      ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white'
-                      : 'bg-gradient-to-r from-purple-100 to-purple-200 text-purple-700 hover:from-purple-200 hover:to-purple-300'
+                      ? 'bg-gradient-to-r from-purple-500 via-purple-600 to-pink-500 text-white shadow-purple-500/50'
+                      : 'bg-white/80 backdrop-blur-sm text-purple-700 border border-purple-200/50 hover:bg-purple-50'
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  <span>Smart Insights</span>
+                  <span className="hidden sm:inline">Insights</span>
+                  <span className="sm:hidden">🧠</span>
                 </button>
                 
                 <button
                   onClick={toggleSmartRouting}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 hover:-translate-y-0.5 ${
+                  className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 text-xs sm:text-sm ${
                     showSmartRouting 
-                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
-                      : 'bg-gradient-to-r from-green-100 to-green-200 text-green-700 hover:from-green-200 hover:to-green-300'
+                      ? 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white shadow-green-500/50'
+                      : 'bg-white/80 backdrop-blur-sm text-green-700 border border-green-200/50 hover:bg-green-50'
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
                   </svg>
-                  <span>Smart Routing</span>
+                  <span className="hidden sm:inline">Routing</span>
+                  <span className="sm:hidden">🗺️</span>
                 </button>
               </div>
 
-              {/* Enhanced Report Button */}
+              {/* Modern Report Button */}
               {(user?.role === 'traffic_enforcer' || user?.role === 'admin') && (
                 <button
                   onClick={() => setShowReportForm(true)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 hover:-translate-y-0.5"
+                  className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-rose-500 via-red-500 to-pink-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:shadow-red-500/50 transition-all duration-300 transform hover:scale-105 active:scale-95 text-xs sm:text-sm"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>Report Incident</span>
+                  <span className="hidden sm:inline">Report</span>
+                  <span className="sm:hidden">🚨</span>
                 </button>
               )}
             </div>
@@ -973,133 +1041,152 @@ const TrafficMonitoring = () => {
 
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error}
+        <div className="bg-red-500/10 backdrop-blur-sm border border-red-500/30 text-red-700 px-4 py-3 rounded-2xl shadow-lg flex items-center space-x-3">
+          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="font-semibold">{error}</span>
         </div>
       )}
 
-        {/* Enhanced Interactive Statistics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 lg:gap-6">
+        {/* Modern Interactive Statistics Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 sm:gap-3 lg:gap-4">
           {/* Free Flow Traffic */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('monitoring')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/20 to-green-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-green-100 to-emerald-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="flex items-center justify-between mb-2 sm:mb-3">
+                <div className="relative">
+                  <div className="absolute -inset-0.5 sm:-inset-1 bg-gradient-to-r from-emerald-500 to-green-500 rounded-xl sm:rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2 sm:p-2.5 lg:p-3 bg-gradient-to-br from-emerald-500 to-green-500 rounded-xl sm:rounded-2xl shadow-lg">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
                   </div>
-                </div>
-                <div className="text-green-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Free Flow</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">
+                <p className="text-xs font-bold text-gray-500 mb-0.5 sm:mb-1">Free Flow</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-black text-gray-900 mb-1 sm:mb-1.5">
                   {trafficData.filter(t => t.traffic_status === 'free_flow').length}
                 </p>
-                <p className="text-xs text-green-600 font-medium">
-                  {Math.round((trafficData.filter(t => t.traffic_status === 'free_flow').length / Math.max(trafficData.length, 1)) * 100)}% of roads
-                </p>
+                <div className="flex items-center space-x-1">
+                  <div className="flex-1 h-1 sm:h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 to-green-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((trafficData.filter(t => t.traffic_status === 'free_flow').length / Math.max(trafficData.length, 1)) * 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-600">
+                    {Math.round((trafficData.filter(t => t.traffic_status === 'free_flow').length / Math.max(trafficData.length, 1)) * 100)}%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Light Traffic */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('monitoring')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/20 to-amber-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
-              <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-yellow-100 to-amber-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <div className="w-6 h-6 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-full flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="flex items-center justify-between mb-2 sm:mb-3">
+                <div className="relative">
+                  <div className="absolute -inset-0.5 sm:-inset-1 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-xl sm:rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2 sm:p-2.5 lg:p-3 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-xl sm:rounded-2xl shadow-lg">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                   </div>
-                </div>
-                <div className="text-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Light Traffic</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">
+                <p className="text-xs font-bold text-gray-500 mb-0.5 sm:mb-1">Light Traffic</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-black text-gray-900 mb-1 sm:mb-1.5">
                   {trafficData.filter(t => t.traffic_status === 'light').length}
                 </p>
-                <p className="text-xs text-yellow-600 font-medium">
-                  {Math.round((trafficData.filter(t => t.traffic_status === 'light').length / Math.max(trafficData.length, 1)) * 100)}% of roads
-                </p>
+                <div className="flex items-center space-x-1">
+                  <div className="flex-1 h-1 sm:h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-yellow-500 to-amber-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((trafficData.filter(t => t.traffic_status === 'light').length / Math.max(trafficData.length, 1)) * 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs font-bold text-yellow-600">
+                    {Math.round((trafficData.filter(t => t.traffic_status === 'light').length / Math.max(trafficData.length, 1)) * 100)}%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Heavy Traffic */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('monitoring')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-400/20 to-red-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-orange-100 to-red-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-red-500 rounded-full flex items-center justify-center">
-                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                <div className="relative">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2.5 sm:p-3 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl shadow-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
                   </div>
-                </div>
-                <div className="text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Heavy Traffic</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">
+                <p className="text-xs sm:text-sm font-bold text-gray-500 mb-1">Heavy Traffic</p>
+                <p className="text-2xl sm:text-3xl font-black text-gray-900 mb-1">
                   {trafficData.filter(t => ['moderate', 'heavy'].includes(t.traffic_status)).length}
                 </p>
-                <p className="text-xs text-orange-600 font-medium">
-                  {Math.round((trafficData.filter(t => ['moderate', 'heavy'].includes(t.traffic_status)).length / Math.max(trafficData.length, 1)) * 100)}% of roads
-                </p>
+                <div className="flex items-center space-x-1">
+                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((trafficData.filter(t => ['moderate', 'heavy'].includes(t.traffic_status)).length / Math.max(trafficData.length, 1)) * 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs font-bold text-orange-600">
+                    {Math.round((trafficData.filter(t => ['moderate', 'heavy'].includes(t.traffic_status)).length / Math.max(trafficData.length, 1)) * 100)}%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Active Incidents */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-3xl p-4 sm:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('incidents')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-red-400/20 to-rose-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-red-100 to-pink-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-                <div className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+                <div className="relative">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-red-500 to-rose-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2.5 sm:p-3 bg-gradient-to-br from-red-500 to-rose-500 rounded-2xl shadow-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Active Incidents</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">{incidents.length}</p>
-                <p className="text-xs text-red-600 font-medium">
-                  {incidents.filter(i => i.severity === 'high' || i.severity === 'critical').length} high priority
+                <p className="text-xs sm:text-sm font-bold text-gray-500 mb-1">Incidents</p>
+                <p className="text-2xl sm:text-3xl font-black text-gray-900 mb-1">{incidents.length}</p>
+                <p className="text-xs font-bold text-red-600">
+                  {incidents.filter(i => i.severity === 'high' || i.severity === 'critical').length} 🔥 critical
                 </p>
               </div>
             </div>
@@ -1107,28 +1194,26 @@ const TrafficMonitoring = () => {
 
           {/* Incident Prone Areas */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-3xl p-4 sm:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('incident_prone')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-400/20 to-pink-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <div className="text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+                <div className="relative">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2.5 sm:p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl shadow-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Risk Areas</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">{incidentProneAreas.length}</p>
-                <p className="text-xs text-purple-600 font-medium">
-                  {incidentProneAreas.filter(area => area.risk_score > 70).length} high risk
+                <p className="text-xs sm:text-sm font-bold text-gray-500 mb-1">Risk Zones</p>
+                <p className="text-2xl sm:text-3xl font-black text-gray-900 mb-1">{incidentProneAreas.length}</p>
+                <p className="text-xs font-bold text-purple-600">
+                  {incidentProneAreas.filter(area => area.risk_score > 70).length} ⚠️ high risk
                 </p>
               </div>
             </div>
@@ -1136,46 +1221,42 @@ const TrafficMonitoring = () => {
 
           {/* Active Roadworks */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-3xl p-4 sm:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('roadworks')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-orange-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-amber-100 to-orange-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                  </svg>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleScrapeRoadworks();
-                    }}
-                    disabled={isScraping}
-                    className="px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center gap-1"
-                  >
-                    {isScraping ? (
-                      <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                <div className="relative">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2.5 sm:p-3 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl shadow-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                     </svg>
                   </div>
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleScrapeRoadworks();
+                  }}
+                  disabled={isScraping}
+                  className="p-1.5 text-white bg-blue-600/90 backdrop-blur-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  {isScraping ? (
+                    <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
+                </button>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Roadworks</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">{roadworks.length}</p>
-                <p className="text-xs text-amber-600 font-medium">
-                  {roadworks.filter(rw => rw.severity === 'high').length} high impact
+                <p className="text-xs sm:text-sm font-bold text-gray-500 mb-1">Roadworks</p>
+                <p className="text-2xl sm:text-3xl font-black text-gray-900 mb-1">{roadworks.length}</p>
+                <p className="text-xs font-bold text-amber-600">
+                  {roadworks.filter(rw => rw.severity === 'high').length} 🚧 active
                 </p>
               </div>
             </div>
@@ -1183,103 +1264,104 @@ const TrafficMonitoring = () => {
 
           {/* Flood Monitoring */}
           <div 
-            className="group relative bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+            className="group relative bg-white/60 backdrop-blur-md rounded-3xl p-4 sm:p-5 shadow-lg border border-white/40 hover:shadow-2xl hover:scale-105 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden"
             onClick={() => setViewMode('flood')}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/20 to-blue-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative">
               <div className="flex items-center justify-between mb-3">
-                <div className="p-3 bg-gradient-to-br from-cyan-100 to-blue-100 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                  <svg className="w-6 h-6 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                  </svg>
-                </div>
-                <div className="text-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+                <div className="relative">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition-opacity"></div>
+                  <div className="relative p-2.5 sm:p-3 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-2xl shadow-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Flood Points</p>
-                <p className="text-3xl font-bold text-gray-900 mb-1">{floodData.length}</p>
-                <p className="text-xs text-cyan-600 font-medium">
-                  {floodData.filter(f => f.alert_level >= 3).length} critical alerts
+                <p className="text-xs sm:text-sm font-bold text-gray-500 mb-1">Flood Points</p>
+                <p className="text-2xl sm:text-3xl font-black text-gray-900 mb-1">{floodData.length}</p>
+                <p className="text-xs font-bold text-cyan-600">
+                  {floodData.filter(f => f.alert_level >= 3).length} 🌊 critical
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Enhanced Main Content */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Enhanced Map Container */}
+        {/* Modern Main Content */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 sm:gap-6">
+          {/* Modern Map Container */}
           <div className="xl:col-span-3">
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 overflow-hidden">
               {/* Map Header */}
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
-                      </svg>
+              <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-50/50 via-pink-50/50 to-rose-50/50 border-b border-white/30">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <div className="relative">
+                      <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl blur opacity-40"></div>
+                      <div className="relative p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl shadow-lg">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                      </div>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">Interactive Traffic Map</h3>
-                      <p className="text-sm text-gray-500">
-                        {viewMode === 'normal' && 'Clean map view without overlays'}
-                        {viewMode === 'heatmap' && 'Traffic density visualization'}
-                        {viewMode === 'incidents' && 'Active incident locations'}
-                        {viewMode === 'monitoring' && 'Real-time monitoring points'}
-                        {viewMode === 'incident_prone' && 'High-risk area analysis'}
-                        {viewMode === 'roadworks' && 'Construction and maintenance zones'}
-                        {viewMode === 'flood' && 'Flood monitoring stations'}
+                      <h3 className="text-sm sm:text-base font-black text-gray-900">Live Traffic Map</h3>
+                      <p className="text-xs text-gray-600 font-medium hidden sm:block">
+                        {viewMode === 'normal' && '🗺️ Clean view'}
+                        {viewMode === 'heatmap' && '🔥 Traffic density'}
+                        {viewMode === 'incidents' && '⚠️ Active incidents'}
+                        {viewMode === 'monitoring' && '📊 Live monitoring'}
+                        {viewMode === 'incident_prone' && '🚨 Risk zones'}
+                        {viewMode === 'roadworks' && '🚧 Construction zones'}
+                        {viewMode === 'flood' && '🌊 Flood monitoring'}
                       </p>
                     </div>
                   </div>
                   
                   {/* Map Controls */}
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1.5 sm:space-x-2">
                     {/* Route Controls */}
                     {(selectedRoute || routesToShow.length > 0) && (
                       <>
                         <button
                           onClick={handleToggleAllRoutes}
-                          className={`p-2 rounded-lg border transition-colors duration-200 ${
+                          className={`p-1.5 sm:p-2 rounded-xl border transition-all duration-300 shadow-md hover:shadow-lg ${
                             showAllRoutes 
-                              ? 'bg-blue-100 border-blue-300 text-blue-700 hover:bg-blue-200'
-                              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                              ? 'bg-blue-500 border-blue-600 text-white'
+                              : 'bg-white/80 backdrop-blur-sm border-white/40 text-gray-600 hover:bg-white'
                           }`}
                           title={showAllRoutes ? 'Show selected route only' : 'Show all route options'}
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
                           </svg>
                         </button>
                         
                         <button
                           onClick={handleClearRoutes}
-                          className="p-2 bg-white rounded-lg border border-gray-300 hover:bg-red-50 hover:border-red-300 text-gray-600 hover:text-red-600 transition-colors duration-200"
+                          className="p-1.5 sm:p-2 bg-white/80 backdrop-blur-sm rounded-xl border border-white/40 hover:bg-red-50 hover:border-red-300 text-gray-600 hover:text-red-600 transition-all duration-300 shadow-md hover:shadow-lg"
                           title="Clear routes"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
                         
-                        <div className="h-6 w-px bg-gray-300"></div>
+                        <div className="h-5 w-px bg-gray-300/50"></div>
                       </>
                     )}
                     
                     {/* Refresh Button */}
                     <button
                       onClick={fetchTrafficData}
-                      className="p-2 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors duration-200"
+                      className="p-1.5 sm:p-2 bg-white/80 backdrop-blur-sm rounded-xl border border-white/40 hover:bg-white transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 active:scale-95"
                       title="Refresh data"
                     >
-                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </button>
                     
@@ -1292,11 +1374,11 @@ const TrafficMonitoring = () => {
                     {/* Fullscreen Toggle */}
                     <button
                       onClick={handleFullscreenToggle}
-                      className="p-2 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors duration-200"
+                      className="p-1.5 sm:p-2 bg-white/80 backdrop-blur-sm rounded-xl border border-white/40 hover:bg-white transition-all duration-300 shadow-md hover:shadow-lg hover:scale-110 active:scale-95"
                       title="Toggle fullscreen"
                     >
-                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                       </svg>
                     </button>
                   </div>
@@ -1304,7 +1386,7 @@ const TrafficMonitoring = () => {
               </div>
               
               {/* Map Container */}
-              <div className="relative h-[600px] bg-gray-100">
+              <div className="relative h-[400px] sm:h-[500px] lg:h-[600px] bg-gradient-to-br from-gray-100 to-gray-200">
                 {/* Loading Overlay */}
                 {loading && (
                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -1599,9 +1681,9 @@ const TrafficMonitoring = () => {
                 ))}
 
                 {/* Flood Monitoring Points */}
-                {(viewMode === 'flood' || viewMode === 'heatmap') && floodData.map((flood) => (
+                {(viewMode === 'flood' || viewMode === 'heatmap') && floodData.map((flood, index) => (
                   <Marker
-                    key={`flood-${flood.id}`}
+                    key={`normal-flood-${flood.id}-${index}`}
                     position={[flood.latitude, flood.longitude]}
                     icon={L.divIcon({
                       className: 'flood-marker',
@@ -1752,7 +1834,7 @@ const TrafficMonitoring = () => {
         </div>
 
           {/* Enhanced Interactive Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Smart Traffic Insights */}
             {showInsights && (
@@ -1771,22 +1853,25 @@ const TrafficMonitoring = () => {
               />
             )}
             {/* Quick Stats Overview */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
+            <div className="bg-white/70 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-lg border border-white/40 overflow-hidden">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-b border-white/30">
+                <div className="flex items-center space-x-2 sm:space-x-3">
+                  <div className="relative">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl blur opacity-40"></div>
+                    <div className="relative p-1.5 sm:p-2 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl shadow-lg">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900">Traffic Overview</h3>
-                    <p className="text-sm text-gray-500">Real-time status summary</p>
+                    <h3 className="text-sm sm:text-base font-black text-gray-900">Traffic Overview</h3>
+                    <p className="text-xs text-gray-600 font-medium">Real-time status</p>
                   </div>
                 </div>
               </div>
               
-              <div className="p-6 space-y-4">
+              <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 {/* Traffic Status Bars */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1851,18 +1936,21 @@ const TrafficMonitoring = () => {
             </div>
 
             {/* Active Incidents Enhanced */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-red-50 to-pink-50 border-b border-gray-200">
+            <div className="bg-white/70 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-lg border border-white/40 overflow-hidden">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-red-50/50 to-pink-50/50 border-b border-white/30">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-red-100 rounded-lg">
-                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                      </svg>
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <div className="relative">
+                      <div className="absolute -inset-0.5 bg-gradient-to-r from-red-600 to-pink-600 rounded-xl blur opacity-40"></div>
+                      <div className="relative p-1.5 sm:p-2 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl shadow-lg">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">Active Incidents</h3>
-                      <p className="text-sm text-gray-500">{incidents.length} total incidents</p>
+                      <h3 className="text-sm sm:text-base font-black text-gray-900">Active Incidents</h3>
+                      <p className="text-xs text-gray-600 font-medium">{incidents.length} total</p>
                     </div>
                   </div>
                   
@@ -1875,7 +1963,7 @@ const TrafficMonitoring = () => {
                 </div>
               </div>
               
-              <div className="max-h-80 overflow-y-auto">
+              <div className="max-h-64 sm:max-h-80 overflow-y-auto">
                 {incidents.length === 0 ? (
                   <div className="p-8 text-center">
                     <div className="w-12 h-12 mx-auto bg-green-100 rounded-full flex items-center justify-center mb-3">
@@ -1891,20 +1979,20 @@ const TrafficMonitoring = () => {
                     {incidents.map((incident, index) => (
                       <div 
                         key={incident.id} 
-                        className="p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-200 group"
+                        className="p-3 sm:p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-200 group"
                         onClick={() => setSelectedIncident(incident)}
                       >
-                        <div className="flex items-start space-x-3">
+                        <div className="flex items-start space-x-2 sm:space-x-3">
                           <div 
-                            className="w-4 h-4 rounded-full mt-0.5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
+                            className="w-3 h-3 sm:w-4 sm:h-4 rounded-full mt-0.5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
                             style={{ backgroundColor: getSeverityColor(incident.severity) }}
                           ></div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium text-gray-900 text-sm truncate">{incident.title}</h4>
-                              <span className="text-xs text-gray-400">#{index + 1}</span>
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <div className="flex items-center justify-between gap-2">
+                              <h4 className="font-bold text-gray-900 text-xs sm:text-sm truncate">{incident.title}</h4>
+                              <span className="text-xs text-gray-400 flex-shrink-0">#{index + 1}</span>
                             </div>
-                            <p className="text-xs text-gray-600 mt-1 capitalize">
+                            <p className="text-xs text-gray-600 mt-1 capitalize truncate">
                               {incident.incident_type.replace('_', ' ')} • {incident.severity} priority
                             </p>
                             <div className="flex items-center justify-between mt-2">
@@ -2003,9 +2091,9 @@ const TrafficMonitoring = () => {
                       }
                       return b.water_level_cm - a.water_level_cm;
                     })
-                    .map((flood) => (
+                    .map((flood, index) => (
                       <div 
-                        key={`sidebar-flood-${flood.id}`} 
+                        key={`sidebar-flood-${flood.id}-${index}`} 
                         className="p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                         onClick={() => setSelectedIncident(flood)}
                       >
@@ -3318,9 +3406,9 @@ const TrafficMonitoring = () => {
                 ))}
 
                 {/* Flood Monitoring Points */}
-                {(viewMode === 'flood' || viewMode === 'heatmap') && floodData.map((flood) => (
+                {(viewMode === 'flood' || viewMode === 'heatmap') && floodData.map((flood, index) => (
                   <Marker
-                    key={`flood-${flood.id}`}
+                    key={`fullscreen-flood-${flood.id}-${index}`}
                     position={[flood.latitude, flood.longitude]}
                     icon={L.divIcon({
                       className: 'flood-marker',

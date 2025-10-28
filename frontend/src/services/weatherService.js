@@ -227,23 +227,23 @@ class WeatherService {
 
   getFloodLevelColor(level) {
     const colorMap = {
-      normal: 'green',
-      low: 'yellow',
-      moderate: 'orange',
-      high: 'red',
-      critical: 'purple'
+      normal: '#22c55e', // green-500
+      low: '#eab308',    // yellow-500
+      moderate: '#f97316', // orange-500
+      high: '#ef4444',   // red-500
+      critical: '#7c3aed' // purple-600
     };
-    return colorMap[level] || 'gray';
+    return colorMap[level] || '#6b7280'; // gray-500
   }
 
   getSeverityColor(severity) {
     const colorMap = {
-      advisory: 'blue',
-      watch: 'yellow',
-      warning: 'orange',
-      critical: 'red'
+      advisory: '#3b82f6', // blue-500
+      watch: '#eab308',    // yellow-500
+      warning: '#f97316',  // orange-500
+      critical: '#ef4444'  // red-500
     };
-    return colorMap[severity] || 'gray';
+    return colorMap[severity] || '#6b7280'; // gray-500
   }
 }
 

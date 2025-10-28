@@ -605,10 +605,9 @@ async def get_daily_traffic_insights(
         insights = traffic_insights_service.get_daily_traffic_insights(db)
         return insights
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating traffic insights: {str(e)}"
-        )
+        logger.error(f"Error generating traffic insights: {str(e)}")
+        # Return default insights instead of 500 error
+        return traffic_insights_service._get_default_insights()
 
 # Traffic Pattern Endpoint (24h, 15-min intervals)
 @router.get("/monitoring/patterns")
@@ -839,6 +838,129 @@ async def get_recommended_routes(
         )
 
 # Geocoding Proxy Endpoints
+@router.get("/geocode")
+async def geocode_location(
+    query: str = Query(..., description="Search query"),
+    limit: int = Query(10, le=20, description="Maximum number of results"),
+    country: str = Query("PH", description="Country code")
+):
+    """Geocode location search - proxy for Nominatim to avoid CORS issues."""
+    import httpx
+    
+    try:
+        params = {
+            'q': query,
+            'format': 'json',
+            'limit': limit,
+            'countrycodes': country.lower(),
+            'addressdetails': '1',
+            'extratags': '1',
+            'namedetails': '1'
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                'https://nominatim.openstreetmap.org/search',
+                params=params,
+                headers={'User-Agent': 'LasPinasTrafficManagement/1.0'}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Transform to frontend format
+                results = []
+                for item in data:
+                    results.append({
+                        'id': f"{item['lat']}_{item['lon']}",
+                        'name': item.get('display_name', ''),
+                        'lat': float(item['lat']),
+                        'lng': float(item['lon']),
+                        'address': {
+                            'street': item.get('address', {}).get('road', ''),
+                            'city': item.get('address', {}).get('city', item.get('address', {}).get('town', '')),
+                            'country': item.get('address', {}).get('country', 'Philippines'),
+                            'full': item.get('display_name', '')
+                        },
+                        'type': 'general',
+                        'provider': 'OpenStreetMap',
+                        'confidence': 0.8
+                    })
+                return results
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Nominatim API error: {response.status_code}"
+                )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Geocoding service timeout"
+        )
+    except Exception as e:
+        logger.error(f"Geocoding search error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Geocoding search failed: {str(e)}"
+        )
+
+@router.get("/reverse-geocode")
+async def reverse_geocode_location(
+    lat: float = Query(..., description="Latitude"),
+    lng: float = Query(..., description="Longitude")
+):
+    """Reverse geocode coordinates - proxy for Nominatim to avoid CORS issues."""
+    import httpx
+    
+    try:
+        params = {
+            'lat': lat,
+            'lon': lng,
+            'format': 'json',
+            'addressdetails': '1'
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                'https://nominatim.openstreetmap.org/reverse',
+                params=params,
+                headers={'User-Agent': 'LasPinasTrafficManagement/1.0'}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Transform to frontend format
+                return {
+                    'id': f"{lat}_{lng}",
+                    'name': data.get('display_name', ''),
+                    'lat': float(data['lat']),
+                    'lng': float(data['lon']),
+                    'address': {
+                        'street': data.get('address', {}).get('road', ''),
+                        'city': data.get('address', {}).get('city', data.get('address', {}).get('town', '')),
+                        'country': data.get('address', {}).get('country', 'Philippines'),
+                        'full': data.get('display_name', '')
+                    },
+                    'type': 'general',
+                    'provider': 'OpenStreetMap',
+                    'confidence': 0.8
+                }
+            else:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Nominatim API error: {response.status_code}"
+                )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Reverse geocoding service timeout"
+        )
+    except Exception as e:
+        logger.error(f"Reverse geocoding error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Reverse geocoding failed: {str(e)}"
+        )
+
 @router.get("/geocoding/search")
 async def geocoding_search(
     q: str = Query(..., description="Search query"),
