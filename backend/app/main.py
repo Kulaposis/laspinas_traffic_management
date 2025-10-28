@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     try:
+        # Delay initial connect slightly when using remote pooled DBs
+        import time, os
+        if os.getenv("DATABASE_URL", "").find("leapcellpool.com") != -1:
+            time.sleep(1.0)
         Base.metadata.create_all(bind=engine)
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")

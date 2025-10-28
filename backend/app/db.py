@@ -12,9 +12,24 @@ DATABASE_URL = os.getenv(
     "postgresql://traffic_user:traffic_password@localhost:5432/traffic_management"  # Default PostgreSQL for production
 )
 
+# If using Leapcell pooled Postgres, enforce SSL and add sslmode=require if missing
+if "leapcellpool.com" in DATABASE_URL and "sslmode=" not in DATABASE_URL:
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
+
 # Handle different database types
 if DATABASE_URL.startswith("postgresql"):
     # Fast fail and keepalive for serverless / remote Postgres
+    connect_args = {
+        "connect_timeout": 5,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+    }
+    if "sslmode=require" in DATABASE_URL:
+        connect_args["sslmode"] = "require"
+
     engine = create_engine(
         DATABASE_URL,
         pool_pre_ping=True,
@@ -22,13 +37,7 @@ if DATABASE_URL.startswith("postgresql"):
         pool_size=5,
         max_overflow=10,
         echo=False,
-        connect_args={
-            "connect_timeout": 5,
-            "keepalives": 1,
-            "keepalives_idle": 30,
-            "keepalives_interval": 10,
-            "keepalives_count": 3,
-        }
+        connect_args=connect_args,
     )
 else:
     # SQLite configuration
