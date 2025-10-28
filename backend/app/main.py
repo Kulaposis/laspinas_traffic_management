@@ -15,12 +15,15 @@ from .services.scheduler import start_weather_scheduler, stop_weather_scheduler
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Defer table creation to startup to avoid import-time crashes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
     await start_weather_scheduler()
     yield
     # Shutdown
@@ -127,6 +130,11 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+# Leapcell reverse proxy healthcheck path
+@app.get("/kaithheathcheck")
+def leapcell_healthcheck():
+    return {"status": "ok"}
 
 # Firebase sync endpoint is now handled by auth router
 

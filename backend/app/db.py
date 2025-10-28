@@ -14,11 +14,21 @@ DATABASE_URL = os.getenv(
 
 # Handle different database types
 if DATABASE_URL.startswith("postgresql"):
+    # Fast fail and keepalive for serverless / remote Postgres
     engine = create_engine(
         DATABASE_URL,
         pool_pre_ping=True,
         pool_recycle=300,
-        echo=False
+        pool_size=5,
+        max_overflow=10,
+        echo=False,
+        connect_args={
+            "connect_timeout": 5,
+            "keepalives": 1,
+            "keepalives_idle": 30,
+            "keepalives_interval": 10,
+            "keepalives_count": 3,
+        }
     )
 else:
     # SQLite configuration
