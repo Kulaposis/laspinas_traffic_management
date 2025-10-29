@@ -75,16 +75,25 @@ app = FastAPI(
 # CORS configuration based on environment
 cors_origins_env = os.getenv("CORS_ORIGINS", "")
 if cors_origins_env:
-    cors_origins = cors_origins_env.split(",")
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 else:
-    # Default: allow all origins for maximum compatibility
-    cors_origins = ["*"]
+    # Default: allow known frontend origins
+    cors_origins = [
+        "https://laspinastrafficmanagement.vercel.app",
+        "https://laspinastrafficmanagement-adenj8873-0xfe2ns0.apn.leapcell.dev",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 # Always allow credentials for authentication
 allow_credentials = True
 
-# If specific origins are set, ensure Vercel domain is included
-if cors_origins != ["*"] and "https://laspinastrafficmanagement.vercel.app" not in cors_origins:
+# Track whether wildcard is allowed
+allow_all_origins = "*" in cors_origins
+
+if not allow_all_origins and "https://laspinastrafficmanagement.vercel.app" not in cors_origins:
     cors_origins.append("https://laspinastrafficmanagement.vercel.app")
 
 # CORS middleware - Comprehensive configuration for Emergency Center
