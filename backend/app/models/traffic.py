@@ -4,18 +4,18 @@ from ..db import Base
 import enum
 
 class TrafficStatus(enum.Enum):
-    FREE_FLOW = "free_flow"
-    LIGHT = "light"
-    MODERATE = "moderate"
-    HEAVY = "heavy"
-    STANDSTILL = "standstill"
+    FREE_FLOW = "FREE_FLOW"
+    LIGHT = "LIGHT"
+    MODERATE = "MODERATE"
+    HEAVY = "HEAVY"
+    STANDSTILL = "STANDSTILL"
 
 class RoadType(enum.Enum):
-    HIGHWAY = "highway"
-    MAIN_ROAD = "main_road"
-    SIDE_STREET = "side_street"
-    RESIDENTIAL = "residential"
-    BRIDGE = "bridge"
+    HIGHWAY = "HIGHWAY"
+    MAIN_ROAD = "MAIN_ROAD"
+    SIDE_STREET = "SIDE_STREET"
+    RESIDENTIAL = "RESIDENTIAL"
+    BRIDGE = "BRIDGE"
 
 class TrafficMonitoring(Base):
     __tablename__ = "traffic_monitoring"
