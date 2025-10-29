@@ -73,21 +73,19 @@ app = FastAPI(
 )
 
 # CORS configuration based on environment
-cors_origins = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
-).split(",")
-
-# In production, use configured origins or allow all for flexibility
-if os.getenv("ENVIRONMENT") == "production":
-    # If no specific origins are configured, allow all for deployment flexibility
-    if not cors_origins:
-        cors_origins = ["*"]
-    allow_credentials = True
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    cors_origins = cors_origins_env.split(",")
 else:
-    # Development: allow all origins for easier testing
+    # Default: allow all origins for maximum compatibility
     cors_origins = ["*"]
-    allow_credentials = True
+
+# Always allow credentials for authentication
+allow_credentials = True
+
+# If specific origins are set, ensure Vercel domain is included
+if cors_origins != ["*"] and "https://laspinastrafficmanagement.vercel.app" not in cors_origins:
+    cors_origins.append("https://laspinastrafficmanagement.vercel.app")
 
 # CORS middleware - Comprehensive configuration for Emergency Center
 app.add_middleware(

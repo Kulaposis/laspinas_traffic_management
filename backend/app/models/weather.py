@@ -5,7 +5,7 @@ import enum
 
 class WeatherCondition(enum.Enum):
     CLEAR = "CLEAR"
-    PARTLY_CLOUDY = "CLOUDY"
+    PARTLY_CLOUDY = "PARTLY_CLOUDY"
     CLOUDY = "CLOUDY"
     LIGHT_RAIN = "LIGHT_RAIN"
     MODERATE_RAIN = "MODERATE_RAIN"

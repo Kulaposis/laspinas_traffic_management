@@ -299,7 +299,7 @@ async def test_weather_service():
         )
 
 # Weather Data Endpoints
-@router.get("/current", response_model=List[WeatherDataResponse])
+@router.get("/current")
 def get_current_weather(
     area_name: Optional[str] = None,
     lat_min: Optional[float] = None,
@@ -309,22 +309,29 @@ def get_current_weather(
     db: Session = Depends(get_db)
 ):
     """Get current weather data with optional filtering by area or coordinates."""
-    query = db.query(WeatherData)
-    
-    if area_name:
-        query = query.filter(WeatherData.area_name.ilike(f"%{area_name}%"))
-    
-    if all([lat_min, lat_max, lng_min, lng_max]):
-        query = query.filter(
-            WeatherData.latitude.between(lat_min, lat_max),
-            WeatherData.longitude.between(lng_min, lng_max)
-        )
-    
-    # Get latest weather data for each area (within last 2 hours)
-    cutoff_time = datetime.utcnow() - timedelta(hours=2)
-    return query.filter(
-        WeatherData.recorded_at >= cutoff_time
-    ).order_by(WeatherData.recorded_at.desc()).all()
+    try:
+        query = db.query(WeatherData)
+        
+        if area_name:
+            query = query.filter(WeatherData.area_name.ilike(f"%{area_name}%"))
+        
+        if all([lat_min, lat_max, lng_min, lng_max]):
+            query = query.filter(
+                WeatherData.latitude.between(lat_min, lat_max),
+                WeatherData.longitude.between(lng_min, lng_max)
+            )
+        
+        # Get latest weather data for each area (within last 2 hours)
+        cutoff_time = datetime.utcnow() - timedelta(hours=2)
+        results = query.filter(
+            WeatherData.recorded_at >= cutoff_time
+        ).order_by(WeatherData.recorded_at.desc()).all()
+        
+        return results
+    except Exception as e:
+        logger.error(f"Error fetching current weather: {str(e)}")
+        # Return empty list instead of 500 error for better UX
+        return []
 
 @router.get("/history")
 def get_weather_history(
