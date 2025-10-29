@@ -4,27 +4,27 @@ from ..db import Base
 import enum
 
 class TransportType(enum.Enum):
-    JEEPNEY = "jeepney"
-    BUS = "bus"
-    TRICYCLE = "tricycle"
-    FX = "fx"
-    UV_EXPRESS = "uv_express"
-    TAXI = "taxi"
-    MOTORCYCLE_TAXI = "motorcycle_taxi"
+    JEEPNEY = "JEEPNEY"
+    BUS = "BUS"
+    TRICYCLE = "TRICYCLE"
+    FX = "FX"
+    UV_EXPRESS = "UV_EXPRESS"
+    TAXI = "TAXI"
+    MOTORCYCLE_TAXI = "MOTORCYCLE_TAXI"
 
 class VehicleStatus(enum.Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    IN_TERMINAL = "in_terminal"
-    ON_ROUTE = "on_route"
-    BREAKDOWN = "breakdown"
-    MAINTENANCE = "maintenance"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    IN_TERMINAL = "IN_TERMINAL"
+    ON_ROUTE = "ON_ROUTE"
+    BREAKDOWN = "BREAKDOWN"
+    MAINTENANCE = "MAINTENANCE"
 
 class RouteStatus(enum.Enum):
-    OPERATIONAL = "operational"
-    SUSPENDED = "suspended"
-    PARTIAL = "partial"
-    REROUTED = "rerouted"
+    OPERATIONAL = "OPERATIONAL"
+    SUSPENDED = "SUSPENDED"
+    PARTIAL = "PARTIAL"
+    REROUTED = "REROUTED"
 
 class PublicTransportRoute(Base):
     __tablename__ = "public_transport_routes"

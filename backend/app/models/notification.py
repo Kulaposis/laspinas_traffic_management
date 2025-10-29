@@ -5,18 +5,18 @@ from ..db import Base
 import enum
 
 class NotificationType(enum.Enum):
-    TRAFFIC_ALERT = "traffic_alert"
-    VIOLATION_UPDATE = "violation_update"
-    REPORT_UPDATE = "report_update"
-    SYSTEM_ANNOUNCEMENT = "system_announcement"
-    WEATHER_ALERT = "weather_alert"
-    EMERGENCY = "emergency"
+    TRAFFIC_ALERT = "TRAFFIC_ALERT"
+    VIOLATION_UPDATE = "VIOLATION_UPDATE"
+    REPORT_UPDATE = "REPORT_UPDATE"
+    SYSTEM_ANNOUNCEMENT = "SYSTEM_ANNOUNCEMENT"
+    WEATHER_ALERT = "WEATHER_ALERT"
+    EMERGENCY = "EMERGENCY"
 
 class NotificationPriority(enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    URGENT = "urgent"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    URGENT = "URGENT"
 
 class Notification(Base):
     __tablename__ = "notifications"

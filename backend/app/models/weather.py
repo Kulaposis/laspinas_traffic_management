@@ -4,21 +4,21 @@ from ..db import Base
 import enum
 
 class WeatherCondition(enum.Enum):
-    CLEAR = "clear"
-    PARTLY_CLOUDY = "partly_cloudy"
-    CLOUDY = "cloudy"
-    LIGHT_RAIN = "light_rain"
-    MODERATE_RAIN = "moderate_rain"
-    HEAVY_RAIN = "heavy_rain"
-    THUNDERSTORM = "thunderstorm"
-    FOG = "fog"
+    CLEAR = "CLEAR"
+    PARTLY_CLOUDY = "CLOUDY"
+    CLOUDY = "CLOUDY"
+    LIGHT_RAIN = "LIGHT_RAIN"
+    MODERATE_RAIN = "MODERATE_RAIN"
+    HEAVY_RAIN = "HEAVY_RAIN"
+    THUNDERSTORM = "THUNDERSTORM"
+    FOG = "FOG"
 
 class FloodLevel(enum.Enum):
-    NORMAL = "normal"
-    LOW = "low"
-    MODERATE = "moderate"
-    HIGH = "high"
-    CRITICAL = "critical"
+    NORMAL = "NORMAL"
+    LOW = "LOW"
+    MODERATE = "MODERATE"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 class WeatherData(Base):
     __tablename__ = "weather_data"

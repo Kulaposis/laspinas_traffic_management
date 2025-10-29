@@ -5,19 +5,19 @@ from ..db import Base
 import enum
 
 class ReportType(enum.Enum):
-    ACCIDENT = "accident"
-    TRAFFIC_JAM = "traffic_jam"
-    ROAD_CLOSURE = "road_closure"
-    FLOODING = "flooding"
-    BROKEN_TRAFFIC_LIGHT = "broken_traffic_light"
-    ILLEGAL_PARKING = "illegal_parking"
-    OTHER = "other"
+    ACCIDENT = "ACCIDENT"
+    TRAFFIC_JAM = "TRAFFIC_JAM"
+    ROAD_CLOSURE = "ROAD_CLOSURE"
+    FLOODING = "FLOODING"
+    BROKEN_TRAFFIC_LIGHT = "BROKEN_TRAFFIC_LIGHT"
+    ILLEGAL_PARKING = "ILLEGAL_PARKING"
+    OTHER = "OTHER"
 
 class ReportStatus(enum.Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    RESOLVED = "resolved"
-    CLOSED = "closed"
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"
 
 class Report(Base):
     __tablename__ = "reports"

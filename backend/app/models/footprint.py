@@ -4,10 +4,10 @@ from ..db import Base
 import enum
 
 class CrowdLevel(enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 class Footprint(Base):
     __tablename__ = "footprints"

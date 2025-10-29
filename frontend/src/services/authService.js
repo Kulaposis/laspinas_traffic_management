@@ -52,9 +52,13 @@ class AuthService {
         firebase_token: firebaseData.idToken
       });
 
-      // Store backend token
+      // Store backend token and user data
       if (response.data.access_token) {
         localStorage.setItem('access_token', response.data.access_token);
+      }
+      
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
       }
 
       return {

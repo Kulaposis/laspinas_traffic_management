@@ -4,17 +4,17 @@ from ..db import Base
 import enum
 
 class ParkingType(enum.Enum):
-    STREET = "street"
-    LOT = "lot"
-    GARAGE = "garage"
-    PRIVATE = "private"
-    RESERVED = "reserved"
+    STREET = "STREET"
+    LOT = "LOT"
+    GARAGE = "GARAGE"
+    PRIVATE = "PRIVATE"
+    RESERVED = "RESERVED"
 
 class ParkingStatus(enum.Enum):
-    AVAILABLE = "available"
-    OCCUPIED = "occupied"
-    RESERVED = "reserved"
-    OUT_OF_ORDER = "out_of_order"
+    AVAILABLE = "AVAILABLE"
+    OCCUPIED = "OCCUPIED"
+    RESERVED = "RESERVED"
+    OUT_OF_ORDER = "OUT_OF_ORDER"
 
 class Parking(Base):
     __tablename__ = "parking"

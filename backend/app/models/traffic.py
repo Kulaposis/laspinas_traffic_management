@@ -75,11 +75,11 @@ class RoadIncident(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class IncidentProneAreaType(enum.Enum):
-    ACCIDENT_PRONE = "accident_prone"
-    CRIME_HOTSPOT = "crime_hotspot"
-    FLOOD_PRONE = "flood_prone"
-    TRAFFIC_CONGESTION = "traffic_congestion"
-    ROAD_HAZARD = "road_hazard"
+    ACCIDENT_PRONE = "ACCIDENT_PRONE"
+    CRIME_HOTSPOT = "CRIME_HOTSPOT"
+    FLOOD_PRONE = "FLOOD_PRONE"
+    TRAFFIC_CONGESTION = "TRAFFIC_CONGESTION"
+    ROAD_HAZARD = "ROAD_HAZARD"
 
 class IncidentProneArea(Base):
     __tablename__ = "incident_prone_areas"

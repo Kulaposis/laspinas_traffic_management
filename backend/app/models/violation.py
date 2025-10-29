@@ -5,21 +5,21 @@ from ..db import Base
 import enum
 
 class ViolationType(enum.Enum):
-    SPEEDING = "speeding"
-    ILLEGAL_PARKING = "illegal_parking"
-    RUNNING_RED_LIGHT = "running_red_light"
-    NO_SEATBELT = "no_seatbelt"
-    DRUNK_DRIVING = "drunk_driving"
-    RECKLESS_DRIVING = "reckless_driving"
-    EXPIRED_LICENSE = "expired_license"
-    NO_HELMET = "no_helmet"
-    OTHER = "other"
+    SPEEDING = "SPEEDING"
+    ILLEGAL_PARKING = "ILLEGAL_PARKING"
+    RUNNING_RED_LIGHT = "RUNNING_RED_LIGHT"
+    NO_SEATBELT = "NO_SEATBELT"
+    DRUNK_DRIVING = "DRUNK_DRIVING"
+    RECKLESS_DRIVING = "RECKLESS_DRIVING"
+    EXPIRED_LICENSE = "EXPIRED_LICENSE"
+    NO_HELMET = "NO_HELMET"
+    OTHER = "OTHER"
 
 class ViolationStatus(enum.Enum):
-    ISSUED = "issued"
-    PAID = "paid"
-    CONTESTED = "contested"
-    DISMISSED = "dismissed"
+    ISSUED = "ISSUED"
+    PAID = "PAID"
+    CONTESTED = "CONTESTED"
+    DISMISSED = "DISMISSED"
 
 class Violation(Base):
     __tablename__ = "violations"

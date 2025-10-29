@@ -5,24 +5,24 @@ from ..db import Base
 import enum
 
 class CameraType(enum.Enum):
-    TRAFFIC = "traffic"
-    SECURITY = "security"
-    SPEED = "speed"
-    INTERSECTION = "intersection"
-    PEDESTRIAN = "pedestrian"
-    PARKING = "parking"
+    TRAFFIC = "TRAFFIC"
+    SECURITY = "SECURITY"
+    SPEED = "SPEED"
+    INTERSECTION = "INTERSECTION"
+    PEDESTRIAN = "PEDESTRIAN"
+    PARKING = "PARKING"
 
 class CameraStatus(enum.Enum):
-    ONLINE = "online"
-    OFFLINE = "offline"
-    MAINTENANCE = "maintenance"
-    ERROR = "error"
+    ONLINE = "ONLINE"
+    OFFLINE = "OFFLINE"
+    MAINTENANCE = "MAINTENANCE"
+    ERROR = "ERROR"
 
 class RecordingQuality(enum.Enum):
-    SD = "sd"
-    HD = "hd"
-    FULL_HD = "full_hd"
-    FOUR_K = "4k"
+    SD = "SD"
+    HD = "HD"
+    FULL_HD = "FULL_HD"
+    FOUR_K = "FOUR_K"
 
 class CCTVCamera(Base):
     __tablename__ = "cctv_cameras"

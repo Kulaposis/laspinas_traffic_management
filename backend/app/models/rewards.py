@@ -5,36 +5,36 @@ from ..db import Base
 import enum
 
 class RewardType(enum.Enum):
-    POINTS = "points"
-    BADGE = "badge"
-    CERTIFICATE = "certificate"
-    DISCOUNT = "discount"
-    CASH = "cash"
-    GIFT = "gift"
+    POINTS = "POINTS"
+    BADGE = "BADGE"
+    CERTIFICATE = "CERTIFICATE"
+    DISCOUNT = "DISCOUNT"
+    CASH = "CASH"
+    GIFT = "GIFT"
 
 class ActionType(enum.Enum):
-    REPORT_VIOLATION = "report_violation"
-    REPORT_INCIDENT = "report_incident"
-    VERIFIED_REPORT = "verified_report"
-    COMPLAINT_RESOLVED = "complaint_resolved"
-    SUGGESTION_IMPLEMENTED = "suggestion_implemented"
-    SAFE_DRIVING = "safe_driving"
-    COMMUNITY_SERVICE = "community_service"
-    REFERRAL = "referral"
+    REPORT_VIOLATION = "REPORT_VIOLATION"
+    REPORT_INCIDENT = "REPORT_INCIDENT"
+    VERIFIED_REPORT = "VERIFIED_REPORT"
+    COMPLAINT_RESOLVED = "COMPLAINT_RESOLVED"
+    SUGGESTION_IMPLEMENTED = "SUGGESTION_IMPLEMENTED"
+    SAFE_DRIVING = "SAFE_DRIVING"
+    COMMUNITY_SERVICE = "COMMUNITY_SERVICE"
+    REFERRAL = "REFERRAL"
 
 class BadgeLevel(enum.Enum):
-    BRONZE = "bronze"
-    SILVER = "silver"
-    GOLD = "gold"
-    PLATINUM = "platinum"
-    DIAMOND = "diamond"
+    BRONZE = "BRONZE"
+    SILVER = "SILVER"
+    GOLD = "GOLD"
+    PLATINUM = "PLATINUM"
+    DIAMOND = "DIAMOND"
 
 class RedemptionStatus(enum.Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REDEEMED = "redeemed"
-    EXPIRED = "expired"
-    CANCELLED = "cancelled"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REDEEMED = "REDEEMED"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
 
 class UserRewards(Base):
     __tablename__ = "user_rewards"

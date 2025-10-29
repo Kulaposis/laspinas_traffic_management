@@ -19,12 +19,10 @@ class DataScheduler:
         self.is_running = False
         self.task: Optional[asyncio.Task] = None
         self.weather_interval = 900  # 15 minutes in seconds
-        self.traffic_interval = 60  # 1 minute for real traffic API
-        self.footprint_interval = 30  # 30 seconds for real-time feel
+        self.traffic_interval = 600  # 10 minutes for real traffic API (avoid rate limits)
         self.daily_flood_interval = 24 * 60 * 60  # 24 hours
         self.last_weather_update = 0
         self.last_traffic_update = 0
-        self.last_footprint_update = 0
         self.last_daily_flood_update = 0
     
     async def start(self):
@@ -66,11 +64,6 @@ class DataScheduler:
                 if current_time - self.last_traffic_update >= self.traffic_interval:
                     await self._update_traffic_data()
                     self.last_traffic_update = current_time
-                
-                # Check if it's time to update footprint data
-                if current_time - self.last_footprint_update >= self.footprint_interval:
-                    await self._update_footprint_data()
-                    self.last_footprint_update = current_time
 
                 # Ensure at least a daily refresh of barangay flood monitoring
                 if current_time - self.last_daily_flood_update >= self.daily_flood_interval:
@@ -122,47 +115,48 @@ class DataScheduler:
         finally:
             db.close()
     
-    async def _update_footprint_data(self):
-        """Update footprint data and broadcast via WebSocket"""
-        db: Session = SessionLocal()
-        try:
-            logger.debug("Starting scheduled footprint data update")
-            
-            # Update footprint data for all monitoring areas
-            footprint_updates = await footprint_service.update_all_footprint_data(db)
-            logger.debug(f"Updated footprint data for {len(footprint_updates)} areas")
-            
-            # Prepare data for WebSocket broadcast
-            if footprint_updates:
-                footprint_data = []
-                for footprint in footprint_updates:
-                    footprint_data.append({
-                        "id": footprint.id,
-                        "area_name": footprint.area_name,
-                        "latitude": footprint.latitude,
-                        "longitude": footprint.longitude,
-                        "radius_meters": footprint.radius_meters,
-                        "pedestrian_count": footprint.pedestrian_count,
-                        "crowd_level": footprint.crowd_level.value,
-                        "temperature_celsius": footprint.temperature_celsius,
-                        "humidity_percent": footprint.humidity_percent,
-                        "recorded_at": footprint.recorded_at.isoformat() if footprint.recorded_at else None
-                    })
-                
-                # Broadcast footprint updates via WebSocket
-                await manager.send_footprint_update({
-                    "type": "real_time_update",
-                    "areas": footprint_data,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "total_areas": len(footprint_data)
-                })
-            
-            logger.debug("Scheduled footprint data update completed successfully")
-            
-        except Exception as e:
-            logger.error(f"Error updating footprint data: {str(e)}")
-        finally:
-            db.close()
+    # Footprint data updates disabled to reduce API calls
+    # async def _update_footprint_data(self):
+    #     """Update footprint data and broadcast via WebSocket"""
+    #     db: Session = SessionLocal()
+    #     try:
+    #         logger.debug("Starting scheduled footprint data update")
+    #         
+    #         # Update footprint data for all monitoring areas
+    #         footprint_updates = await footprint_service.update_all_footprint_data(db)
+    #         logger.debug(f"Updated footprint data for {len(footprint_updates)} areas")
+    #         
+    #         # Prepare data for WebSocket broadcast
+    #         if footprint_updates:
+    #             footprint_data = []
+    #             for footprint in footprint_updates:
+    #                 footprint_data.append({
+    #                     "id": footprint.id,
+    #                     "area_name": footprint.area_name,
+    #                     "latitude": footprint.latitude,
+    #                     "longitude": footprint.longitude,
+    #                     "radius_meters": footprint.radius_meters,
+    #                     "pedestrian_count": footprint.pedestrian_count,
+    #                     "crowd_level": footprint.crowd_level.value,
+    #                     "temperature_celsius": footprint.temperature_celsius,
+    #                     "humidity_percent": footprint.humidity_percent,
+    #                     "recorded_at": footprint.recorded_at.isoformat() if footprint.recorded_at else None
+    #                 })
+    #             
+    #             # Broadcast footprint updates via WebSocket
+    #             await manager.send_footprint_update({
+    #                 "type": "real_time_update",
+    #                 "areas": footprint_data,
+    #                 "timestamp": datetime.now(timezone.utc).isoformat(),
+    #                 "total_areas": len(footprint_data)
+    #             })
+    #         
+    #         logger.debug("Scheduled footprint data update completed successfully")
+    #         
+    #     except Exception as e:
+    #         logger.error(f"Error updating footprint data: {str(e)}")
+    #     finally:
+    #         db.close()
 
     async def _refresh_daily_flood_data(self):
         """Run a daily flood refresh to prevent stale flood statuses."""
