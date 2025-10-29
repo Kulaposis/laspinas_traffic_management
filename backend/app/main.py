@@ -92,6 +92,7 @@ allow_credentials = True
 
 # Track whether wildcard is allowed
 allow_all_origins = "*" in cors_origins
+allowed_origin_set = set(cors_origins) if not allow_all_origins else set()
 
 if not allow_all_origins and "https://laspinastrafficmanagement.vercel.app" not in cors_origins:
     cors_origins.append("https://laspinastrafficmanagement.vercel.app")
@@ -110,12 +111,27 @@ app.add_middleware(
 @app.middleware("http")
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
+        origin = request.headers.get("origin")
         response = await call_next(request)
-        # Add CORS headers to all responses
-        response.headers["Access-Control-Allow-Origin"] = "*"
+
+        # Determine allowed origin for this request
+        if allow_all_origins:
+            allowed_origin = "*"
+        elif origin and origin in allowed_origin_set:
+            allowed_origin = origin
+        else:
+            allowed_origin = None
+
+        if allowed_origin:
+            response.headers["Access-Control-Allow-Origin"] = allowed_origin
+            response.headers["Vary"] = response.headers.get("Vary", "") + (", Origin" if "Origin" not in response.headers.get("Vary", "") else "")
+
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, User-Agent, Cache-Control"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
+
+        if allow_credentials and allowed_origin and allowed_origin != "*":
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+
         # Add COOP headers to fix Cross-Origin-Opener-Policy issues
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
         response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
