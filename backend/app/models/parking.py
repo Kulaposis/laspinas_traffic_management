@@ -22,14 +22,14 @@ class Parking(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     description = Column(String(500), nullable=True)
-    parking_type = Column(Enum(ParkingType), nullable=False)
+    parking_type = Column(Enum(ParkingType, name='parkingtype', create_type=False), nullable=False)
     total_spaces = Column(Integer, nullable=False)
     available_spaces = Column(Integer, nullable=False)
     hourly_rate = Column(Numeric(10, 2), nullable=True)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     address = Column(String(500), nullable=False)
-    status = Column(Enum(ParkingStatus), default=ParkingStatus.AVAILABLE, nullable=False)
+    status = Column(Enum(ParkingStatus, name='parkingstatus', create_type=False), default=ParkingStatus.AVAILABLE, nullable=False)
     is_monitored = Column(Boolean, default=False, nullable=False)  # Real-time monitoring
     operating_hours_start = Column(String(5), nullable=True)  # HH:MM format
     operating_hours_end = Column(String(5), nullable=True)    # HH:MM format

@@ -45,8 +45,8 @@ class Event(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    event_type = Column(Enum(EventType), nullable=False)
-    status = Column(Enum(EventStatus), default=EventStatus.PLANNED, nullable=False)
+    event_type = Column(Enum(EventType, name='eventtype', create_type=False), nullable=False)
+    status = Column(Enum(EventStatus, name='eventstatus', create_type=False), default=EventStatus.PLANNED, nullable=False)
     venue_name = Column(String(255), nullable=False)
     address = Column(String(500), nullable=False)
     latitude = Column(Float, nullable=False)
@@ -69,10 +69,10 @@ class Emergency(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     emergency_number = Column(String(20), unique=True, index=True, nullable=False)
-    emergency_type = Column(Enum(EmergencyType), nullable=False)
+    emergency_type = Column(Enum(EmergencyType, name='emergencytype', create_type=False), nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    status = Column(Enum(EmergencyStatus), default=EmergencyStatus.REPORTED, nullable=False)
+    status = Column(Enum(EmergencyStatus, name='emergencystatus', create_type=False), default=EmergencyStatus.REPORTED, nullable=False)
     severity = Column(String(20), default="medium", nullable=False)  # low, medium, high, critical
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)

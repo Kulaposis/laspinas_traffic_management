@@ -46,12 +46,14 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE"))
                     logger.info("[startup-migration] Added users.email_verified")
 
-                # Ensure unique index on firebase_uid exists
+                # Ensure unique index on firebase_uid exists (only for non-NULL values)
                 existing_indexes = {idx.get('name') for idx in inspector.get_indexes('users')}
                 if 'ix_users_firebase_uid' not in existing_indexes:
                     try:
-                        conn.execute(text("CREATE UNIQUE INDEX ix_users_firebase_uid ON users(firebase_uid)"))
-                        logger.info("[startup-migration] Created index ix_users_firebase_uid")
+                        # Create partial unique index that only applies to non-NULL values
+                        # This allows multiple NULL values while ensuring uniqueness for actual Firebase UIDs
+                        conn.execute(text("CREATE UNIQUE INDEX ix_users_firebase_uid ON users(firebase_uid) WHERE firebase_uid IS NOT NULL"))
+                        logger.info("[startup-migration] Created partial unique index ix_users_firebase_uid")
                     except Exception as idx_err:
                         logger.warning(f"[startup-migration] Could not create index: {idx_err}")
         except Exception as mig_err:

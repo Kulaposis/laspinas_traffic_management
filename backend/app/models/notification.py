@@ -24,8 +24,8 @@ class Notification(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
-    notification_type = Column(Enum(NotificationType), nullable=False)
-    priority = Column(Enum(NotificationPriority), default=NotificationPriority.MEDIUM, nullable=False)
+    notification_type = Column(Enum(NotificationType, name='notificationtype', create_type=False), nullable=False)
+    priority = Column(Enum(NotificationPriority, name='notificationpriority', create_type=False), default=NotificationPriority.MEDIUM, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Null for broadcast messages
     is_read = Column(Boolean, default=False, nullable=False)
     is_broadcast = Column(Boolean, default=False, nullable=False)  # Send to all users

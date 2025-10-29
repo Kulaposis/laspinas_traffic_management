@@ -32,7 +32,7 @@ class PublicTransportRoute(Base):
     id = Column(Integer, primary_key=True, index=True)
     route_name = Column(String(255), nullable=False)
     route_code = Column(String(50), unique=True, index=True, nullable=False)
-    transport_type = Column(Enum(TransportType), nullable=False)
+    transport_type = Column(Enum(TransportType, name='transporttype', create_type=False), nullable=False)
     origin = Column(String(255), nullable=False)
     destination = Column(String(255), nullable=False)
     route_coordinates = Column(JSON, nullable=False)  # Array of [lat, lng] waypoints
@@ -43,7 +43,7 @@ class PublicTransportRoute(Base):
     operating_hours_start = Column(String(5), nullable=False)  # HH:MM
     operating_hours_end = Column(String(5), nullable=False)    # HH:MM
     frequency_minutes = Column(Integer, default=15, nullable=False)  # Average frequency
-    status = Column(Enum(RouteStatus), default=RouteStatus.OPERATIONAL, nullable=False)
+    status = Column(Enum(RouteStatus, name='routestatus', create_type=False), default=RouteStatus.OPERATIONAL, nullable=False)
     is_airconditioned = Column(Boolean, default=False, nullable=False)
     wheelchair_accessible = Column(Boolean, default=False, nullable=False)
     operator_name = Column(String(255), nullable=True)
@@ -57,13 +57,13 @@ class PublicTransportVehicle(Base):
     id = Column(Integer, primary_key=True, index=True)
     vehicle_number = Column(String(50), unique=True, index=True, nullable=False)
     plate_number = Column(String(20), nullable=False)
-    transport_type = Column(Enum(TransportType), nullable=False)
+    transport_type = Column(Enum(TransportType, name='transporttype', create_type=False), nullable=False)
     route_id = Column(Integer, nullable=True)  # Can be null if not assigned to route
     driver_name = Column(String(255), nullable=True)
     driver_contact = Column(String(20), nullable=True)
     current_latitude = Column(Float, nullable=True)
     current_longitude = Column(Float, nullable=True)
-    status = Column(Enum(VehicleStatus), default=VehicleStatus.INACTIVE, nullable=False)
+    status = Column(Enum(VehicleStatus, name='vehiclestatus', create_type=False), default=VehicleStatus.INACTIVE, nullable=False)
     passenger_capacity = Column(Integer, nullable=False)
     current_passenger_count = Column(Integer, default=0, nullable=False)
     last_seen = Column(DateTime(timezone=True), nullable=True)
@@ -109,7 +109,7 @@ class TransportDisruption(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     route_id = Column(Integer, nullable=True)
-    transport_type = Column(Enum(TransportType), nullable=False)
+    transport_type = Column(Enum(TransportType, name='transporttype', create_type=False), nullable=False)
     disruption_type = Column(String(50), nullable=False)  # strike, accident, road_closure, weather
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)

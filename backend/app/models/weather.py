@@ -32,7 +32,7 @@ class WeatherData(Base):
     wind_speed_kmh = Column(Float, nullable=True)
     wind_direction = Column(String(10), nullable=True)  # N, NE, E, SE, S, SW, W, NW
     rainfall_mm = Column(Float, default=0.0, nullable=False)
-    weather_condition = Column(Enum(WeatherCondition), nullable=False)
+    weather_condition = Column(Enum(WeatherCondition, name='weathercondition', create_type=False), nullable=False)
     visibility_km = Column(Float, nullable=True)
     pressure_hpa = Column(Float, nullable=True)
     recorded_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -46,7 +46,7 @@ class FloodMonitoring(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     water_level_cm = Column(Float, nullable=False)
-    flood_level = Column(Enum(FloodLevel), default=FloodLevel.NORMAL, nullable=False)
+    flood_level = Column(Enum(FloodLevel, name='floodlevel', create_type=False), default=FloodLevel.NORMAL, nullable=False)
     is_flood_prone = Column(Boolean, default=False, nullable=False)
     evacuation_center_nearby = Column(String(500), nullable=True)
     affected_roads = Column(Text, nullable=True)  # JSON array of road names

@@ -26,10 +26,10 @@ class Violation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     violation_number = Column(String(50), unique=True, index=True, nullable=False)
-    violation_type = Column(Enum(ViolationType), nullable=False)
+    violation_type = Column(Enum(ViolationType, name='violationtype', create_type=False), nullable=False)
     description = Column(Text, nullable=True)
     fine_amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(Enum(ViolationStatus), default=ViolationStatus.ISSUED, nullable=False)
+    status = Column(Enum(ViolationStatus, name='violationstatus', create_type=False), default=ViolationStatus.ISSUED, nullable=False)
     driver_name = Column(String(255), nullable=False)
     driver_license = Column(String(50), nullable=False)
     vehicle_plate = Column(String(20), nullable=False)

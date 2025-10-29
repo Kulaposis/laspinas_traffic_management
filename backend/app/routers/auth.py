@@ -6,7 +6,7 @@ from ..schemas.user_schema import UserCreate, UserResponse, Token, FirebaseSync
 from ..services.auth_service import AuthService
 from ..services.activity_logger import get_activity_logger
 from ..auth import get_current_user
-from ..models.user import User
+from ..models.user import User, UserRole
 import logging
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,14 @@ def firebase_sync(firebase_data: FirebaseSync, db: Session = Depends(get_db)):
         result = auth_service.sync_firebase_user(firebase_dict)
         logger.info(f"Firebase sync successful for user: {result['user'].email}")
         
+        user_role = result["user"].role
+        if hasattr(user_role, "value"):
+            role_value = user_role.value
+        elif isinstance(user_role, str):
+            role_value = user_role
+        else:
+            role_value = UserRole.CITIZEN.value
+
         return {
             "access_token": result["access_token"],
             "token_type": result["token_type"],
@@ -107,7 +115,7 @@ def firebase_sync(firebase_data: FirebaseSync, db: Session = Depends(get_db)):
                 "email": result["user"].email,
                 "full_name": result["user"].full_name,
                 "username": result["user"].username,
-                "role": result["user"].role.value,
+                "role": role_value,
                 "photo_url": result["user"].photo_url,
                 "email_verified": result["user"].email_verified,
                 "firebase_uid": result["user"].firebase_uid
@@ -133,3 +141,42 @@ def firebase_sync_alias(firebase_data: FirebaseSync, db: Session = Depends(get_d
 @router.get("/test")
 def test_endpoint():
     return {"message": "Auth router is working"}
+
+@router.get("/debug/firebase-sync")
+def debug_firebase_sync(db: Session = Depends(get_db)):
+    """
+    Debug endpoint to test Firebase sync functionality
+    """
+    try:
+        # Test database connection
+        db.execute("SELECT 1")
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    # Check if Firebase Admin is available
+    firebase_status = "not_available"
+    try:
+        from ..services.auth_service import firebase_admin, firebase_auth
+        if firebase_admin and firebase_auth:
+            firebase_status = "available"
+    except Exception as e:
+        firebase_status = f"error: {str(e)}"
+    
+    # Check user table schema
+    try:
+        from ..models.user import User
+        user_columns = User.__table__.columns.keys()
+        schema_status = "ok"
+    except Exception as e:
+        schema_status = f"error: {str(e)}"
+        user_columns = []
+    
+    return {
+        "database": db_status,
+        "firebase_admin": firebase_status,
+        "user_schema": schema_status,
+        "user_columns": user_columns,
+        "required_columns": ["firebase_uid", "photo_url", "email_verified"],
+        "missing_columns": [col for col in ["firebase_uid", "photo_url", "email_verified"] if col not in user_columns]
+    }

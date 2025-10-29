@@ -18,7 +18,7 @@ class Footprint(Base):
     longitude = Column(Float, nullable=False)
     radius_meters = Column(Float, default=100.0, nullable=False)  # Area coverage in meters
     pedestrian_count = Column(Integer, default=0, nullable=False)
-    crowd_level = Column(Enum(CrowdLevel), default=CrowdLevel.LOW, nullable=False)
+    crowd_level = Column(Enum(CrowdLevel, name='crowdlevel', create_type=False), default=CrowdLevel.LOW, nullable=False)
     temperature_celsius = Column(Float, nullable=True)
     humidity_percent = Column(Float, nullable=True)
     recorded_at = Column(DateTime(timezone=True), server_default=func.now())

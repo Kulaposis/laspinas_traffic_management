@@ -18,7 +18,7 @@ class SystemSetting(Base):
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(255), unique=True, nullable=False, index=True)
     value = Column(Text, nullable=True)
-    setting_type = Column(Enum(SettingType), default=SettingType.STRING)
+    setting_type = Column(Enum(SettingType, name='settingtype', create_type=False), default=SettingType.STRING)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=False, default="general")
     is_public = Column(Boolean, default=False)  # Whether setting can be viewed by non-admins
