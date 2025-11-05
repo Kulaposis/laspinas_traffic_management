@@ -222,15 +222,17 @@ export const AuthProvider = ({ children }) => {
   const firebaseLogin = async (email, password) => {
     try {
       const result = await signInWithEmailPassword(email, password);
-      if (result.success) {
+      if (result && result.success) {
         setUser(result.user);
         setAuthMethod('firebase');
         return result;
       } else {
-        throw new Error(result.error);
+        // Return failure result instead of throwing to allow backend fallback
+        return { success: false, error: result?.error || 'Firebase authentication failed' };
       }
     } catch (error) {
-      throw error;
+      // Return failure result instead of throwing to allow backend fallback
+      return { success: false, error: error.message || 'Firebase authentication failed' };
     }
   };
 

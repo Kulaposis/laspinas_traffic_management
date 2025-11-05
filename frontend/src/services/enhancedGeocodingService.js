@@ -15,14 +15,14 @@ class EnhancedGeocodingService {
   }
 
   /**
-   * Search for locations using backend API proxy
+   * Search for locations using backend API proxy with enhanced algorithm
    */
   async searchLocations(query, options = {}) {
     if (!query || query.length < 1) {
       return [];
     }
 
-    const cacheKey = `search_${query}_${JSON.stringify(options)}`;
+    const cacheKey = `search_${query.toLowerCase()}_${JSON.stringify(options)}`;
     
     // Check cache first
     if (this.cache.has(cacheKey)) {
@@ -33,51 +33,215 @@ class EnhancedGeocodingService {
     }
 
     try {
-      // Use backend API proxy endpoint
-      const params = new URLSearchParams({
-        query: query,
-        limit: options.limit || 10,
-        country: options.countrySet || 'PH'
-      });
-
-      const response = await api.get(`${this.baseEndpoint}/geocode?${params}`);
+      const normalizedQuery = query.toLowerCase().trim();
+      const limit = options.limit || 20; // Increased default limit
       
-      if (response.data && Array.isArray(response.data)) {
-        // Transform backend results to our format
-        const results = response.data.map(result => ({
-          id: result.id || `${result.lat}_${result.lng}`,
-          name: result.name || 'Unknown',
-          lat: result.lat,
-          lng: result.lng,
-          address: {
-            full: result.address?.full || result.name,
-            freeformAddress: result.address?.full || result.name,
-            streetName: result.address?.street || '',
-            streetNumber: '',
-            municipality: result.address?.city || '',
-            countrySubdivision: '',
-            postalCode: '',
-            country: result.address?.country || 'Philippines'
-          },
-          type: result.type || 'general',
-          score: result.confidence || 0.8,
-          provider: result.provider || 'OpenStreetMap'
-        }));
-        
-        // Cache the results
-        this.cache.set(cacheKey, {
-          data: results,
-          timestamp: Date.now()
-        });
+      // Generate search variations for better results
+      const searchVariations = this.generateSearchVariations(query);
+      
+      // Combine results from multiple searches
+      const allResults = [];
+      const seenIds = new Set();
+      
+      // Search with each variation
+      for (const variation of searchVariations) {
+        try {
+          const params = new URLSearchParams({
+            query: variation,
+            limit: limit,
+            country: options.countrySet || 'PH'
+          });
 
-        return results;
+          const response = await api.get(`${this.baseEndpoint}/geocode?${params}`);
+          
+          if (response.data && Array.isArray(response.data)) {
+            // Transform and add results
+            response.data.forEach(result => {
+              const resultId = result.id || `${result.lat}_${result.lng}`;
+              if (!seenIds.has(resultId)) {
+                seenIds.add(resultId);
+                allResults.push({
+                  id: resultId,
+                  name: result.name || 'Unknown',
+                  lat: result.lat,
+                  lng: result.lng,
+                  address: {
+                    full: result.address?.full || result.name,
+                    freeformAddress: result.address?.full || result.name,
+                    streetName: result.address?.street || '',
+                    streetNumber: '',
+                    municipality: result.address?.city || result.address?.municipality || '',
+                    countrySubdivision: result.address?.state || result.address?.countrySubdivision || '',
+                    postalCode: result.address?.postalCode || '',
+                    country: result.address?.country || 'Philippines'
+                  },
+                  type: result.type || 'general',
+                  score: result.confidence || 0.8,
+                  provider: result.provider || 'OpenStreetMap',
+                  searchMatch: variation, // Track which variation matched
+                  matchScore: this.calculateMatchScore(normalizedQuery, result)
+                });
+              }
+            });
+          }
+        } catch (err) {
+          // Continue with next variation if one fails
+          console.warn(`Search variation "${variation}" failed:`, err);
+        }
       }
       
-      return [];
+      // Add local Las Piñas locations if query matches
+      if (this.isLasPinasQuery(normalizedQuery)) {
+        const localResults = this.getLocalLasPinasLocations();
+        localResults.forEach(loc => {
+          const resultId = `local_${loc.lat}_${loc.lng}`;
+          if (!seenIds.has(resultId)) {
+            seenIds.add(resultId);
+            allResults.push({
+              id: resultId,
+              name: loc.name,
+              lat: loc.lat,
+              lng: loc.lng,
+              address: {
+                full: loc.fullAddress,
+                freeformAddress: loc.fullAddress,
+                streetName: loc.street || '',
+                municipality: 'Las Piñas',
+                countrySubdivision: 'Metro Manila',
+                country: 'Philippines'
+              },
+              type: loc.type || 'general',
+              score: 0.95, // High score for local results
+              provider: 'Local',
+              isLocal: true,
+              matchScore: this.calculateMatchScore(normalizedQuery, { name: loc.name, address: { full: loc.fullAddress } })
+            });
+          }
+        });
+      }
+      
+      // Sort by match score and relevance
+      const sortedResults = allResults
+        .sort((a, b) => {
+          // Prioritize local results
+          if (a.isLocal && !b.isLocal) return -1;
+          if (!a.isLocal && b.isLocal) return 1;
+          
+          // Sort by match score
+          if (b.matchScore !== a.matchScore) {
+            return b.matchScore - a.matchScore;
+          }
+          
+          // Then by provider confidence
+          return (b.score || 0) - (a.score || 0);
+        })
+        .slice(0, limit);
+      
+      // Cache the results
+      this.cache.set(cacheKey, {
+        data: sortedResults,
+        timestamp: Date.now()
+      });
+
+      return sortedResults;
     } catch (error) {
+      console.error('Search error:', error);
       // Return mock results for common locations as fallback
       return this.getMockResults(query);
     }
+  }
+
+  /**
+   * Generate search variations for better coverage
+   */
+  generateSearchVariations(query) {
+    const variations = [query]; // Original query first
+    const normalized = query.toLowerCase().trim();
+    
+    // Common variations for Las Piñas
+    if (normalized.includes('las pinas') || normalized.includes('las piñas')) {
+      variations.push('Las Piñas City');
+      variations.push('Las Piñas');
+      variations.push('Las Pinas');
+      variations.push('Las Piñas, Metro Manila');
+      variations.push('Las Piñas, Philippines');
+    }
+    
+    // Add city/country suffixes
+    if (!normalized.includes('city') && !normalized.includes('philippines')) {
+      variations.push(`${query} City`);
+      variations.push(`${query}, Metro Manila`);
+      variations.push(`${query}, Philippines`);
+    }
+    
+    // Remove duplicates
+    return [...new Set(variations)];
+  }
+
+  /**
+   * Calculate match score for relevance ranking
+   */
+  calculateMatchScore(query, result) {
+    let score = 0;
+    const queryLower = query.toLowerCase();
+    const nameLower = (result.name || '').toLowerCase();
+    const addressLower = (result.address?.full || result.address?.freeformAddress || '').toLowerCase();
+    const municipalityLower = (result.address?.municipality || '').toLowerCase();
+    
+    // Exact match in name
+    if (nameLower === queryLower) score += 100;
+    // Starts with query
+    else if (nameLower.startsWith(queryLower)) score += 80;
+    // Contains query
+    else if (nameLower.includes(queryLower)) score += 60;
+    
+    // Address matches
+    if (addressLower.includes(queryLower)) score += 40;
+    
+    // Municipality matches
+    if (municipalityLower.includes(queryLower)) score += 30;
+    
+    // Partial word matches
+    const queryWords = queryLower.split(/\s+/);
+    const nameWords = nameLower.split(/\s+/);
+    queryWords.forEach(qWord => {
+      if (nameWords.some(nWord => nWord.startsWith(qWord) || qWord.startsWith(nWord))) {
+        score += 10;
+      }
+    });
+    
+    return score;
+  }
+
+  /**
+   * Check if query is related to Las Piñas
+   */
+  isLasPinasQuery(query) {
+    const lasPinasTerms = ['las pinas', 'las piñas', 'laspinas', 'las pinas city', 'las piñas city'];
+    return lasPinasTerms.some(term => query.includes(term));
+  }
+
+  /**
+   * Get local Las Piñas locations database
+   */
+  getLocalLasPinasLocations() {
+    return [
+      { name: 'SM Southmall Las Piñas', lat: 14.4504, lng: 121.0170, type: 'shopping', street: 'Alabang-Zapote Road', fullAddress: 'SM Southmall, Alabang-Zapote Road, Las Piñas City, Metro Manila' },
+      { name: 'Las Piñas City Hall', lat: 14.4378, lng: 121.0122, type: 'government', street: 'Real Street', fullAddress: 'Las Piñas City Hall, Real Street, Las Piñas City' },
+      { name: 'Zapote Public Market', lat: 14.4456, lng: 121.0189, type: 'market', street: 'Zapote Road', fullAddress: 'Zapote Public Market, Zapote Road, Las Piñas' },
+      { name: 'BF Homes Las Piñas', lat: 14.4389, lng: 121.0344, type: 'residential', street: 'BF Homes', fullAddress: 'BF Homes, Las Piñas City' },
+      { name: 'Alabang-Zapote Road', lat: 14.4450, lng: 121.0200, type: 'road', street: 'Alabang-Zapote Road', fullAddress: 'Alabang-Zapote Road, Las Piñas City' },
+      { name: 'University of Perpetual Help System DALTA', lat: 14.4456, lng: 121.0156, type: 'education', street: 'Alabang-Zapote Road', fullAddress: 'University of Perpetual Help, Alabang-Zapote Road, Las Piñas' },
+      { name: 'St. Joseph Parish Church', lat: 14.4370, lng: 121.0120, type: 'religious', street: 'Real Street', fullAddress: 'St. Joseph Parish Church, Las Piñas City' },
+      { name: 'Las Piñas General Hospital', lat: 14.4390, lng: 121.0140, type: 'healthcare', street: 'Alabang-Zapote Road', fullAddress: 'Las Piñas General Hospital, Las Piñas City' },
+      { name: 'Villar Sipag', lat: 14.4400, lng: 121.0160, type: 'attraction', street: 'Alabang-Zapote Road', fullAddress: 'Villar Sipag, Las Piñas City' },
+      { name: 'Las Piñas City National High School', lat: 14.4380, lng: 121.0130, type: 'education', street: 'Real Street', fullAddress: 'Las Piñas City National High School, Las Piñas' },
+      { name: 'Las Piñas Doctors Hospital', lat: 14.4410, lng: 121.0150, type: 'healthcare', street: 'Alabang-Zapote Road', fullAddress: 'Las Piñas Doctors Hospital, Las Piñas City' },
+      { name: 'Robinsons Place Las Piñas', lat: 14.4520, lng: 121.0180, type: 'shopping', street: 'Alabang-Zapote Road', fullAddress: 'Robinsons Place Las Piñas, Las Piñas City' },
+      { name: 'Villar Coliseum', lat: 14.4420, lng: 121.0170, type: 'sports', street: 'Alabang-Zapote Road', fullAddress: 'Villar Coliseum, Las Piñas City' },
+      { name: 'Las Piñas City Library', lat: 14.4360, lng: 121.0110, type: 'cultural', street: 'Real Street', fullAddress: 'Las Piñas City Library, Las Piñas' },
+      { name: 'Las Piñas Police Station', lat: 14.4375, lng: 121.0125, type: 'government', street: 'Real Street', fullAddress: 'Las Piñas Police Station, Las Piñas City' }
+    ];
   }
 
   /**

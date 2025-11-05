@@ -39,35 +39,77 @@ const Login = ({ onLoginSuccess = () => {} }) => {
 
     setLoading(true);
 
+    // Suppress console errors for Firebase credential failures (we'll try backend next)
+    const originalError = console.error;
+    let consoleErrorSuppressed = false;
+    
     try {
-      // Automatically try Firebase first, then fallback to backend
+      // Try Firebase first (for regular users), then automatically fallback to backend (for admin/backend users)
       let result;
+      let firebaseSuccess = false;
       
+      // Temporarily suppress Firebase credential errors in console
+      console.error = (...args) => {
+        const errorStr = args.join(' ');
+        // Suppress Firebase credential-related errors (these are expected for backend-only accounts)
+        if (errorStr.includes('INVALID_LOGIN_CREDENTIALS') || 
+            errorStr.includes('identitytoolkit.googleapis.com') ||
+            errorStr.includes('signInWithPassword') ||
+            errorStr.includes('400 (Bad Request)')) {
+          consoleErrorSuppressed = true;
+          return; // Don't log Firebase credential errors - we'll try backend next
+        }
+        originalError.apply(console, args);
+      };
+      
+      // Try Firebase authentication first - fail silently if it doesn't recognize the account
       try {
-        // Try Firebase authentication first
         result = await firebaseLogin(formData.email, formData.password);
-        if (result.success) {
+        
+        if (result && result.success) {
+          // Restore console.error before success
+          console.error = originalError;
+          firebaseSuccess = true;
           toast.success(`Welcome back, ${result.user.displayName || result.user.email}!`);
           onLoginSuccess(result.user);
           return;
-        } else {
-          throw new Error(result.error);
         }
+        // If result exists but success is false, Firebase didn't recognize the account
+        // Silently fall through to backend authentication
       } catch (firebaseError) {
-        // If Firebase fails (user not found or invalid credentials), try backend
-        
+        // Firebase threw an error - silently fall through to backend authentication
+        // This is expected for backend-only accounts (like admin)
+      } finally {
+        // Always restore console.error
+        console.error = originalError;
+      }
+      
+      // If Firebase didn't succeed, automatically try backend authentication
+      // This handles admin accounts and other backend-only users stored in Supabase
+      if (!firebaseSuccess) {
         try {
           result = await login(formData.email, formData.password);
-          toast.success(`Welcome back, ${result.user.full_name || result.user.email}!`);
-          onLoginSuccess(result.user);
+          if (result && result.user) {
+            toast.success(`Welcome back, ${result.user.full_name || result.user.email}!`);
+            onLoginSuccess(result.user);
+            return;
+          }
         } catch (backendError) {
-          // Both authentication methods failed
-          throw new Error(backendError.message || 'Invalid email/username or password. Please check your credentials.');
+          // Both authentication methods failed - show error to user
+          const errorMsg = backendError?.response?.data?.detail || 
+                          backendError?.message || 
+                          'Invalid email/username or password. Please check your credentials.';
+          throw new Error(errorMsg);
         }
       }
+      
+      // If we get here, login failed
+      throw new Error('Login failed. Please check your credentials.');
     } catch (error) {
       toast.error(error.message || 'Failed to sign in');
     } finally {
+      // Ensure console.error is restored
+      console.error = originalError;
       setLoading(false);
     }
   };

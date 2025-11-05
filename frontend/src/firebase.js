@@ -119,6 +119,18 @@ export const signInWithEmailPassword = async (email, password) => {
 
     return { success: true, user: mappedUser };
   } catch (error) {
+    // Check if this is a credential error that should trigger backend fallback
+    const shouldFallbackToBackend = 
+      error.code === 'auth/user-not-found' ||
+      error.code === 'auth/invalid-credential' ||
+      error.code === 'auth/invalid-login-credentials' ||
+      error.code === 'auth/wrong-password';
+
+    // Don't log credential errors as they're expected for backend-only accounts
+    // Only log unexpected errors
+    if (!shouldFallbackToBackend) {
+      console.warn('Firebase authentication error:', error.code, error.message);
+    }
 
     let errorMessage = 'An error occurred during sign-in';
 
@@ -128,6 +140,10 @@ export const signInWithEmailPassword = async (email, password) => {
         break;
       case 'auth/wrong-password':
         errorMessage = 'Incorrect password';
+        break;
+      case 'auth/invalid-credential':
+      case 'auth/invalid-login-credentials':
+        errorMessage = 'Invalid login credentials';
         break;
       case 'auth/invalid-email':
         errorMessage = 'Invalid email address';

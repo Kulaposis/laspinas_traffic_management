@@ -33,7 +33,8 @@ import voiceNavigationService from '../services/voiceNavigationService';
 
 const SmartRoutePanel = ({ 
   onRouteSelect, 
-  onStartNavigation, 
+  onStartNavigation,
+  onStartSimulation,
   onClose,
   isOpen = false,
   className = '',
@@ -99,7 +100,7 @@ const SmartRoutePanel = ({
       clearTimeout(inputTimeoutRef.current);
     }
     
-    if (query.length < 2) {
+    if (query.length < 1) {
       setOriginSuggestions([]);
       setShowOriginSuggestions(false);
       return;
@@ -107,13 +108,16 @@ const SmartRoutePanel = ({
 
     inputTimeoutRef.current = setTimeout(async () => {
       try {
-        const suggestions = await enhancedGeocodingService.searchLocations(query, 5);
+        const suggestions = await enhancedGeocodingService.searchLocations(query, {
+          limit: 10,
+          countrySet: 'PH'
+        });
         setOriginSuggestions(suggestions);
         setShowOriginSuggestions(true);
       } catch (error) {
-
+        console.error('Origin search error:', error);
       }
-    }, 300);
+    }, 200); // Reduced debounce for faster response
   }, []);
 
   const handleDestinationSearch = useCallback(async (query) => {
@@ -123,7 +127,7 @@ const SmartRoutePanel = ({
       clearTimeout(inputTimeoutRef.current);
     }
     
-    if (query.length < 2) {
+    if (query.length < 1) {
       setDestinationSuggestions([]);
       setShowDestinationSuggestions(false);
       return;
@@ -131,13 +135,16 @@ const SmartRoutePanel = ({
 
     inputTimeoutRef.current = setTimeout(async () => {
       try {
-        const suggestions = await enhancedGeocodingService.searchLocations(query, 5);
+        const suggestions = await enhancedGeocodingService.searchLocations(query, {
+          limit: 10,
+          countrySet: 'PH'
+        });
         setDestinationSuggestions(suggestions);
         setShowDestinationSuggestions(true);
       } catch (error) {
-
+        console.error('Destination search error:', error);
       }
-    }, 300);
+    }, 200); // Reduced debounce for faster response
   }, []);
 
   const handleOriginSelect = (location) => {
@@ -157,6 +164,12 @@ const SmartRoutePanel = ({
   const handleGetRoutes = async () => {
     if (!selectedOrigin || !selectedDestination) {
       setError('Please select both origin and destination');
+      return;
+    }
+
+    // Prevent route calculation if already loading to avoid duplicate API calls
+    if (loading) {
+      console.log('Route calculation skipped: already in progress');
       return;
     }
 
@@ -295,7 +308,7 @@ const SmartRoutePanel = ({
   return (
     <div 
       ref={panelRef}
-      className={`fixed inset-x-0 bottom-0 z-50 transition-all duration-300 ease-out ${className}`}
+      className={`fixed inset-x-0 bottom-0 z-[1100] transition-all duration-300 ease-out ${className}`}
       style={{
         transform: `translateY(${isExpanded ? -panelOffset : 'calc(100% - 60px)'}px)`,
         maxHeight: isExpanded ? '55vh' : '60px' // Reduced from 90vh to 55vh to show more map
@@ -621,17 +634,34 @@ const SmartRoutePanel = ({
                             )}
                           </button>
                           
-                          {isSelected && onStartNavigation && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onStartNavigation(route);
-                              }}
-                              className="flex items-center space-x-1.5 px-3 py-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-lg font-medium hover:from-emerald-600 hover:to-green-700 transition-all shadow-md text-xs"
-                            >
-                              <Play className="w-3.5 h-3.5" />
-                              <span>Start</span>
-                            </button>
+                          {isSelected && (
+                            <div className="flex items-center space-x-2">
+                              {onStartSimulation && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onStartSimulation(route);
+                                  }}
+                                  className="flex items-center space-x-1.5 px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all shadow-md text-xs"
+                                  title="Simulate this trip"
+                                >
+                                  <Play className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Simulate</span>
+                                </button>
+                              )}
+                              {onStartNavigation && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onStartNavigation(route);
+                                  }}
+                                  className="flex items-center space-x-1.5 px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md text-xs"
+                                >
+                                  <Navigation className="w-3.5 h-3.5" />
+                                  <span>Start</span>
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>

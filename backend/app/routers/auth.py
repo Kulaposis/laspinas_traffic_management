@@ -39,11 +39,15 @@ def login(
         result = auth_service.login_user(form_data.username, form_data.password)
         
         # Log successful login
-        activity_logger.log_login_success(
-            user=result["user"],
-            ip_address=ip_address,
-            user_agent=user_agent
-        )
+        try:
+            activity_logger.log_login_success(
+                user=result["user"],
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+        except Exception as log_error:
+            # Log error but don't fail login if logging fails
+            logger.error(f"Failed to log login success: {log_error}")
         
         return {
             "access_token": result["access_token"],
@@ -51,13 +55,38 @@ def login(
         }
     except HTTPException as e:
         # Log failed login
-        activity_logger.log_login_failure(
-            username=form_data.username,
-            reason=e.detail,
-            ip_address=ip_address,
-            user_agent=user_agent
-        )
+        try:
+            activity_logger.log_login_failure(
+                username=form_data.username,
+                reason=e.detail,
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+        except Exception as log_error:
+            # Log error but don't fail the exception if logging fails
+            logger.error(f"Failed to log login failure: {log_error}")
         raise e
+    except Exception as e:
+        # Catch any unexpected errors to prevent 500
+        logger.error(f"Unexpected error during login: {str(e)}", exc_info=True)
+        
+        # Log failed login
+        try:
+            activity_logger.log_login_failure(
+                username=form_data.username,
+                reason=f"Internal server error: {str(e)}",
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+        except Exception as log_error:
+            logger.error(f"Failed to log login failure: {log_error}")
+        
+        # Return a proper 401 error instead of 500
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 @router.post("/logout")
 def logout(

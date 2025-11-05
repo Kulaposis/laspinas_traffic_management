@@ -13,24 +13,42 @@ class EnhancedRoutingService {
   }
 
   /**
-   * Get detailed route with turn-by-turn instructions using OSRM (Open Source Routing Machine)
+   * Get detailed route with turn-by-turn instructions using TomTom API (with OSRM fallback)
    */
   async getDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     try {
+      // Try TomTom API first for better routing with traffic data
+      try {
+        const tomtomRoute = await this.getTomTomDetailedRoute(
+          originLat, originLng, destinationLat, destinationLng, options
+        );
 
-      // Use OSRM for reliable routing
+        if (tomtomRoute && tomtomRoute.routes) {
+          // Transform TomTom response to our format
+          const transformedRoute = this.transformTomTomRoute(tomtomRoute);
+          
+          if (transformedRoute && transformedRoute.routes && transformedRoute.routes.length > 0) {
+            console.log('✅ Using TomTom API for routing');
+            return transformedRoute;
+          }
+        }
+      } catch (tomtomError) {
+        console.warn('TomTom routing failed, falling back to OSRM:', tomtomError.message);
+      }
+
+      // Fallback to OSRM for reliable routing
       const osrmRoute = await this.getOSRMDetailedRoute(
         originLat, originLng, destinationLat, destinationLng, options
       );
 
       if (osrmRoute && osrmRoute.routes && osrmRoute.routes.length > 0) {
-
+        console.log('✅ Using OSRM for routing');
         return osrmRoute;
       }
 
       throw new Error('No valid route found');
     } catch (error) {
-
+      console.error('Route calculation error:', error);
       throw error;
     }
   }
@@ -76,27 +94,38 @@ class EnhancedRoutingService {
     const origin = { lat: originLat, lng: originLng };
     const destination = { lat: destinationLat, lng: destinationLng };
 
-    // TomTom API parameters - simplified to avoid 400 errors
+    // TomTom API parameters - optimized for better routing
     const routeOptions = {
-      traffic: 'true',
+      traffic: 'true', // Enable real-time traffic
       travelMode: options.travelMode || 'car',
-      instructionsType: 'text',
-      routeRepresentation: 'polyline',
+      instructionsType: 'text', // Get text instructions
+      routeRepresentation: 'polyline', // Get polyline - TomTom will include points in legs
       computeBestOrder: 'false',
-      maxAlternatives: String(options.maxAlternatives || 0), // 0 means fastest route only
+      maxAlternatives: String(options.maxAlternatives || 3), // Get up to 3 alternative routes
       language: 'en-US'
     };
     
-    // Only add avoid parameter if explicitly requested
+    // Add avoid parameters if requested
     if (options.avoidTraffic === true) {
       routeOptions.avoid = 'unpavedRoads';
+    }
+    
+    // Set route type based on options
+    if (options.routeType) {
+      routeOptions.routeType = options.routeType; // fastest, shortest, eco, thrilling
     }
 
     try {
       const result = await tomtomService.calculateRoute(origin, destination, routeOptions);
+      
+      // Validate TomTom response
+      if (!result || !result.routes || result.routes.length === 0) {
+        throw new Error('TomTom API returned no routes');
+      }
+      
       return result;
     } catch (error) {
-
+      console.error('TomTom routing error:', error);
       throw error;
     }
   }
@@ -258,48 +287,140 @@ class EnhancedRoutingService {
         return null;
       }
 
-      // Extract route coordinates
+      // Extract route coordinates from TomTom response
       const coordinates = [];
+      
+      // Method 1: Extract from leg.points array (primary method - TomTom includes this with polyline representation)
       if (leg.points && Array.isArray(leg.points)) {
         leg.points.forEach(point => {
-          if (point.latitude && point.longitude) {
-            coordinates.push([point.latitude, point.longitude]);
+          if (point.latitude !== undefined && point.longitude !== undefined) {
+            const lat = point.latitude;
+            const lng = point.longitude;
+            if (typeof lat === 'number' && typeof lng === 'number' && 
+                !isNaN(lat) && !isNaN(lng) &&
+                lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+              coordinates.push([lat, lng]);
+            }
           }
         });
       }
       
-      // Fallback: use instruction points if no leg points
-      if (coordinates.length === 0 && leg.instructions) {
-        leg.instructions.forEach(instruction => {
-          if (instruction.point?.latitude && instruction.point?.longitude) {
-            coordinates.push([instruction.point.latitude, instruction.point.longitude]);
+      // Method 2: Extract from sections (alternative structure)
+      if (coordinates.length === 0 && route.sections && Array.isArray(route.sections)) {
+        route.sections.forEach(section => {
+          // Extract from section points
+          if (section.points && Array.isArray(section.points)) {
+            section.points.forEach(point => {
+              if (point.latitude !== undefined && point.longitude !== undefined) {
+                const lat = point.latitude;
+                const lng = point.longitude;
+                if (typeof lat === 'number' && typeof lng === 'number' && 
+                    !isNaN(lat) && !isNaN(lng) &&
+                    lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                  coordinates.push([lat, lng]);
+                }
+              }
+            });
+          }
+          // Fallback to start/end points
+          if (section.startPoint && section.startPoint.latitude !== undefined) {
+            coordinates.push([section.startPoint.latitude, section.startPoint.longitude]);
+          }
+          if (section.endPoint && section.endPoint.latitude !== undefined) {
+            coordinates.push([section.endPoint.latitude, section.endPoint.longitude]);
           }
         });
+      }
+      
+      // Method 3: Fallback to instruction points (sparse but better than nothing)
+      if (coordinates.length === 0 && leg.instructions && Array.isArray(leg.instructions)) {
+        leg.instructions.forEach(instruction => {
+          if (instruction.point) {
+            const lat = instruction.point.latitude;
+            const lng = instruction.point.longitude;
+            if (lat !== undefined && lng !== undefined &&
+                typeof lat === 'number' && typeof lng === 'number' && 
+                !isNaN(lat) && !isNaN(lng) &&
+                lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+              coordinates.push([lat, lng]);
+            }
+          }
+        });
+      }
+      
+      // Remove duplicates and ensure proper order
+      if (coordinates.length > 0) {
+        // Remove duplicate consecutive coordinates
+        const uniqueCoordinates = [coordinates[0]];
+        for (let i = 1; i < coordinates.length; i++) {
+          const prev = uniqueCoordinates[uniqueCoordinates.length - 1];
+          const curr = coordinates[i];
+          // Only add if different from previous (at least 0.00001 degrees apart)
+          const latDiff = Math.abs(prev[0] - curr[0]);
+          const lngDiff = Math.abs(prev[1] - curr[1]);
+          if (latDiff > 0.00001 || lngDiff > 0.00001) {
+            uniqueCoordinates.push(curr);
+          }
+        }
+        // Replace coordinates array with deduplicated version
+        coordinates.length = 0;
+        coordinates.push(...uniqueCoordinates);
       }
 
       // Extract detailed turn-by-turn instructions
       const steps = [];
-      if (leg.instructions) {
+      
+      // Try to get instructions from leg
+      if (leg.instructions && Array.isArray(leg.instructions)) {
         leg.instructions.forEach((instruction, stepIndex) => {
           const step = {
             index: stepIndex,
-            instruction: instruction.message || instruction.instructionType || 'Continue',
-            maneuver_type: this.mapTomTomManeuverType(instruction.instructionType || instruction.maneuver),
-            distance_meters: instruction.routeOffsetInMeters || 0,
-            travel_time_seconds: instruction.travelTimeInSeconds || 0,
-            street_name: instruction.street || instruction.roadNumbers?.join(', ') || '',
+            instruction: instruction.message || instruction.instructionType || instruction.combinedMessage || 'Continue',
+            maneuver_type: this.mapTomTomManeuverType(instruction.instructionType || instruction.maneuver || 'STRAIGHT'),
+            distance_meters: instruction.routeOffsetInMeters || instruction.distance || 0,
+            travel_time_seconds: instruction.travelTimeInSeconds || instruction.time || 0,
+            street_name: instruction.street || instruction.roadNumbers?.join(', ') || instruction.road || '',
             location: instruction.point ? [instruction.point.latitude, instruction.point.longitude] : null,
             
             // Additional details for better navigation
             turn_angle_degrees: instruction.turnAngleInDegrees,
             exit_number: instruction.exitNumber,
             roundabout_exit_number: instruction.roundaboutExitNumber,
-            combined_instruction: instruction.combinedMessage,
+            combined_instruction: instruction.combinedMessage || instruction.message,
             driving_side: instruction.drivingSide,
             lane_info: instruction.lanes ? this.extractLaneInfo(instruction.lanes) : null
           };
 
           steps.push(step);
+        });
+      }
+      
+      // Fallback: Create steps from sections if no instructions
+      if (steps.length === 0 && route.sections && Array.isArray(route.sections)) {
+        route.sections.forEach((section, sectionIndex) => {
+          const step = {
+            index: sectionIndex,
+            instruction: section.drivingSide === 'LEFT' ? 'Continue on left side' : 'Continue on route',
+            maneuver_type: 'straight',
+            distance_meters: section.lengthInMeters || 0,
+            travel_time_seconds: section.travelTimeInSeconds || 0,
+            street_name: section.street || '',
+            location: section.startPoint ? [section.startPoint.latitude, section.startPoint.longitude] : null
+          };
+          steps.push(step);
+        });
+      }
+      
+      // Last resort: Create a single step from route summary
+      if (steps.length === 0) {
+        steps.push({
+          index: 0,
+          instruction: 'Follow the route to your destination',
+          maneuver_type: 'straight',
+          distance_meters: summary.lengthInMeters || 0,
+          travel_time_seconds: summary.travelTimeInSeconds || 0,
+          street_name: '',
+          location: coordinates.length > 0 ? coordinates[0] : null
         });
       }
 

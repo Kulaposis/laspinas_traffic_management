@@ -167,6 +167,13 @@ const TrafficMap = () => {
   const [searchHistory, setSearchHistory] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Mobile layout optimization states
+  const [navigationPanelMinimized, setNavigationPanelMinimized] = useState(false);
+  const [searchBarVisible, setSearchBarVisible] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
+  const [showSecondaryActions, setShowSecondaryActions] = useState(false);
+  const [autoHideTimeout, setAutoHideTimeout] = useState(null);
+
   // Popular Las Piñas City locations for quick suggestions
   const lasPinasSuggestions = [
     { name: 'SM Southmall', lat: 14.4504, lng: 121.0170, category: 'Shopping', icon: '🛒' },
@@ -255,6 +262,30 @@ const TrafficMap = () => {
     };
     resolveLandmarks();
   }, []);
+
+  // Auto-hide search bar when navigating
+  useEffect(() => {
+    if (isNavigationActive) {
+      // Hide search bar after 2 seconds
+      const timer = setTimeout(() => {
+        setSearchBarVisible(false);
+      }, 2000);
+      
+      // Minimize navigation panel after 3 seconds
+      const navTimer = setTimeout(() => {
+        setNavigationPanelMinimized(true);
+      }, 3000);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(navTimer);
+      };
+    } else {
+      // Show search bar when not navigating
+      setSearchBarVisible(true);
+      setNavigationPanelMinimized(false);
+    }
+  }, [isNavigationActive]);
 
   // GPS and navigation tracking
   const [userLocation, setUserLocation] = useState(null);
@@ -414,6 +445,10 @@ const TrafficMap = () => {
   
   // Traffic Predictions Panel
   const [showPredictionsPanel, setShowPredictionsPanel] = useState(false);
+  
+  // Simulation Completion Modal
+  const [showSimulationCompleteModal, setShowSimulationCompleteModal] = useState(false);
+  const [simulationCompleteData, setSimulationCompleteData] = useState(null);
 
   // Load user's personalized data
   useEffect(() => {
@@ -422,19 +457,29 @@ const TrafficMap = () => {
 
   // Load traffic and heatmap data (keep for now, will refactor later)
   useEffect(() => {
+    // Skip loading traffic data during simulation to prevent infinite loops
+    if (isSimulating) {
+      return;
+    }
+    
     loadTrafficData();
     const interval = setInterval(loadTrafficData, 30000); // Update every 30 seconds
     return () => clearInterval(interval);
-  }, [mapCenter, mapZoom]);
+  }, [mapCenter, mapZoom, isSimulating]);
 
   // Load traffic data for selected route
   useEffect(() => {
+    // Skip loading route traffic data during simulation to prevent infinite loops
+    if (isSimulating) {
+      return;
+    }
+    
     if (selectedRoute && selectedRoute.route_coordinates) {
       loadRouteTrafficData();
       const interval = setInterval(loadRouteTrafficData, 60000); // Update every minute
       return () => clearInterval(interval);
     }
-  }, [selectedRoute]);
+  }, [selectedRoute, isSimulating]);
 
   const loadUserData = async () => {
     if (!user) {
@@ -470,6 +515,11 @@ const TrafficMap = () => {
   };
 
   const loadTrafficData = async () => {
+    // Don't load traffic data during simulation to prevent loops
+    if (isSimulating) {
+      return;
+    }
+    
     setIsLoadingData(true);
     try {
       // Try to fetch real traffic data from API
@@ -663,6 +713,11 @@ const TrafficMap = () => {
 
   // Load traffic data for the selected route
   const loadRouteTrafficData = async () => {
+    // Don't load route traffic data during simulation to prevent loops
+    if (isSimulating) {
+      return;
+    }
+    
     if (!selectedRoute || !selectedRoute.route_coordinates) return;
 
     try {
@@ -747,24 +802,29 @@ const TrafficMap = () => {
         // Las Piñas City center coordinates for proximity search
         const lasPinasCenter = { lat: 14.4504, lng: 121.0170 };
         
-        // Search for locations with Las Piñas bias
+        // Search for locations with enhanced algorithm - automatically shows all variations
         const results = await enhancedGeocodingService.searchLocations(query, {
-          limit: 15, // More results for better selection
+          limit: 20, // More results for comprehensive coverage
           countrySet: 'PH',
           center: lasPinasCenter, // Bias towards Las Piñas
           radius: 15000 // 15km radius around Las Piñas
         });
 
-        
+        // Results are already sorted and prioritized by the enhanced algorithm
+        // No need for additional filtering as the algorithm handles it
+        const allResults = results;
 
-        // Filter and prioritize Las Piñas results
-        const lasPinasResults = results.filter(result => 
+        // Filter and prioritize Las Piñas results (additional local prioritization)
+        const lasPinasResults = allResults.filter(result => 
+          result.isLocal || // Local database results
           result.address?.municipality?.toLowerCase().includes('las piñas') ||
           result.address?.municipality?.toLowerCase().includes('las pinas') ||
-          result.address?.countrySubdivision?.toLowerCase().includes('las piñas')
+          result.address?.countrySubdivision?.toLowerCase().includes('las piñas') ||
+          result.name?.toLowerCase().includes('las pinas') ||
+          result.name?.toLowerCase().includes('las piñas')
         );
 
-        const nearbyResults = results.filter(result => 
+        const nearbyResults = allResults.filter(result => 
           !lasPinasResults.some(lp => lp.name === result.name) &&
           (result.address?.municipality?.toLowerCase().includes('parañaque') ||
            result.address?.municipality?.toLowerCase().includes('paranaque') ||
@@ -937,6 +997,12 @@ const TrafficMap = () => {
 
   // Calculate and display route with alternatives
   const handleGetRoute = async (routeOptions = {}) => {
+    // Prevent route calculation during simulation to avoid API call loops
+    if (isSimulating) {
+      console.log('Route calculation blocked: simulation is active');
+      return;
+    }
+
     if (!selectedOrigin || !selectedDestination) {
       
       return;
@@ -1032,6 +1098,12 @@ const TrafficMap = () => {
 
   // Get route with specific criteria
   const getRouteWithCriteria = (criteria) => {
+    // Prevent route calculation during simulation to avoid API call loops
+    if (isSimulating) {
+      console.log('Route calculation with criteria blocked: simulation is active');
+      return;
+    }
+
     const routeOptions = {
       fastest: { maxAlternatives: 3 },
       shortest: { maxAlternatives: 3 },
@@ -1311,9 +1383,21 @@ const TrafficMap = () => {
       timestamp: Date.now()
     });
 
-    // Center map on starting point
-    setMapCenter([startCoords[0], startCoords[1]]);
-    setMapZoom(16);
+    // Center map on starting point (use mapRef to avoid triggering useEffect during simulation)
+    if (mapRef.current) {
+      try {
+        mapRef.current.setView([startCoords[0], startCoords[1]], 16, {
+          animate: true
+        });
+      } catch (err) {
+        // Fallback to state if map ref not ready
+        setMapCenter([startCoords[0], startCoords[1]]);
+        setMapZoom(16);
+      }
+    } else {
+      setMapCenter([startCoords[0], startCoords[1]]);
+      setMapZoom(16);
+    }
 
     // Start simulation animation
     runSimulation();
@@ -1353,8 +1437,17 @@ const TrafficMap = () => {
 
       setSimulationProgress(progress);
 
-      // Auto-center map on simulated location
-      setMapCenter([coords[0], coords[1]]);
+      // Auto-center map on simulated location (only update map directly, not state to avoid loops)
+      // Use mapRef to update map center without triggering useEffect
+      if (mapRef.current) {
+        try {
+          mapRef.current.setView([coords[0], coords[1]], mapRef.current.getZoom(), {
+            animate: false // Disable animation to prevent extra renders
+          });
+        } catch (err) {
+          // Silently fail if map is not ready
+        }
+      }
 
       // Update navigation step based on progress
       if (selectedRoute.steps) {
@@ -1395,6 +1488,10 @@ const TrafficMap = () => {
       ? (endTime - simulationStartTime) / 1000 / 60 
       : selectedRoute.estimated_duration_minutes;
 
+    let saveSuccess = false;
+    let saveError = null;
+    let isAuthError = false;
+
     // Save to travel history (only if user is logged in)
     if (user && selectedOrigin && selectedDestination && selectedRoute) {
       try {
@@ -1428,23 +1525,28 @@ const TrafficMap = () => {
 
         // Refresh travel history
         await loadUserData();
-
-        alert('✅ Simulation complete! Trip saved to your travel history.');
+        saveSuccess = true;
       } catch (error) {
-        
+        saveError = error.message || 'Unknown error';
         // Check if it's an authentication error
         if (error.response?.status === 401) {
-          alert('✅ Simulation complete!\n\n⚠️ Note: You need to be logged in to save trips to your travel history.');
-        } else {
-          alert('✅ Simulation complete!\n\n⚠️ Could not save to travel history: ' + (error.message || 'Unknown error'));
+          isAuthError = true;
         }
       }
-    } else if (!user) {
-      // User not logged in
-      alert('✅ Simulation complete!\n\n💡 Tip: Log in to save your simulated trips to travel history.');
-    } else {
-      alert('✅ Simulation complete!');
     }
+
+    // Prepare modal data
+    const modalData = {
+      saveSuccess,
+      saveError,
+      isAuthError,
+      isGuest: !user,
+      durationMinutes: Math.round(durationMinutes),
+      distanceKm: selectedRoute?.distance_km || 0,
+      origin: selectedOrigin?.name || 'Unknown Origin',
+      destination: selectedDestination?.name || 'Unknown Destination',
+      trafficConditions: selectedRoute?.traffic_conditions || 'light'
+    };
 
     // Reset simulation state
     setIsSimulating(false);
@@ -1452,6 +1554,10 @@ const TrafficMap = () => {
     setSimulationPaused(false);
     setSimulationMinimized(false);
     setCurrentSimulationIndex(0);
+    
+    // Show completion modal
+    setSimulationCompleteData(modalData);
+    setShowSimulationCompleteModal(true);
     
     // Keep simulated location at destination for a moment
     setTimeout(() => {
@@ -1768,6 +1874,12 @@ const TrafficMap = () => {
   // 5. WEATHER-AWARE ROUTING FUNCTIONS
   // Get weather-aware route
   const getWeatherAwareRoute = async () => {
+    // Prevent route calculation during simulation to avoid API call loops
+    if (isSimulating) {
+      console.log('Weather-aware route calculation blocked: simulation is active');
+      return;
+    }
+
     if (!selectedOrigin || !selectedDestination) return;
     
     try {
@@ -1794,7 +1906,10 @@ const TrafficMap = () => {
       }
     } catch (error) {
       
-      handleGetRoute();
+      // Only fallback to handleGetRoute if simulation is not active
+      if (!isSimulating) {
+        handleGetRoute();
+      }
     } finally {
       setIsLoadingData(false);
     }
@@ -2178,33 +2293,41 @@ const TrafficMap = () => {
         }
       )()}
 
-      {/* Modern Floating Search Bar - Google Maps/Waze Style */}
-      <div className={`absolute transition-all duration-500 ease-out animate-fade-in ${
-        showSidePanel
-          ? 'top-4 left-80 right-4 sm:top-6 sm:left-96 sm:right-6'
-          : (showHistoryPanel
-            ? 'top-4 left-72 right-4 sm:top-6 sm:left-80 sm:right-6'
-            : 'top-4 left-4 right-4 sm:top-6 sm:left-6 sm:right-6')
-      }`} style={{ zIndex: 40 }}>
-        <div className="flex items-center justify-center space-x-3 max-w-5xl mx-auto">
-          {/* Hamburger Menu - Modern Floating Button with Enhanced Animations */}
+      {/* Compact Mobile-First Search Bar - Auto-Hide When Navigating */}
+      <div 
+        className={`absolute transition-all duration-300 ease-out ${
+          showSidePanel
+            ? 'left-80 right-4 sm:left-96 sm:right-6'
+            : (showHistoryPanel
+              ? 'left-72 right-4 sm:left-80 sm:right-6'
+              : 'left-2 right-2 sm:left-4 sm:right-4')
+        } top-2 sm:top-4 ${
+          isNavigationActive && !searchBarVisible
+            ? 'opacity-0 pointer-events-none translate-y-[-100%]'
+            : 'opacity-100 translate-y-0'
+        }`} 
+        style={{ zIndex: 40 }}
+      >
+        <div className="flex items-center justify-center space-x-2 max-w-5xl mx-auto">
+          {/* Hamburger Menu - Compact */}
           <button
             onClick={() => setShowSidePanel(!showSidePanel)}
-            className="modern-fab bg-white/95 backdrop-blur-xl hover:bg-white rounded-full p-3.5 sm:p-4 flex-shrink-0 border border-white/50 shadow-lg hover:shadow-2xl transition-all duration-300 ease-out hover:scale-110 active:scale-95 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="bg-white/80 backdrop-blur-lg hover:bg-white rounded-full p-2.5 sm:p-3 flex-shrink-0 border border-white/50 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 min-w-[40px] min-h-[40px] flex items-center justify-center z-50"
             style={{ zIndex: 41 }}
           >
-            <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 transition-transform duration-300 group-hover:rotate-90" />
+            <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
           </button>
 
-          {/* Search Bar - Enhanced Glassmorphism Card */}
-          <div ref={searchPanelRef} className="flex-1 max-w-3xl bg-white/90 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl shadow-2xl border border-white/30 overflow-hidden transition-all duration-500 hover:shadow-3xl hover:border-white/50 animate-slide-down">
-            {/* Origin Input - Enhanced with Glassmorphism */}
-            <div className="flex items-center border-b border-gray-200/50 hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-transparent transition-all duration-300 ease-out group">
-              <div className="flex items-center space-x-3 px-5 py-4 flex-1 min-w-0">
-                <div className="w-4 h-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex-shrink-0 shadow-lg ring-2 ring-blue-200/50 transition-all duration-300 group-hover:scale-110 group-hover:ring-blue-300"></div>
+          {/* Compact Search Input - Single Row Design */}
+          <div ref={searchPanelRef} className="flex-1 max-w-3xl bg-white/75 backdrop-blur-xl backdrop-saturate-150 rounded-2xl shadow-xl border border-white/40 overflow-hidden transition-all duration-300">
+            {/* Compact Single Row Search */}
+            <div className="flex items-center px-3 py-2.5 sm:px-4 sm:py-3">
+              {/* Origin - Compact */}
+              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full flex-shrink-0"></div>
                 <input
                   type="text"
-                  placeholder="Choose starting point..."
+                  placeholder={selectedOrigin ? selectedOrigin.name : "From..."}
                   value={originQuery}
                   onChange={(e) => {
                     setOriginQuery(e.target.value);
@@ -2215,46 +2338,32 @@ const TrafficMap = () => {
                   onFocus={() => {
                     setSearchMode('origin');
                     setShowSuggestions(true);
-                    if (!originQuery) {
-                      setShowSearchResults(true);
-                    }
+                    if (!originQuery) setShowSearchResults(true);
                   }}
                   onBlur={() => {
-                    // Delay hiding to allow click on suggestions
                     setTimeout(() => setShowSuggestions(false), 200);
                   }}
-                  className="flex-1 text-gray-900 placeholder-gray-400/70 bg-transparent focus:outline-none text-base font-medium min-w-0 transition-all duration-200 focus:placeholder-gray-300"
+                  className="flex-1 text-sm sm:text-base text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none min-w-0"
                 />
                 {selectedOrigin && (
                   <button
                     onClick={() => setSelectedOrigin(null)}
-                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gradient-to-br hover:from-red-50 hover:to-red-100 rounded-full flex-shrink-0 transition-all duration-300 ease-out transform hover:scale-110 active:scale-95 hover:shadow-md"
+                    className="p-1 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
                   >
-                    <X className="w-4 h-4 text-gray-400 transition-colors duration-200 hover:text-red-500" />
+                    <X className="w-3 h-3 text-gray-400 hover:text-red-500" />
                   </button>
                 )}
               </div>
 
-              {/* Current Location Button for Origin - Enhanced with Gradient Hover */}
-              <button
-                onClick={() => {
-                  setSearchMode('origin');
-                  getCurrentLocation('origin');
-                }}
-                className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gradient-to-br hover:from-blue-100 hover:to-blue-200 rounded-full flex-shrink-0 mr-4 transition-all duration-300 ease-out group transform hover:scale-110 active:scale-95 hover:shadow-lg"
-                title="Use current location as starting point"
-              >
-                <Target className="w-5 h-5 text-gray-500 transition-all duration-300 group-hover:text-blue-600 group-hover:scale-110" />
-              </button>
-            </div>
+              {/* Divider */}
+              <div className="w-px h-6 bg-gray-300 mx-2"></div>
 
-            {/* Destination Input - Enhanced with Glassmorphism */}
-            <div className="flex items-center hover:bg-gradient-to-r hover:from-red-50/40 hover:to-transparent transition-all duration-300 ease-out group">
-              <div className="flex items-center space-x-3 px-5 py-4 flex-1 min-w-0">
-                <div className="w-4 h-4 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex-shrink-0 shadow-lg ring-2 ring-red-200/50 transition-all duration-300 group-hover:scale-110 group-hover:ring-red-300"></div>
+              {/* Destination - Compact */}
+              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full flex-shrink-0"></div>
                 <input
                   type="text"
-                  placeholder="Where to?"
+                  placeholder={selectedDestination ? selectedDestination.name : "To..."}
                   value={destinationQuery}
                   onChange={(e) => {
                     setDestinationQuery(e.target.value);
@@ -2265,118 +2374,53 @@ const TrafficMap = () => {
                   onFocus={() => {
                     setSearchMode('destination');
                     setShowSuggestions(true);
-                    if (!destinationQuery) {
-                      setShowSearchResults(true);
-                    }
+                    if (!destinationQuery) setShowSearchResults(true);
                   }}
                   onBlur={() => {
-                    // Delay hiding to allow click on suggestions
                     setTimeout(() => setShowSuggestions(false), 200);
                   }}
-                  className="flex-1 text-gray-900 placeholder-gray-400/70 bg-transparent focus:outline-none text-base font-medium min-w-0 transition-all duration-200 focus:placeholder-gray-300"
+                  className="flex-1 text-sm sm:text-base text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none min-w-0"
                 />
                 {selectedDestination && (
                   <button
                     onClick={() => setSelectedDestination(null)}
-                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gradient-to-br hover:from-red-50 hover:to-red-100 rounded-full flex-shrink-0 transition-all duration-300 ease-out transform hover:scale-110 active:scale-95 hover:shadow-md"
+                    className="p-1 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
                   >
-                    <X className="w-4 h-4 text-gray-400 transition-colors duration-200 hover:text-red-500" />
+                    <X className="w-3 h-3 text-gray-400 hover:text-red-500" />
                   </button>
                 )}
               </div>
 
-              {/* Current Location Button for Destination - Enhanced with Gradient Hover */}
-              <button
-                onClick={() => {
-                  setSearchMode('destination');
-                  getCurrentLocation('destination');
-                }}
-                className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gradient-to-br hover:from-blue-100 hover:to-blue-200 rounded-full flex-shrink-0 mr-4 transition-all duration-300 ease-out group transform hover:scale-110 active:scale-95 hover:shadow-lg"
-                title="Use current location"
-              >
-                <Target className="w-5 h-5 text-gray-500 transition-all duration-300 group-hover:text-blue-600 group-hover:scale-110" />
-              </button>
-
-              {/* Enhanced Route Button - Modern Waze Style with Loading State */}
-              {selectedOrigin && selectedDestination ? (
-                <>
-                  <button
-                    onClick={() => handleGetRoute()}
-                    disabled={isLoadingData}
-                    className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-blue-500 via-blue-600 to-blue-600 hover:from-blue-600 hover:via-blue-700 hover:to-blue-700 disabled:from-gray-400 disabled:via-gray-500 disabled:to-gray-500 text-white px-6 py-4 rounded-2xl text-base font-bold transition-all duration-300 ease-out disabled:opacity-50 flex items-center justify-center space-x-2 mr-4 shadow-xl hover:shadow-2xl transform hover:scale-105 active:scale-95 disabled:transform-none disabled:cursor-not-allowed relative overflow-hidden group"
-                    title="Get fastest route"
-                  >
-                    {isLoadingData ? (
-                      <>
-                        <RefreshCw className="w-5 h-5 animate-spin" />
-                        <span className="hidden sm:inline">Loading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Route className="w-5 h-5 transition-transform duration-300 group-hover:rotate-12" />
-                        <span className="hidden sm:inline">Go</span>
-                      </>
-                    )}
-                    {/* Ripple effect overlay */}
-                    <span className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-300"></span>
-                  </button>
-                  {/* Auto-open Smart Route when both locations are selected */}
-                  {!showSmartRoutePanel && (
-                    <>
-                      <button
-                        onClick={() => setShowSmartRoutePanel(true)}
-                        className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-indigo-600 via-purple-600 to-purple-600 hover:from-indigo-700 hover:via-purple-700 hover:to-purple-700 text-white px-4 py-4 rounded-2xl text-base font-bold transition-all duration-300 ease-out flex items-center justify-center space-x-2 mr-4 shadow-xl hover:shadow-2xl transform hover:scale-105 active:scale-95 relative overflow-hidden group"
-                        title="Open Smart Route options"
-                      >
-                        <Zap className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-                        <span className="hidden sm:inline">Smart</span>
-                        <span className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          
-                          setShowPredictionsPanel(true);
-                        }}
-                        className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-cyan-600 via-blue-600 to-blue-600 hover:from-cyan-700 hover:via-blue-700 hover:to-blue-700 text-white px-4 py-4 rounded-2xl text-base font-bold transition-all duration-300 ease-out flex items-center justify-center space-x-2 mr-4 shadow-xl hover:shadow-2xl transform hover:scale-105 active:scale-95 relative overflow-hidden group"
-                        title="View Traffic Predictions"
-                      >
-                        <BarChart3 className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-                        <span className="hidden sm:inline">Predictions</span>
-                        <span className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-                      </button>
-                    </>
-                  )}
-                </>
-              ) : (
-                /* Smart Route Button - Show when locations not both selected */
-                <>
+              {/* Action Buttons - Compact */}
+              <div className="ml-2 flex items-center space-x-1.5 flex-shrink-0">
+                {selectedOrigin && selectedDestination ? (
                   <button
                     onClick={() => setShowSmartRoutePanel(true)}
-                    className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-indigo-600 via-purple-600 to-purple-600 hover:from-indigo-700 hover:via-purple-700 hover:to-purple-700 text-white px-5 py-4 rounded-2xl text-base font-bold transition-all duration-300 ease-out flex items-center justify-center space-x-2 mr-4 shadow-xl hover:shadow-2xl transform hover:scale-105 active:scale-95 relative overflow-hidden group"
-                    title="Smart Route Planning"
+                    disabled={isLoadingData || isSimulating}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-semibold transition-all disabled:opacity-50 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
+                    title={isSimulating ? "Finish simulation first" : "Smart Route Planning"}
                   >
-                    <Zap className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-                    <span className="hidden sm:inline">Smart</span>
-                    <span className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
+                    {isLoadingData ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        <span>Go</span>
+                      </>
+                    )}
                   </button>
+                ) : (
                   <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      
-                      setShowPredictionsPanel(true);
-                    }}
-                    className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-cyan-600 via-blue-600 to-blue-600 hover:from-cyan-700 hover:via-blue-700 hover:to-blue-700 text-white px-4 py-4 rounded-2xl text-base font-bold transition-all duration-300 ease-out flex items-center justify-center space-x-2 mr-4 shadow-xl hover:shadow-2xl transform hover:scale-105 active:scale-95 relative overflow-hidden group"
-                    title="View Traffic Predictions"
+                    onClick={() => setShowSmartRoutePanel(true)}
+                    disabled={isSimulating}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-semibold transition-all disabled:opacity-50 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
+                    title={isSimulating ? "Finish simulation first" : "Smart Route Planning"}
                   >
-                    <BarChart3 className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-                    <span className="hidden sm:inline">Predictions</span>
-                    <span className="absolute inset-0 rounded-2xl bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
+                    <Zap className="w-4 h-4" />
+                    <span>Smart</span>
                   </button>
-                </>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Enhanced Search Results - Modern Dropdown with Glassmorphism */}
@@ -2744,173 +2788,194 @@ const TrafficMap = () => {
         </div>
       )}
 
-      {/* Enhanced Navigation Panel - Modern Google Maps Style - Responsive */}
-      {isNavigationActive && !isSimulating && currentStep && (
-        <div className="absolute bottom-20 sm:bottom-24 left-2 right-2 sm:left-4 sm:right-4 z-40">
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-              <div>
-                <h3 className="font-semibold text-gray-900">Turn-by-turn navigation</h3>
-                <div className="text-sm text-gray-500">
-                  Step {navigationStep + 1} of {selectedRoute ? selectedRoute.steps.length : 0}
-                </div>
-                {userLocation && (
-                  <div className="flex items-center space-x-2 mt-1">
-                    <div className={`w-2 h-2 rounded-full ${
-                      isTrackingLocation ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-                    }`}></div>
-                    <span className="text-xs text-gray-500">
-                      GPS: ±{Math.round(userLocation.accuracy)}m
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center space-x-2">
-                {/* Gyroscope Toggle */}
-                <button
-                  onClick={() => setGyroscopeEnabled(!gyroscopeEnabled)}
-                  className={`p-2 rounded-full transition-colors ${
-                    gyroscopeEnabled 
-                      ? 'bg-blue-500 text-white hover:bg-blue-600' 
-                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                  }`}
-                  title={gyroscopeEnabled ? 'Disable gyroscope rotation' : 'Enable gyroscope rotation'}
-                >
-                  <Navigation className="w-5 h-5" />
-                </button>
-                
-                {/* Icon Selector */}
-                <button
-                  onClick={() => setShowIconSelector(!showIconSelector)}
-                  className="p-2 bg-gray-200 text-gray-600 hover:bg-gray-300 rounded-full transition-colors"
-                  title="Select navigation icon"
-                >
-                  <span className="text-xl">{navigationIcon === 'car' ? '🚗' : navigationIcon === 'bike' ? '🚴' : navigationIcon === 'walk' ? '🚶' : navigationIcon === 'motorcycle' ? '🏍️' : navigationIcon === 'bus' ? '🚌' : navigationIcon === 'truck' ? '🚚' : '📍'}</span>
-                </button>
-                
-                {/* Exit Navigation */}
-                <button
-                  onClick={stopNavigation}
-                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-                  title="Exit navigation"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-            </div>
-            
-            {/* Icon Selector Dropdown */}
-            {showIconSelector && (
-              <div className="absolute top-16 right-4 bg-white rounded-xl shadow-2xl border border-gray-200 p-3 z-50">
-                <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                  Select Icon
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { type: 'car', icon: '🚗', label: 'Car' },
-                    { type: 'bike', icon: '🚴', label: 'Bike' },
-                    { type: 'walk', icon: '🚶', label: 'Walk' },
-                    { type: 'motorcycle', icon: '🏍️', label: 'Motorcycle' },
-                    { type: 'bus', icon: '🚌', label: 'Bus' },
-                    { type: 'truck', icon: '🚚', label: 'Truck' }
-                  ].map((option) => (
-                    <button
-                      key={option.type}
-                      onClick={() => {
-                        setNavigationIcon(option.type);
-                        setShowIconSelector(false);
-                      }}
-                      className={`p-3 rounded-lg transition-all ${
-                        navigationIcon === option.type
-                          ? 'bg-blue-100 border-2 border-blue-500'
-                          : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                      }`}
-                    >
-                      <div className="text-2xl mb-1">{option.icon}</div>
-                      <div className="text-xs text-gray-600">{option.label}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+      {/* Collapsible Navigation Panel - Swipeable Bottom Sheet */}
+      {isNavigationActive && !isSimulating && selectedRoute && (
+        <div className="absolute bottom-0 left-0 right-0 z-50">
+          {/* Swipe Handle */}
+          <div className="flex justify-center pt-2 pb-1">
+            <button
+              onClick={() => setNavigationPanelMinimized(!navigationPanelMinimized)}
+              className="w-12 h-1 bg-gray-300 rounded-full hover:bg-gray-400 transition-colors"
+            />
+          </div>
 
-            {/* Current Instruction */}
-            <div className="p-6">
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0">
-                  <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center border-2 border-blue-200">
-                    <span className="text-3xl">
-                      {enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type)}
-                    </span>
+          {/* Minimized Bar - Always Visible */}
+          <div className={`bg-white/90 backdrop-blur-xl border-t border-gray-200 shadow-2xl transition-all duration-300 ${
+            navigationPanelMinimized ? 'rounded-t-2xl' : ''
+          }`}>
+            <div className={`transition-all duration-300 ${
+              navigationPanelMinimized ? 'p-3' : 'p-4'
+            }`}>
+              {navigationPanelMinimized ? (
+                /* Minimized View - Compact Info Bar */
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center border-2 border-blue-200 flex-shrink-0">
+                      <span className="text-xl">
+                        {currentStep ? enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type) : '→'}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {currentStep ? currentStep.instruction : 'Navigation active'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {currentStep ? (
+                          <>
+                            {enhancedRoutingService.formatDistance(currentStep.distance_meters || 0)} • {enhancedRoutingService.formatDuration((currentStep.travel_time_seconds || 0) / 60)}
+                          </>
+                        ) : (
+                          selectedRoute ? `${selectedRoute.distance_km?.toFixed(1) || 0} km • ${Math.round(selectedRoute.estimated_duration_minutes || 0)} min` : ''
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 flex-shrink-0">
+                    <button
+                      onClick={() => setNavigationPanelMinimized(false)}
+                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    >
+                      <ChevronUp className="w-5 h-5 text-gray-600" />
+                    </button>
+                    <button
+                      onClick={stopNavigation}
+                      className="p-2 hover:bg-red-100 rounded-full transition-colors"
+                    >
+                      <X className="w-5 h-5 text-red-600" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-lg font-semibold text-gray-900 leading-tight mb-1">
-                    {currentStep.instruction}
-                  </p>
-                  {currentStep.street_name && (
-                    <p className="text-sm text-gray-600 mb-2">
-                      on {currentStep.street_name}
-                    </p>
+              ) : (
+                /* Expanded View - Full Navigation Details */
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Turn-by-turn navigation</h3>
+                      <div className="text-sm text-gray-500">
+                        Step {navigationStep + 1} of {selectedRoute ? selectedRoute.steps.length : 0}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setGyroscopeEnabled(!gyroscopeEnabled)}
+                        className={`p-2 rounded-full transition-colors ${
+                          gyroscopeEnabled 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-gray-200 text-gray-600'
+                        }`}
+                      >
+                        <Navigation className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => setNavigationPanelMinimized(true)}
+                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                      >
+                        <ChevronDown className="w-5 h-5 text-gray-600" />
+                      </button>
+                      <button
+                        onClick={stopNavigation}
+                        className="p-2 hover:bg-red-100 rounded-full transition-colors"
+                      >
+                        <X className="w-5 h-5 text-red-600" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Current Instruction */}
+                  {currentStep ? (
+                    <div className="mb-4">
+                      <div className="flex items-start space-x-4">
+                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center border-2 border-blue-200 flex-shrink-0">
+                          <span className="text-3xl">
+                            {enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type || 'straight')}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-lg font-semibold text-gray-900 leading-tight mb-1">
+                            {currentStep.instruction || 'Continue on route'}
+                          </p>
+                          {currentStep.street_name && (
+                            <p className="text-sm text-gray-600 mb-2">
+                              on {currentStep.street_name}
+                            </p>
+                          )}
+                          <div className="flex items-center space-x-2 text-sm">
+                            <span className="text-gray-500">
+                              {enhancedRoutingService.formatDistance(currentStep.distance_meters || 0)}
+                            </span>
+                            <span className="text-gray-400">•</span>
+                            <span className="text-gray-500">
+                              {enhancedRoutingService.formatDuration((currentStep.travel_time_seconds || 0) / 60)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-4 p-4 bg-blue-50 rounded-xl">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Navigation className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">Navigation Active</p>
+                          <p className="text-xs text-gray-600">
+                            {selectedRoute ? (
+                              <>
+                                {selectedRoute.distance_km?.toFixed(1) || 0} km • {Math.round(selectedRoute.estimated_duration_minutes || 0)} min
+                              </>
+                            ) : (
+                              'Route information loading...'
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   )}
 
-                  {/* Distance to next turn */}
-                  <div className="flex items-center space-x-2 text-sm">
-                    <span className="text-gray-500">
-                      {enhancedRoutingService.formatDistance(currentStep.distance_meters || 0)}
-                    </span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-500">
-                      {enhancedRoutingService.formatDuration((currentStep.travel_time_seconds || 0) / 60)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  {/* Next Instruction Preview */}
+                  {nextStep && (
+                    <div className="p-3 bg-gray-50 rounded-xl mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
+                          <span className="text-sm">
+                            {enhancedRoutingService.getManeuverIcon(nextStep.maneuver_type)}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700">Next: {nextStep.instruction}</p>
+                          {nextStep.street_name && (
+                            <p className="text-xs text-gray-500">on {nextStep.street_name}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-            {/* Next Instruction Preview */}
-            {nextStep && (
-              <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
-                    <span className="text-sm">
-                      {enhancedRoutingService.getManeuverIcon(nextStep.maneuver_type)}
-                    </span>
+                  {/* Progress Bar */}
+                  <div>
+                    <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                      <span>Progress</span>
+                      <span>
+                        {Math.round(((navigationStep + 1) / (selectedRoute ? selectedRoute.steps.length : 1)) * 100)}%
+                      </span>
+                    </div>
+                    <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-700"
+                        style={{ width: `${((navigationStep + 1) / (selectedRoute ? selectedRoute.steps.length : 1)) * 100}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-700">Next: {nextStep.instruction}</p>
-                    {nextStep.street_name && (
-                      <p className="text-xs text-gray-500">on {nextStep.street_name}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Enhanced Progress Bar */}
-            <div className="p-4 bg-white">
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                <span>Progress</span>
-                <span>
-                  {Math.round(((navigationStep + 1) / (selectedRoute ? selectedRoute.steps.length : 1)) * 100)}%
-                </span>
-              </div>
-              <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-700 ease-out relative"
-                  style={{ width: `${((navigationStep + 1) / (selectedRoute ? selectedRoute.steps.length : 1)) * 100}%` }}
-                >
-                  <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* Route Alternatives Panel - Modern Design - Responsive */}
-      {showRouteAlternatives && routeAlternatives.length > 0 && !isNavigationActive && (
+      {showRouteAlternatives && routeAlternatives.length > 0 && !isNavigationActive && !showSmartRoutePanel && (
         <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-80 sm:max-h-96">
             <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
@@ -3000,138 +3065,7 @@ const TrafficMap = () => {
         </div>
       )}
 
-      {/* Enhanced Route Information Panel with Real-time Traffic - Modern Design - Responsive */}
-      {selectedRoute && !isNavigationActive && !isSimulating && (
-        <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center border border-blue-200">
-                    <Route className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Route Found</h3>
-                    <p className="text-sm text-gray-500">{selectedRoute.route_name || 'Recommended Route'}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  {/* Show alternatives button if multiple routes available */}
-                  {routeAlternatives.length > 1 && (
-                    <button
-                      onClick={() => setShowRouteAlternatives(true)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-                      title="View alternative routes"
-                    >
-                      <Layers className="w-5 h-5 text-gray-600" />
-                    </button>
-                  )}
-                  {/* Close button */}
-                  <button
-                    onClick={clearLocations}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-                    title="Close route"
-                  >
-                    <X className="w-5 h-5 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={saveAsFavorite}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-                    title="Save as favorite"
-                  >
-                    <Heart className="w-5 h-5 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={startSimulation}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
-                    title="Simulate this trip"
-                  >
-                    <Play className="w-4 h-4" />
-                    <span className="hidden sm:inline">Simulate</span>
-                  </button>
-                  <button
-                    onClick={startNavigation}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
-                  >
-                    <Navigation className="w-4 h-4" />
-                    <span>Start</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {enhancedRoutingService.formatDuration(selectedRoute.estimated_duration_minutes)}
-                  </div>
-                  <div className="text-xs text-gray-500">Duration</div>
-                </div>
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {enhancedRoutingService.formatDistance(selectedRoute.distance_km * 1000)}
-                  </div>
-                  <div className="text-xs text-gray-500">Distance</div>
-                </div>
-
-                {/* Real-time Traffic Condition */}
-                <div>
-                  <div className={`text-lg font-semibold ${
-                    routeTrafficData?.condition === 'heavy' ? 'text-red-600' :
-                    routeTrafficData?.condition === 'moderate' ? 'text-yellow-600' :
-                    'text-green-600'
-                  }`}>
-                    {routeTrafficData?.condition === 'heavy' ? 'Heavy' :
-                     routeTrafficData?.condition === 'moderate' ? 'Moderate' :
-                     'Light'}
-                  </div>
-                  <div className="text-xs text-gray-500">Traffic</div>
-                  {routeTrafficData && (
-                    <div className="text-xs text-gray-400 mt-1">
-                      {Math.round(routeTrafficData.avgSpeed)} km/h avg
-                    </div>
-                  )}
-                </div>
-
-                {/* Traffic Indicator */}
-                <div className="flex items-center justify-center">
-                  <div className={`w-3 h-3 rounded-full ${
-                    routeTrafficData?.condition === 'heavy' ? 'bg-red-500' :
-                    routeTrafficData?.condition === 'moderate' ? 'bg-yellow-500' :
-                    'bg-green-500'
-                  }`}></div>
-                  <span className="ml-2 text-xs text-gray-500">
-                    Live traffic
-                  </span>
-                </div>
-              </div>
-
-              {/* Traffic Details */}
-              {routeTrafficData && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Traffic flow:</span>
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center space-x-1">
-                        <div className={`w-2 h-2 rounded-full ${
-                          routeTrafficData.condition === 'heavy' ? 'bg-red-500' :
-                          routeTrafficData.condition === 'moderate' ? 'bg-yellow-500' :
-                          'bg-green-500'
-                        }`}></div>
-                        <span className="text-gray-700 capitalize">{routeTrafficData.condition}</span>
-                      </div>
-                      <span className="text-gray-400">•</span>
-                      <span className="text-gray-600">
-                        {routeTrafficData.samplePoints} checkpoints
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Route Found Panel removed - functionality moved to Smart Route Panel */}
 
       {/* Semi-transparent overlay for sidebar */}
       {showSidePanel && (
@@ -3340,96 +3274,114 @@ const TrafficMap = () => {
         </div>
       )}
 
-      {/* Feature Toggle Buttons - Right Side */}
-      <div className="absolute bottom-4 right-4 z-40 flex flex-col space-y-3">
-        {/* Incident Report Button - Enhanced with Pulse Animation */}
-        <button
-          onClick={() => {
-            if (isGuest) {
-              setShowAuthPrompt(true);
-              return;
-            }
-            setShowIncidentModal(true);
-          }}
-          className="min-w-[56px] min-h-[56px] p-4 bg-gradient-to-br from-red-600 via-red-600 to-red-700 text-white rounded-full shadow-2xl hover:shadow-red-500/50 hover:from-red-700 hover:via-red-700 hover:to-red-800 transition-all duration-300 ease-out hover:scale-110 active:scale-95 relative overflow-hidden group"
-          title="Report Incident"
-        >
-          <AlertTriangle className="w-6 h-6 relative z-10 animate-pulse" />
-          <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-        </button>
+      {/* Compact Floating Action Buttons - Right Side */}
+      {!showSmartRoutePanel && (
+      <div className={`absolute bottom-4 right-4 z-[45] flex flex-col space-y-2 transition-all duration-300 ${
+        isNavigationActive ? 'bottom-20 sm:bottom-24' : 'bottom-4'
+      }`}>
+        {/* Primary Actions - Always Visible */}
+        <div className="flex flex-col space-y-2">
+          {/* Incident Report */}
+          <button
+            onClick={() => {
+              if (isGuest) {
+                setShowAuthPrompt(true);
+                return;
+              }
+              setShowIncidentModal(true);
+            }}
+            className="w-12 h-12 bg-red-600/90 backdrop-blur-lg hover:bg-red-700 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
+            title="Report Incident"
+          >
+            <AlertTriangle className="w-5 h-5" />
+          </button>
 
-        {/* Voice Navigation Toggle - Enhanced */}
-        {!isGuest && (
-        <button
-          onClick={() => {
-            const newState = voiceNavigationService.toggle();
-            setVoiceEnabled(newState);
-          }}
-          className={`min-w-[56px] min-h-[56px] p-3 rounded-full shadow-xl transition-all duration-300 ease-out hover:scale-110 active:scale-95 relative overflow-hidden group ${
-            voiceNavigationService.isEnabled()
-              ? 'bg-gradient-to-br from-blue-600 via-blue-600 to-blue-700 text-white hover:from-blue-700 hover:via-blue-700 hover:to-blue-800'
-              : 'bg-white/95 backdrop-blur-xl text-gray-700 hover:bg-gray-50 border border-gray-200/50'
-          }`}
-          title="Voice Navigation"
-        >
-          <div className="relative z-10">
-            {voiceNavigationService.isEnabled() ? (
-              <Volume2 className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
-            ) : (
-              <VolumeX className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
+          {/* Voice Navigation */}
+          {!isGuest && (
+            <button
+              onClick={() => {
+                const newState = voiceNavigationService.toggle();
+                setVoiceEnabled(newState);
+              }}
+              className={`w-12 h-12 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${
+                voiceNavigationService.isEnabled()
+                  ? 'bg-blue-600/90 backdrop-blur-lg hover:bg-blue-700 text-white'
+                  : 'bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700'
+              }`}
+              title={voiceNavigationService.isEnabled() ? 'Mute Voice' : 'Enable Voice'}
+            >
+              {voiceNavigationService.isEnabled() ? (
+                <Volume2 className="w-5 h-5" />
+              ) : (
+                <VolumeX className="w-5 h-5" />
+              )}
+            </button>
+          )}
+
+          {/* Layers Toggle */}
+          <button
+            onClick={() => setShowSecondaryActions(!showSecondaryActions)}
+            className="w-12 h-12 bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
+            title="More Options"
+          >
+            <Layers className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Secondary Actions - Expandable */}
+        {showSecondaryActions && (
+          <div className="flex flex-col space-y-2 animate-fade-in">
+            <button
+              onClick={() => setWeatherEnabled(!weatherEnabled)}
+              className={`w-12 h-12 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${
+                weatherEnabled
+                  ? 'bg-blue-600/90 backdrop-blur-lg hover:bg-blue-700 text-white'
+                  : 'bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700'
+              }`}
+              title="Weather"
+            >
+              <Cloud className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={() => setIsMiniOpen(true)}
+              className="w-12 h-12 bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
+              title="Insights"
+            >
+              <BarChart3 className="w-5 h-5" />
+            </button>
+
+            {/* Traffic Predictions */}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowPredictionsPanel(true);
+              }}
+              className="w-12 h-12 bg-cyan-600/90 backdrop-blur-lg hover:bg-cyan-700 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
+              title="View Traffic Predictions"
+            >
+              <BarChart3 className="w-5 h-5" />
+            </button>
+
+            {/* Multi-Stop Mode Toggle */}
+            {!isGuest && (
+              <button
+                onClick={toggleMultiStopMode}
+                className={`w-12 h-12 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${
+                  multiStopMode
+                    ? 'bg-purple-600/90 backdrop-blur-lg hover:bg-purple-700 text-white'
+                    : 'bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700'
+                }`}
+                title="Multi-Stop Planning"
+              >
+                <Shuffle className="w-5 h-5" />
+              </button>
             )}
           </div>
-          <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-        </button>
-        )}
-
-        {/* 3D Traffic Visualization Toggle removed */}
-        
-        {/* Multi-Stop Mode Toggle - Enhanced */}
-        {!isGuest && (
-        <button
-          onClick={toggleMultiStopMode}
-          className={`min-w-[56px] min-h-[56px] p-3 rounded-full shadow-xl transition-all duration-300 ease-out hover:scale-110 active:scale-95 relative overflow-hidden group ${
-            multiStopMode
-              ? 'bg-gradient-to-br from-purple-600 via-purple-600 to-purple-700 text-white hover:from-purple-700 hover:via-purple-700 hover:to-purple-800'
-              : 'bg-white/95 backdrop-blur-xl text-gray-700 hover:bg-gray-50 border border-gray-200/50'
-          }`}
-          title="Multi-Stop Planning"
-        >
-          <Shuffle className={`w-5 h-5 transition-transform duration-300 ${multiStopMode ? 'group-hover:rotate-180' : 'group-hover:scale-110'}`} />
-          <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-        </button>
-        )}
-        
-        {/* Update Incident‑Prone Areas (Web Scrape) - Admin Only */}
-        {user?.role === 'admin' && (
-        <button
-          onClick={handleScrapeIncidentProneAreas}
-          className={`p-3 rounded-full shadow-xl transition-all hover:scale-110 active:scale-95 ${
-            incidentProneEnabled ? 'bg-amber-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-          title="Update Incident‑Prone Areas"
-        >
-          {isScrapingIncidentProne ? (
-            <RefreshCw className="w-5 h-5 animate-spin" />
-          ) : (
-            <BarChart3 className="w-5 h-5" />
-          )}
-        </button>
-        )}
-        
-        {/* Weather-Aware Route - Enhanced */}
-        {!isGuest && selectedOrigin && selectedDestination && (
-          <button
-            onClick={getWeatherAwareRoute}
-            className="min-w-[56px] min-h-[56px] p-3 bg-white/95 backdrop-blur-xl text-gray-700 rounded-full shadow-xl hover:bg-gradient-to-br hover:from-cyan-50 hover:to-blue-50 border border-gray-200/50 transition-all duration-300 ease-out hover:scale-110 active:scale-95 relative overflow-hidden group"
-            title="Weather-Aware Route"
-          >
-            <Cloud className="w-5 h-5 transition-transform duration-300 group-hover:scale-110 group-hover:text-cyan-600" />
-            <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-          </button>
         )}
       </div>
+      )}
 
       {/* Voice Navigation Panel - Only show when navigation is active */}
       {isNavigationActive && (
@@ -3676,14 +3628,22 @@ const TrafficMap = () => {
           setShowSmartRoutePanel(false);
           startNavigation();
         }}
+        onStartSimulation={(route) => {
+          // Start simulation with the selected route
+          setSelectedRoute(route);
+          setShowSmartRoutePanel(false);
+          startSimulation();
+        }}
       />
 
       {/* Weather & Flood Advisory Panel - Bottom Overlay */}
-      <WeatherFloodAdvisory 
-        mapCenter={mapCenter}
-        locationName="Las Piñas City"
-        sidebarOpen={showSidePanel}
-      />
+      {!showSmartRoutePanel && !isNavigationActive && (
+        <WeatherFloodAdvisory 
+          mapCenter={mapCenter}
+          locationName="Las Piñas City"
+          sidebarOpen={showSidePanel}
+        />
+      )}
 
       {/* Traffic Predictions Panel */}
       {showPredictionsPanel && (
@@ -3701,6 +3661,212 @@ const TrafficMap = () => {
           selectedOrigin={selectedOrigin}
           selectedDestination={selectedDestination}
         />
+      )}
+
+      {/* Simulation Completion Modal - Modern Design */}
+      {showSimulationCompleteModal && simulationCompleteData && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          {/* Backdrop with blur */}
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+            onClick={() => {
+              setShowSimulationCompleteModal(false);
+              setSimulationCompleteData(null);
+            }}
+          />
+          
+          {/* Modal Content */}
+          <div 
+            className="relative bg-white rounded-3xl sm:rounded-[2rem] shadow-2xl w-full max-w-md animate-scale-in overflow-hidden border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Success Icon Header with Gradient */}
+            <div className="relative bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-8 sm:p-10 text-center overflow-hidden">
+              {/* Animated Background Pattern */}
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 blur-2xl"></div>
+                <div className="absolute bottom-0 right-0 w-40 h-40 bg-white rounded-full translate-x-1/2 translate-y-1/2 blur-2xl"></div>
+              </div>
+              
+              {/* Success Icon */}
+              <div className="relative z-10">
+                <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-white/20 backdrop-blur-lg rounded-full mb-4 animate-scale-in">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center shadow-xl">
+                    <svg className="w-8 h-8 sm:w-10 sm:h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Trip Complete!</h2>
+                <p className="text-green-50 text-sm sm:text-base">Simulation finished successfully</p>
+              </div>
+            </div>
+
+            {/* Content Section */}
+            <div className="p-6 sm:p-8">
+              {/* Trip Summary Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+                {/* Distance Card */}
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 border border-blue-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Route className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Distance</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {simulationCompleteData.distanceKm.toFixed(1)} km
+                  </p>
+                </div>
+
+                {/* Duration Card */}
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4 border border-purple-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Clock className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Duration</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-900">
+                    {Math.round(simulationCompleteData.durationMinutes)}m
+                  </p>
+                </div>
+              </div>
+
+              {/* Route Info */}
+              <div className="bg-gray-50 rounded-2xl p-4 sm:p-5 mb-6 border border-gray-200">
+                <div className="space-y-3">
+                  {/* Origin */}
+                  <div className="flex items-start space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Origin</p>
+                      <p className="text-sm font-semibold text-gray-900 truncate">{simulationCompleteData.origin}</p>
+                    </div>
+                  </div>
+
+                  {/* Route Line */}
+                  <div className="flex items-center space-x-3 ml-4">
+                    <div className="w-0.5 h-8 bg-gradient-to-b from-blue-400 to-red-400"></div>
+                  </div>
+
+                  {/* Destination */}
+                  <div className="flex items-start space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Destination</p>
+                      <p className="text-sm font-semibold text-gray-900 truncate">{simulationCompleteData.destination}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Messages */}
+              {simulationCompleteData.saveSuccess && (
+                <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border border-green-200 flex items-start space-x-3 animate-slide-down">
+                  <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-green-900 mb-1">Saved to Travel History</p>
+                    <p className="text-xs text-green-700">Your trip has been saved and added to your travel history.</p>
+                  </div>
+                </div>
+              )}
+
+              {simulationCompleteData.isGuest && (
+                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 flex items-start space-x-3 animate-slide-down">
+                  <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Info className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Sign in to Save Trips</p>
+                    <p className="text-xs text-blue-700">Create an account to automatically save your trips and access travel history.</p>
+                  </div>
+                </div>
+              )}
+
+              {simulationCompleteData.saveError && !simulationCompleteData.isGuest && (
+                <div className={`mb-6 p-4 rounded-2xl border flex items-start space-x-3 animate-slide-down ${
+                  simulationCompleteData.isAuthError 
+                    ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200'
+                    : 'bg-gradient-to-r from-red-50 to-pink-50 border-red-200'
+                }`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                    simulationCompleteData.isAuthError ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}>
+                    <AlertTriangle className={`w-4 h-4 ${
+                      simulationCompleteData.isAuthError ? 'text-yellow-900' : 'text-white'
+                    }`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-semibold mb-1 ${
+                      simulationCompleteData.isAuthError ? 'text-yellow-900' : 'text-red-900'
+                    }`}>
+                      {simulationCompleteData.isAuthError ? 'Authentication Required' : 'Save Failed'}
+                    </p>
+                    <p className={`text-xs ${
+                      simulationCompleteData.isAuthError ? 'text-yellow-700' : 'text-red-700'
+                    }`}>
+                      {simulationCompleteData.isAuthError 
+                        ? 'Please log in to save trips to your travel history.'
+                        : `Could not save trip: ${simulationCompleteData.saveError}`
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {simulationCompleteData.isGuest && (
+                  <button
+                    onClick={() => {
+                      setShowSimulationCompleteModal(false);
+                      setSimulationCompleteData(null);
+                      navigate('/login');
+                    }}
+                    className="flex-1 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2"
+                  >
+                    <span>Sign In</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                )}
+                
+                {simulationCompleteData.saveError && !simulationCompleteData.isGuest && simulationCompleteData.isAuthError && (
+                  <button
+                    onClick={() => {
+                      setShowSimulationCompleteModal(false);
+                      setSimulationCompleteData(null);
+                      navigate('/login');
+                    }}
+                    className="flex-1 px-6 py-3.5 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-xl font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    Log In
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setShowSimulationCompleteModal(false);
+                    setSimulationCompleteData(null);
+                  }}
+                  className={`px-6 py-3.5 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] ${
+                    simulationCompleteData.isGuest || simulationCompleteData.saveError
+                      ? 'bg-white text-gray-700 border-2 border-gray-300 hover:bg-gray-50'
+                      : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700'
+                  } flex-1 sm:flex-none`}
+                >
+                  {simulationCompleteData.saveSuccess ? 'Done' : 'Close'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       </div>
