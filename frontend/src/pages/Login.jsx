@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { signInWithGoogle, signInWithEmailPassword, registerWithEmailPassword } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const Login = ({ onLoginSuccess = () => {} }) => {
-  const { firebaseLogin, firebaseRegister } = useAuth();
+  const { login, firebaseLogin, firebaseRegister, register } = useAuth();
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,13 +40,30 @@ const Login = ({ onLoginSuccess = () => {} }) => {
     setLoading(true);
 
     try {
-      const result = await firebaseLogin(formData.email, formData.password);
-
-      if (result.success) {
-        toast.success(`Welcome back, ${result.user.displayName || result.user.email}!`);
-        onLoginSuccess(result.user);
-      } else {
-        toast.error(result.error || 'Failed to sign in');
+      // Automatically try Firebase first, then fallback to backend
+      let result;
+      
+      try {
+        // Try Firebase authentication first
+        result = await firebaseLogin(formData.email, formData.password);
+        if (result.success) {
+          toast.success(`Welcome back, ${result.user.displayName || result.user.email}!`);
+          onLoginSuccess(result.user);
+          return;
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (firebaseError) {
+        // If Firebase fails (user not found or invalid credentials), try backend
+        
+        try {
+          result = await login(formData.email, formData.password);
+          toast.success(`Welcome back, ${result.user.full_name || result.user.email}!`);
+          onLoginSuccess(result.user);
+        } catch (backendError) {
+          // Both authentication methods failed
+          throw new Error(backendError.message || 'Invalid email/username or password. Please check your credentials.');
+        }
       }
     } catch (error) {
       toast.error(error.message || 'Failed to sign in');
@@ -76,13 +93,36 @@ const Login = ({ onLoginSuccess = () => {} }) => {
     setLoading(true);
 
     try {
-      const result = await firebaseRegister(formData.email, formData.password, formData.displayName);
-
-      if (result.success) {
-        toast.success(`Account created! Please check your email at ${result.user.email} to verify your account.`);
-        // Don't call onLoginSuccess here since the user needs to verify their email first
-      } else {
-        toast.error(result.error || 'Failed to create account');
+      // Try Firebase registration first (preferred for new users)
+      try {
+        const result = await firebaseRegister(formData.email, formData.password, formData.displayName);
+        if (result.success) {
+          toast.success(`Account created! Please check your email at ${result.user.email} to verify your account.`);
+          // Don't call onLoginSuccess here since the user needs to verify their email first
+          return;
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (firebaseError) {
+        // If Firebase registration fails (e.g., email already exists in Firebase), 
+        // try backend registration as fallback
+        
+        try {
+          const username = formData.email.split('@')[0]; // Generate username from email
+          const result = await register({
+            email: formData.email,
+            username: username,
+            password: formData.password,
+            full_name: formData.displayName,
+            role: 'citizen'
+          });
+          toast.success(`Account created! Welcome, ${result.full_name}!`);
+          // Auto-login after backend registration
+          const loginResult = await login(formData.email, formData.password);
+          onLoginSuccess(loginResult.user);
+        } catch (backendError) {
+          throw new Error(backendError.message || 'Failed to create account. The email may already be registered.');
+        }
       }
     } catch (error) {
       toast.error(error.message || 'Failed to create account');

@@ -30,7 +30,7 @@ const NotificationBell = () => {
       const count = await notificationService.getUnreadCount();
       setUnreadCount(count);
     } catch (error) {
-      console.error('Error fetching unread count:', error);
+
     }
   };
 
@@ -42,7 +42,7 @@ const NotificationBell = () => {
       const data = await notificationService.getNotifications({ limit: 10 });
       setNotifications(data);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ const NotificationBell = () => {
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+
     }
   };
 
@@ -77,7 +77,7 @@ const NotificationBell = () => {
       );
       setUnreadCount(0);
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+
     }
   };
 

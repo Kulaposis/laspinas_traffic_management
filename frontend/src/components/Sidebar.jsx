@@ -74,6 +74,13 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
       allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin']
     },
     {
+      name: 'Traffic Monitor (New)',
+      href: '/traffic-monitor-new',
+      icon: Activity,
+      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin'],
+      badge: 'NEW'
+    },
+    {
       name: 'Traffic Map',
       href: '/traffic-map',
       icon: Map,
@@ -123,8 +130,10 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
     }
   ];
 
+  // Normalize user role to lowercase for comparison (backend returns uppercase)
+  const normalizedUserRole = user?.role?.toLowerCase();
   const filteredNavigation = navigationItems.filter(item =>
-    item.allowedRoles.includes(user?.role)
+    item.allowedRoles.some(role => role.toLowerCase() === normalizedUserRole)
   );
 
   return (
@@ -133,17 +142,18 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
       <aside
         className={`
           bg-white sidebar-container
-          fixed lg:static inset-y-0 left-0 z-50
+          fixed inset-y-0 left-0 z-[60]
           w-64 lg:w-64
           transform transition-transform duration-300 ease-in-out
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           flex flex-col
           shadow-xl lg:shadow-sm
-          h-screen lg:h-auto
-          top-0 lg:top-auto
+          h-screen
+          top-0
           border-r border-gray-200 lg:border-gray-100
         `}
         aria-label="Main navigation"
+        style={{ display: 'block', visibility: 'visible' }}
       >
         {/* Header */}
         <div className="p-4 sm:p-6 border-b lg:border-b-0">
@@ -171,6 +181,11 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
+          {filteredNavigation.length === 0 && user && (
+            <div className="p-4 text-center text-sm text-gray-500">
+              No navigation items available for your role.
+            </div>
+          )}
           <div className="space-y-1">
             {filteredNavigation.map((item) => {
               const Icon = item.icon;

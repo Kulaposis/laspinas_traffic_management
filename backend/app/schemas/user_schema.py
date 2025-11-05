@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_serializer
 from typing import Optional
 from datetime import datetime
 from ..models.user import UserRole
+from ..utils.role_helpers import normalize_role
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -25,6 +26,11 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    @field_serializer('role')
+    def serialize_role(self, role: UserRole, _info):
+        """Serialize role to lowercase for frontend compatibility."""
+        return normalize_role(role)
 
     class Config:
         from_attributes = True

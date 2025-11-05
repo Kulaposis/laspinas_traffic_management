@@ -78,7 +78,7 @@ class RealTimeTrafficService {
 
       return trafficData;
     } catch (error) {
-      console.error('Error getting route traffic data:', error);
+
       return this.getFallbackTrafficData(routeCoordinates);
     }
   }
@@ -110,7 +110,7 @@ class RealTimeTrafficService {
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error('Backend traffic data error:', error);
+
       return { source: 'backend', data: [], coverage: 0, timestamp: Date.now() };
     }
   }
@@ -156,7 +156,7 @@ class RealTimeTrafficService {
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error('OSM traffic data error:', error);
+
       return { source: 'osm', data: [], coverage: 0, timestamp: Date.now() };
     }
   }
@@ -521,7 +521,7 @@ class RealTimeTrafficService {
         timestamp: Date.now()
       };
     } catch (error) {
-      console.error('Error getting traffic incidents:', error);
+
       return { incidents: [], sources: [], timestamp: Date.now() };
     }
   }
@@ -563,7 +563,7 @@ class RealTimeTrafficService {
         created_at: new Date().toISOString()
       }));
     } catch (error) {
-      console.error('OSM incidents error:', error);
+
       return [];
     }
   }

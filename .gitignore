@@ -39,7 +39,7 @@ __pycache__/
 *.sqlite3
 traffic_management.db
 
-# Testing files
+# Testing files - All test files and directories
 test_*.py
 test_*.js
 test_*.html
@@ -50,12 +50,26 @@ spec/
 **/*.test.js
 **/*.test.ts
 **/*.test.tsx
+**/*.test.jsx
 **/*.spec.js
 **/*.spec.ts
 **/*.spec.tsx
+**/*.spec.jsx
+__tests__/
+__test__/
+**/__tests__/**
+**/__test__/**
+testing/
+**/testing/**
 
-# Backend specific test files
+# Backend specific test files - All backend tests
 backend/test_*.py
+backend/**/*test*.py
+backend/**/*_test.py
+backend/tests/
+backend/spec/
+backend/__tests__/
+backend/__test__/
 backend/simple_cors_test.py
 backend/check_*.py
 backend/fix_*.py
@@ -67,6 +81,32 @@ backend/test_emergency_moderation.py
 backend/test_emergency_with_auth.py
 backend/test_model_db.py
 backend/test_moderation_api.py
+
+# Frontend specific test files - All frontend tests
+frontend/test_*.js
+frontend/test_*.ts
+frontend/test_*.jsx
+frontend/test_*.tsx
+frontend/**/*test*.js
+frontend/**/*test*.ts
+frontend/**/*test*.jsx
+frontend/**/*test*.tsx
+frontend/**/*_test.js
+frontend/**/*_test.ts
+frontend/**/*_test.jsx
+frontend/**/*_test.tsx
+frontend/tests/
+frontend/spec/
+frontend/__tests__/
+frontend/__test__/
+frontend/**/*.test.js
+frontend/**/*.test.ts
+frontend/**/*.test.jsx
+frontend/**/*.test.tsx
+frontend/**/*.spec.js
+frontend/**/*.spec.ts
+frontend/**/*.spec.jsx
+frontend/**/*.spec.tsx
 
 # IDE and editor files
 .vscode/
@@ -103,6 +143,10 @@ mobile/
 # Documentation that might be generated
 *.md.bak
 docs/_build/
+
+# Ignore all Markdown files (.md files)
+*.md
+**/*.md
 
 # Coverage reports
 coverage/

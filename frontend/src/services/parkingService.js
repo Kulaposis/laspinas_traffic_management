@@ -7,7 +7,7 @@ const parkingService = {
       const response = await api.get('/parking/areas', { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching parking areas:', error);
+
       throw error;
     }
   },
@@ -17,7 +17,7 @@ const parkingService = {
       const response = await api.get(`/parking/areas/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching parking area:', error);
+
       throw error;
     }
   },
@@ -27,7 +27,7 @@ const parkingService = {
       const response = await api.post('/parking/areas', parkingData);
       return response.data;
     } catch (error) {
-      console.error('Error creating parking area:', error);
+
       throw error;
     }
   },
@@ -37,7 +37,7 @@ const parkingService = {
       const response = await api.put(`/parking/areas/${id}`, parkingData);
       return response.data;
     } catch (error) {
-      console.error('Error updating parking area:', error);
+
       throw error;
     }
   },
@@ -47,7 +47,7 @@ const parkingService = {
       const response = await api.delete(`/parking/areas/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Error deleting parking area:', error);
+
       throw error;
     }
   },
@@ -58,7 +58,7 @@ const parkingService = {
       const response = await api.get('/parking/no-parking-zones', { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching no parking zones:', error);
+
       throw error;
     }
   },
@@ -68,7 +68,7 @@ const parkingService = {
       const response = await api.get(`/parking/no-parking-zones/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching no parking zone:', error);
+
       throw error;
     }
   },
@@ -78,7 +78,7 @@ const parkingService = {
       const response = await api.post('/parking/no-parking-zones', zoneData);
       return response.data;
     } catch (error) {
-      console.error('Error creating no parking zone:', error);
+
       throw error;
     }
   },
@@ -88,7 +88,7 @@ const parkingService = {
       const response = await api.put(`/parking/no-parking-zones/${id}`, zoneData);
       return response.data;
     } catch (error) {
-      console.error('Error updating no parking zone:', error);
+
       throw error;
     }
   },
@@ -98,7 +98,7 @@ const parkingService = {
       const response = await api.delete(`/parking/no-parking-zones/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Error deleting no parking zone:', error);
+
       throw error;
     }
   },
@@ -109,7 +109,7 @@ const parkingService = {
       const response = await api.get('/parking/statistics');
       return response.data;
     } catch (error) {
-      console.error('Error fetching parking statistics:', error);
+
       throw error;
     }
   },
@@ -119,7 +119,7 @@ const parkingService = {
       const response = await api.get('/parking/no-parking-zones/statistics');
       return response.data;
     } catch (error) {
-      console.error('Error fetching no parking statistics:', error);
+
       throw error;
     }
   },
@@ -130,7 +130,7 @@ const parkingService = {
       const response = await api.get('/parking/map-data', { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching parking map data:', error);
+
       throw error;
     }
   },
@@ -141,7 +141,7 @@ const parkingService = {
       const response = await api.post('/parking/no-parking-zones/import');
       return response.data;
     } catch (error) {
-      console.error('Error importing no parking zones:', error);
+
       throw error;
     }
   },

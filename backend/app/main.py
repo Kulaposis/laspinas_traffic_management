@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, WebSocket, Request, HTTPException
+from starlette.requests import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -8,6 +9,9 @@ import logging
 import os
 from .db import get_db, Base, engine
 from sqlalchemy import inspect, text
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded  # type: ignore
 from .routers import auth, users, reports, violations, notifications, traffic, weather, emergency, footprints, parking, incident_prone_areas, logs, admin, travel_history
 from .websocket import websocket_endpoint
 from .services.scheduler import start_weather_scheduler, stop_weather_scheduler
@@ -72,6 +76,46 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+# Exception handler for rate limit exceeded
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Handle rate limit exceeded exceptions"""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": f"Rate limit exceeded: {exc.detail}",
+            "error": "Too many requests"
+        }
+    )
+
+# Apply rate limiting to login endpoint
+from functools import wraps
+
+def rate_limit_login(func):
+    """Decorator to apply rate limiting to login endpoint."""
+    @wraps(func)
+    @limiter.limit("5/minute")
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
+
+# Function to apply rate limits after routers are included
+def apply_rate_limits():
+    """Apply rate limits to auth endpoints."""
+    try:
+        for route in auth.router.routes:
+            if hasattr(route, 'path') and route.path == '/login' and hasattr(route, 'endpoint'):
+                original_endpoint = route.endpoint
+                route.endpoint = rate_limit_login(original_endpoint)
+                logger.info("Rate limiting applied to /auth/login endpoint")
+                break
+    except Exception as e:
+        logger.warning(f"Could not apply rate limiting: {e}")
+
 # CORS configuration based on environment
 cors_origins_env = os.getenv("CORS_ORIGINS", "")
 if cors_origins_env:
@@ -102,9 +146,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=allow_credentials,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "User-Agent", "Cache-Control"],
+    expose_headers=["Content-Type", "Authorization"]
 )
 
 # Add error handling middleware
@@ -139,9 +183,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
         return response
     except Exception as exc:
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
+        # Don't expose internal error details to clients
         return JSONResponse(
             status_code=500,
-            content={"detail": "Internal server error", "error": str(exc)},
+            content={"detail": "Internal server error"},
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -153,6 +198,24 @@ async def catch_exceptions_middleware(request: Request, call_next):
             }
         )
 
+# Add security headers middleware
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(self), microphone=(), camera=()"
+    
+    # HSTS header (only for HTTPS)
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    return response
+
 # Add request logging middleware for debugging
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -161,8 +224,10 @@ async def log_requests(request: Request, call_next):
     logger.info(f"Response: {response.status_code}")
     return response
 
-# Include routers
+# Include routers  
 app.include_router(auth.router)
+# Apply rate limiting to auth endpoints
+apply_rate_limits()
 app.include_router(users.router)
 app.include_router(reports.router)
 app.include_router(violations.router)

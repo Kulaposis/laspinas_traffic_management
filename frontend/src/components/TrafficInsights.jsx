@@ -61,7 +61,7 @@ const TrafficInsights = ({ onRouteRequest, className = '' }) => {
       setError('');
     } catch (err) {
       setError(err.message || 'Failed to fetch traffic insights');
-      console.error('Error fetching insights:', err);
+
     } finally {
       setLoading(false);
     }

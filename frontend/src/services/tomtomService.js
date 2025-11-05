@@ -45,13 +45,13 @@ class TomTomService {
 
     // Check daily limits
     if (this.usageStats.isLimitReached) {
-      console.warn('TomTom API daily limit reached, using fallback');
+
       return false;
     }
 
     if (this.usageStats.requests >= this.usageStats.dailyLimit) {
       this.usageStats.isLimitReached = true;
-      console.warn('TomTom API daily limit reached, using fallback');
+
       return false;
     }
 
@@ -59,7 +59,7 @@ class TomTomService {
     const now = Date.now();
     if (this.lastRequestTimestamp && (now - this.lastRequestTimestamp) < this.minRequestInterval) {
       const timeUntilNextRequest = Math.ceil((this.minRequestInterval - (now - this.lastRequestTimestamp)) / (60 * 1000));
-      console.warn(`TomTom API rate limited. Next request available in ${timeUntilNextRequest} minutes`);
+
       return false;
     }
 
@@ -75,7 +75,7 @@ class TomTomService {
       this.usageStats.requests = 0;
       this.usageStats.isLimitReached = false;
       this.usageStats.lastReset = today;
-      console.log('TomTom API usage counter reset for new day');
+
     }
   }
 
@@ -85,7 +85,6 @@ class TomTomService {
   trackRequest() {
     this.usageStats.requests++;
     this.lastRequestTimestamp = Date.now();
-    console.log(`TomTom API requests today: ${this.usageStats.requests}/${this.usageStats.dailyLimit} (last request: ${new Date(this.lastRequestTimestamp).toLocaleTimeString()})`);
   }
 
   /**
@@ -157,7 +156,7 @@ class TomTomService {
 
       return data;
     } catch (error) {
-      console.error('TomTom geocoding error:', error);
+
       return this.fallbackGeocode(query, options);
     }
   }
@@ -203,7 +202,7 @@ class TomTomService {
 
       return data;
     } catch (error) {
-      console.error('TomTom reverse geocoding error:', error);
+
       return this.fallbackReverseGeocode(lat, lng, options);
     }
   }
@@ -252,7 +251,7 @@ class TomTomService {
 
       return data;
     } catch (error) {
-      console.error('TomTom traffic flow error:', error);
+
       return this.fallbackTrafficFlow(lat, lng, options);
     }
   }
@@ -263,7 +262,7 @@ class TomTomService {
   async calculateRoute(origin, destination, options = {}) {
     // Validate coordinates
     if (!origin || !destination || !origin.lat || !origin.lng || !destination.lat || !destination.lng) {
-      console.error('Invalid coordinates for routing:', { origin, destination });
+
       return this.fallbackRoute(origin, destination, options);
     }
 
@@ -304,7 +303,7 @@ class TomTomService {
 
       return data;
     } catch (error) {
-      console.error('TomTom routing error:', error);
+
       return this.fallbackRoute(origin, destination, options);
     }
   }
@@ -313,7 +312,7 @@ class TomTomService {
    * Fallback geocoding using OpenStreetMap Nominatim
    */
   async fallbackGeocode(query, options = {}) {
-    console.log('Using OpenStreetMap fallback for geocoding');
+
     try {
       const params = new URLSearchParams({
         q: query,
@@ -342,7 +341,7 @@ class TomTomService {
         }))
       };
     } catch (error) {
-      console.error('Fallback geocoding error:', error);
+
       return { results: [] };
     }
   }
@@ -351,7 +350,7 @@ class TomTomService {
    * Fallback reverse geocoding using OpenStreetMap Nominatim
    */
   async fallbackReverseGeocode(lat, lng, options = {}) {
-    console.log('Using OpenStreetMap fallback for reverse geocoding');
+
     try {
       const params = new URLSearchParams({
         lat: lat.toString(),
@@ -379,7 +378,7 @@ class TomTomService {
         }]
       };
     } catch (error) {
-      console.error('Fallback reverse geocoding error:', error);
+
       return { addresses: [] };
     }
   }
@@ -388,7 +387,7 @@ class TomTomService {
    * Fallback traffic flow using backend service
    */
   async fallbackTrafficFlow(lat, lng, options = {}) {
-    console.log('Using backend fallback for traffic flow');
+
     try {
       // Use your existing backend traffic service
       const response = await fetch(`/api/traffic/nearby?lat=${lat}&lng=${lng}&radius=${options.radius || 1000}`);
@@ -409,7 +408,7 @@ class TomTomService {
         }
       };
     } catch (error) {
-      console.error('Fallback traffic flow error:', error);
+
       // Return a valid response structure even on error
       return {
         flowSegmentData: {
@@ -426,7 +425,7 @@ class TomTomService {
    * Fallback routing using OSRM
    */
   async fallbackRoute(origin, destination, options = {}) {
-    console.log('Using OSRM fallback for routing');
+
     try {
       const response = await fetch(
         `http://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
@@ -453,7 +452,7 @@ class TomTomService {
       
       return { routes: [] };
     } catch (error) {
-      console.error('Fallback routing error:', error);
+
       return { routes: [] };
     }
   }
@@ -493,7 +492,7 @@ class TomTomService {
    */
   clearCache() {
     this.cache.clear();
-    console.log('TomTom service cache cleared');
+
   }
 }
 

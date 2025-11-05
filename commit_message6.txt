@@ -1,0 +1,4 @@
+Fix: align traffic enums with Supabase values
+
+- Update TrafficStatus and RoadType enums to emit uppercase strings expected by Supabase
+- Avoid enum mismatch errors during traffic data inserts

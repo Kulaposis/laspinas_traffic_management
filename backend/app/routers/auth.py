@@ -22,16 +22,17 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(), 
-    request: Request = None,
     db: Session = Depends(get_db)
 ):
-    """Login user and return access token."""
+    """Login user and return access token. Rate limited to 5 attempts per minute."""
+    # Rate limiting is handled by middleware in main.py
     auth_service = AuthService(db)
     activity_logger = get_activity_logger(db)
     
     # Get client info
-    ip_address = request.client.host if request and request.client else None
+    ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent") if request else None
     
     try:

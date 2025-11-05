@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -69,13 +69,13 @@ const Footprints = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Las Piñas City center coordinates
-  const defaultCenter = [14.4504, 121.0170];
+  // Default map center and bounds for requested heatmap area
+  const defaultCenter = [14.441781, 120.99996];
   const defaultBounds = {
-    lat_min: 14.4200,
-    lat_max: 14.4800,
-    lng_min: 121.0000,
-    lng_max: 121.0400
+    lat_min: 14.425741,
+    lat_max: 14.457820,
+    lng_min: 120.970614,
+    lng_max: 121.029305
   };
 
   const fetchFootprintData = useCallback(async () => {
@@ -96,7 +96,7 @@ const Footprints = () => {
         const heatmapResponse = await footprintService.getFootprintHeatmap(defaultBounds);
         setHeatmapData(heatmapResponse.heatmap_data || []);
       } catch (heatmapError) {
-        console.warn('Heatmap data not available:', heatmapError);
+        
         // Generate heatmap from monitoring areas
         const sampleHeatmapData = (areasResponse.monitoring_areas || []).map(area => ({
           lat: area.latitude,
@@ -114,7 +114,7 @@ const Footprints = () => {
       setError('');
       
     } catch (err) {
-      console.error('Error fetching footprint data:', err);
+      
       setError('Failed to load footprint data. Please try again.');
     } finally {
       setIsUpdating(false);
@@ -129,7 +129,7 @@ const Footprints = () => {
       setIsInitialized(true);
       await fetchFootprintData();
     } catch (err) {
-      console.error('Error initializing footprint monitoring:', err);
+      
       setError('Failed to initialize footprint monitoring. Using sample data.');
       
       // Use sample data if initialization fails
@@ -147,7 +147,7 @@ const Footprints = () => {
       // Fetch updated data after a short delay
       setTimeout(fetchFootprintData, 1000);
     } catch (err) {
-      console.error('Error triggering real-time update:', err);
+      
       setError('Failed to trigger real-time update.');
       setIsUpdating(false);
     }
@@ -281,7 +281,7 @@ const Footprints = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Avg Temperature</p>
-                <p className="text-2xl font-bold text-gray-900">{statistics.average_temperature || 0}°C</p>
+                <p className="text-2xl font-bold text-gray-900">{statistics.average_temperature || 0}Â°C</p>
               </div>
             </div>
           </div>
@@ -364,7 +364,7 @@ const Footprints = () => {
                           <div className="space-y-1 text-sm">
                             <p><strong>Pedestrians:</strong> {area.pedestrian_count}</p>
                             <p><strong>Crowd Level:</strong> {getCrowdLevelBadge(area.crowd_level)}</p>
-                            <p><strong>Temperature:</strong> {area.temperature_celsius}°C</p>
+                            <p><strong>Temperature:</strong> {area.temperature_celsius}Â°C</p>
                             <p><strong>Humidity:</strong> {area.humidity_percent}%</p>
                             <p><strong>Updated:</strong> {formatTimestamp(area.recorded_at)}</p>
                           </div>
@@ -505,7 +505,7 @@ const Footprints = () => {
                       {getCrowdLevelBadge(area.crowd_level)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {area.temperature_celsius}°C
+                      {area.temperature_celsius}Â°C
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {area.humidity_percent}%

@@ -1,0 +1,4 @@
+Fix: refine CORS headers for production endpoints
+
+- Trim middleware to echo specific origins and avoid wildcard credentials
+- Ensure error responses also include correct CORS headers

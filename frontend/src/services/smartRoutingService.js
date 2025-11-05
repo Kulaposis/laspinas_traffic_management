@@ -43,7 +43,7 @@ class SmartRoutingService {
       
       return data;
     } catch (error) {
-      console.error('Error fetching smart routes:', error);
+
       throw error;
     }
   }
@@ -56,7 +56,7 @@ class SmartRoutingService {
       const response = await api.post('/traffic/routing/save-route', routeData);
       return response.data;
     } catch (error) {
-      console.error('Error saving route:', error);
+
       throw error;
     }
   }
@@ -75,7 +75,7 @@ class SmartRoutingService {
       const response = await api.get('/traffic/routing/recommended', { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching recommended routes:', error);
+
       throw error;
     }
   }

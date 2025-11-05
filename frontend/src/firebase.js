@@ -17,15 +17,15 @@ import {
 } from 'firebase/auth';
 
 // Firebase configuration object
-// Using your Firebase project credentials
+// Using environment variables for security
 const firebaseConfig = {
-  apiKey: "AIzaSyAUgpqB3LoCDjpKNBN-Xec-TUHAKszlQVY",
-  authDomain: "traffic-management-9c2f4.firebaseapp.com",
-  projectId: "traffic-management-9c2f4",
-  storageBucket: "traffic-management-9c2f4.firebasestorage.app",
-  messagingSenderId: "870304007603",
-  appId: "1:870304007603:web:9d347421d1ea2abcc977c6",
-  measurementId: "G-MWNPN4MPQH"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAUgpqB3LoCDjpKNBN-Xec-TUHAKszlQVY",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "traffic-management-9c2f4.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "traffic-management-9c2f4",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "traffic-management-9c2f4.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "870304007603",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:870304007603:web:9d347421d1ea2abcc977c6",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-MWNPN4MPQH"
 };
 
 // Initialize Firebase
@@ -61,6 +61,13 @@ const mapFirebaseUserToAppUser = (firebaseUser) => {
   };
 };
 
+// Public site URL used for Firebase email action links
+// Configure VITE_SITE_URL in your .env (e.g., https://yourdomain.com)
+const SITE_URL = (typeof window !== 'undefined' && window.location?.origin) || '';
+const PUBLIC_SITE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SITE_URL)
+  ? import.meta.env.VITE_SITE_URL
+  : SITE_URL;
+
 // Helper function: Sign in with Google
 export const signInWithGoogle = async () => {
   try {
@@ -74,7 +81,6 @@ export const signInWithGoogle = async () => {
 
     return { success: true, user: mappedUser };
   } catch (error) {
-    console.error('Error signing in with Google:', error);
 
     // Handle specific error codes
     let errorMessage = 'An error occurred during sign-in';
@@ -113,7 +119,6 @@ export const signInWithEmailPassword = async (email, password) => {
 
     return { success: true, user: mappedUser };
   } catch (error) {
-    console.error('Error signing in with email/password:', error);
 
     let errorMessage = 'An error occurred during sign-in';
 
@@ -157,8 +162,12 @@ export const registerWithEmailPassword = async (email, password, displayName) =>
       });
     }
 
-    // Send email verification
-    await sendEmailVerification(user);
+    // Send email verification with redirect to your public domain
+    const actionCodeSettings = {
+      url: `${PUBLIC_SITE_URL}/verify-email`,
+      handleCodeInApp: false,
+    };
+    await sendEmailVerification(user, actionCodeSettings);
 
     const mappedUser = mapFirebaseUserToAppUser(user);
 
@@ -167,7 +176,6 @@ export const registerWithEmailPassword = async (email, password, displayName) =>
 
     return { success: true, user: mappedUser, needsVerification: true };
   } catch (error) {
-    console.error('Error registering with email/password:', error);
 
     let errorMessage = 'An error occurred during registration';
 
@@ -198,8 +206,9 @@ export const sendVerificationEmail = async (customUrl = null) => {
     const user = auth.currentUser;
     if (user) {
       // Configure email verification with proper redirect URL
+      const destination = customUrl || `${PUBLIC_SITE_URL}/verify-email`;
       const actionCodeSettings = {
-        url: `${window.location.origin}/?verified=true&email=${encodeURIComponent(user.email)}`,
+        url: destination,
         handleCodeInApp: false, // Let Firebase handle the redirect, then our app will process it
       };
 
@@ -209,7 +218,7 @@ export const sendVerificationEmail = async (customUrl = null) => {
       return { success: false, error: 'No authenticated user found' };
     }
   } catch (error) {
-    console.error('Error sending verification email:', error);
+
     return { success: false, error: error.message };
   }
 };
@@ -220,7 +229,6 @@ export const sendPasswordReset = async (email) => {
     await sendPasswordResetEmail(auth, email);
     return { success: true };
   } catch (error) {
-    console.error('Error sending password reset email:', error);
 
     let errorMessage = 'An error occurred while sending password reset email';
 
@@ -258,7 +266,7 @@ export const handleEmailVerificationAction = async (actionCode) => {
 
     return { success: true, email: info.data.email };
   } catch (error) {
-    console.error('Error handling email verification action:', error);
+
     return { success: false, error: error.message };
   }
 };
@@ -283,7 +291,7 @@ export const signOutUser = async () => {
     localStorage.removeItem('user');
     return { success: true };
   } catch (error) {
-    console.error('Error signing out:', error);
+
     return { success: false, error: error.message };
   }
 };

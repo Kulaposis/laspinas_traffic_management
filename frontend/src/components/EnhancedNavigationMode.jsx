@@ -168,7 +168,7 @@ const EnhancedNavigationMode = ({
   useEffect(() => {
     // Validate route
     if (!route) {
-      console.error('Invalid route for navigation: route is null');
+
       if (onExitNavigation) {
         setTimeout(() => onExitNavigation(), 100);
       }
@@ -176,7 +176,7 @@ const EnhancedNavigationMode = ({
     }
     
     if (!route.route_coordinates || !Array.isArray(route.route_coordinates)) {
-      console.error('Invalid route for navigation: no coordinates array');
+
       if (onExitNavigation) {
         setTimeout(() => onExitNavigation(), 100);
       }
@@ -184,7 +184,7 @@ const EnhancedNavigationMode = ({
     }
     
     if (route.route_coordinates.length < 2) {
-      console.error('Invalid route for navigation: insufficient coordinates');
+
       if (onExitNavigation) {
         setTimeout(() => onExitNavigation(), 100);
       }
@@ -193,7 +193,7 @@ const EnhancedNavigationMode = ({
     
     // Validate origin and destination
     if (!origin || !destination) {
-      console.error('Invalid navigation: missing origin or destination');
+
       if (onExitNavigation) {
         setTimeout(() => onExitNavigation(), 100);
       }
@@ -208,7 +208,7 @@ const EnhancedNavigationMode = ({
         destination
       );
     } catch (error) {
-      console.error('Failed to start navigation session:', error);
+
       if (onExitNavigation) {
         setTimeout(() => onExitNavigation(), 100);
       }
@@ -236,7 +236,7 @@ const EnhancedNavigationMode = ({
   
   const startNavigation = () => {
     if (!navigator.geolocation) {
-      console.error('Geolocation not supported');
+
       return;
     }
     
@@ -351,7 +351,7 @@ const EnhancedNavigationMode = ({
   };
   
   const handlePositionError = (error) => {
-    console.error('Position error:', error.message);
+
   };
   
   const handleVoiceAnnouncement = (step, distanceToStep) => {
@@ -417,7 +417,7 @@ const EnhancedNavigationMode = ({
         announceVoice('Route recalculated');
       }
     } catch (error) {
-      console.error('Recalculation error:', error);
+
     }
   };
   

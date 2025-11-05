@@ -11,12 +11,13 @@ from ..auth import get_current_user
 from ..models.user import User
 from ..services.admin_service import AdminService
 from ..schemas.admin_schemas import *
+from ..utils.role_helpers import is_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 def require_admin(current_user: User = Depends(get_current_user)):
     """Require admin role for admin endpoints."""
-    if current_user.role.value != "admin":
+    if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"

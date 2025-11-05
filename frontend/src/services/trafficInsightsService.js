@@ -34,7 +34,7 @@ class TrafficInsightsService {
       
       return data;
     } catch (error) {
-      console.error('Error fetching daily traffic insights:', error);
+
       throw error;
     }
   }
@@ -47,7 +47,7 @@ class TrafficInsightsService {
       const response = await api.get('/traffic/insights/trends');
       return response.data;
     } catch (error) {
-      console.error('Error fetching traffic trends:', error);
+
       throw error;
     }
   }

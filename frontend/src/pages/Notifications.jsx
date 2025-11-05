@@ -21,6 +21,7 @@ import {
   Users
 } from 'lucide-react';
 import notificationService from '../services/notificationService';
+import { ListItemSkeleton } from '../components/LoadingSkeleton';
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
@@ -63,7 +64,7 @@ const Notifications = () => {
         thisWeek: allNotifications.filter(n => new Date(n.created_at) > weekAgo).length
       });
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+
     } finally {
       setLoading(false);
     }
@@ -98,7 +99,7 @@ const Notifications = () => {
         )
       );
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+
     }
   };
 
@@ -109,14 +110,24 @@ const Notifications = () => {
         prev.map(notif => ({ ...notif, is_read: true }))
       );
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-500"></div>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <div className="h-10 bg-gray-200 rounded w-64 mb-4 animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded w-96 animate-pulse"></div>
+          </div>
+          <div className="space-y-3">
+            {[...Array(10)].map((_, i) => (
+              <ListItemSkeleton key={i} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -183,8 +194,18 @@ const Notifications = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-500"></div>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <div className="h-10 bg-gray-200 rounded w-64 mb-4 animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded w-96 animate-pulse"></div>
+          </div>
+          <div className="space-y-3">
+            {[...Array(10)].map((_, i) => (
+              <ListItemSkeleton key={i} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

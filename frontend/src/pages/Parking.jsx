@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Car, MapPin, AlertTriangle, RefreshCw, Camera, ExternalLink, Ban } from 'lucide-react';
 import parkingService from '../services/parkingService';
+import { TableSkeleton, CardSkeleton } from '../components/LoadingSkeleton';
 import { useAuth } from '../context/AuthContext';
 
 // Fix Leaflet default markers
@@ -174,7 +175,7 @@ const Parking = () => {
       setStatistics(statsData);
 
     } catch (err) {
-      console.error('Error fetching parking data:', err);
+
       setError('Failed to load parking data. Please try again.');
     } finally {
       setLoading(false);
@@ -193,10 +194,18 @@ const Parking = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
-          <p className="text-gray-600">Loading parking data...</p>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-6">
+            <div className="h-10 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded w-96 animate-pulse"></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+          <TableSkeleton rows={8} columns={5} />
         </div>
       </div>
     );

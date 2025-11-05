@@ -1,0 +1,4 @@
+Fix: align UserRole enum values with Supabase
+
+- Update UserRole enum to emit uppercase values matching the userrole enum in Supabase
+- Prevent Firebase sync from failing on role value mismatches

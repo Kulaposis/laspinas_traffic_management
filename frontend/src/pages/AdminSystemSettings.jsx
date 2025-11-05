@@ -66,7 +66,7 @@ const AdminSystemSettings = () => {
       const data = await adminService.getSystemSettings(category);
       setSettings(data);
     } catch (error) {
-      console.error('Error fetching settings:', error);
+
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ const AdminSystemSettings = () => {
       });
       await fetchSettings();
     } catch (error) {
-      console.error('Error creating setting:', error);
+
       alert('Error creating setting');
     }
   };
@@ -102,7 +102,7 @@ const AdminSystemSettings = () => {
       setEditingSetting(null);
       await fetchSettings();
     } catch (error) {
-      console.error('Error updating setting:', error);
+
       alert('Error updating setting');
     }
   };
@@ -114,7 +114,7 @@ const AdminSystemSettings = () => {
       await adminService.deleteSystemSetting(key);
       await fetchSettings();
     } catch (error) {
-      console.error('Error deleting setting:', error);
+
       alert('Error deleting setting');
     }
   };

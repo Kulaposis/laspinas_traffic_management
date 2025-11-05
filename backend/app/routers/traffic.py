@@ -32,7 +32,8 @@ async def update_realtime_traffic(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger real-time traffic data update from TomTom API with fallback"""
-    if current_user.role.value not in ["admin", "traffic_enforcer"]:
+    from ..utils.role_helpers import is_authorized
+    if not is_authorized(current_user.role, ["admin", "traffic_enforcer"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and traffic enforcers can trigger traffic updates"

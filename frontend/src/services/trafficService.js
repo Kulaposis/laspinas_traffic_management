@@ -143,6 +143,111 @@ class TrafficService {
       throw new Error(error.response?.data?.detail || 'Failed to get simulation status');
     }
   }
+
+  // Traffic Patterns and Predictions
+  async getTrafficPatterns() {
+    try {
+      const response = await api.get('/traffic/monitoring/patterns');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch traffic patterns');
+    }
+  }
+
+  async getTrafficTrends() {
+    try {
+      const response = await api.get('/traffic/insights/trends');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch traffic trends');
+    }
+  }
+
+  // Calculate best time to leave based on route and traffic patterns
+  calculateBestTimeToLeave(patterns, route, targetArrivalTime) {
+    if (!patterns || !patterns.data || !route) return null;
+
+    // Extract road segments from route
+    const routeRoads = this.extractRoadsFromRoute(route);
+    
+    // Group patterns by time of day
+    const timeGroups = {
+      morning: { start: 6, end: 9, label: 'Morning Rush (6-9 AM)' },
+      lunch: { start: 11, end: 14, label: 'Lunch (11 AM-2 PM)' },
+      evening: { start: 16, end: 19, label: 'Evening Rush (4-7 PM)' }
+    };
+
+    const recommendations = [];
+    
+    Object.entries(timeGroups).forEach(([key, group]) => {
+      const relevantPatterns = patterns.data.filter(point => {
+        const hour = new Date(point.timestamp).getHours();
+        return hour >= group.start && hour < group.end && 
+               routeRoads.some(road => point.road_name.includes(road));
+      });
+
+      if (relevantPatterns.length > 0) {
+        const avgSpeed = relevantPatterns.reduce((sum, p) => sum + p.average_speed_kph, 0) / relevantPatterns.length;
+        const avgCongestion = relevantPatterns.filter(p => p.congestion_level === 'heavy' || p.congestion_level === 'moderate').length / relevantPatterns.length;
+        
+        recommendations.push({
+          period: key,
+          label: group.label,
+          avgSpeed,
+          congestionLevel: avgCongestion > 0.5 ? 'heavy' : avgCongestion > 0.3 ? 'moderate' : 'low',
+          congestionPercentage: Math.round(avgCongestion * 100)
+        });
+      }
+    });
+
+    // Find best time (lowest congestion)
+    const bestTime = recommendations.reduce((best, current) => {
+      if (!best || current.congestionPercentage < best.congestionPercentage) {
+        return current;
+      }
+      return best;
+    }, null);
+
+    return {
+      recommendations,
+      bestTime,
+      timeGroups
+    };
+  }
+
+  // Helper to extract road names from route
+  extractRoadsFromRoute(route) {
+    if (!route) {
+      return [];
+    }
+
+    // Try to extract from route steps if available
+    if (route.steps && Array.isArray(route.steps)) {
+      const roadNames = route.steps
+        .map(step => step.street_name)
+        .filter(name => name && name.trim() !== '')
+        .filter((name, index, self) => self.indexOf(name) === index); // Remove duplicates
+      
+      if (roadNames.length > 0) {
+        return roadNames;
+      }
+    }
+
+    // Try to extract from road_segments if available
+    if (route.road_segments && Array.isArray(route.road_segments)) {
+      return route.road_segments;
+    }
+
+    // Fallback to major roads in Las Piñas
+    const majorRoads = [
+      'Alabang-Zapote Road',
+      'CAA Road',
+      'C-5 Extension',
+      'Almanza Road',
+      'West Service Road'
+    ];
+    return majorRoads;
+  }
 }
 
 export default new TrafficService();

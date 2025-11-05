@@ -74,7 +74,7 @@ const SmartRouting = ({ onRouteSelect, onStartNavigation, className = '' }) => {
       setOriginSuggestions(suggestions);
       setShowOriginSuggestions(true);
     } catch (error) {
-      console.error('Origin search error:', error);
+
     } finally {
       setOriginLoading(false);
     }
@@ -95,7 +95,7 @@ const SmartRouting = ({ onRouteSelect, onStartNavigation, className = '' }) => {
       setDestinationSuggestions(suggestions);
       setShowDestinationSuggestions(true);
     } catch (error) {
-      console.error('Destination search error:', error);
+
     } finally {
       setDestinationLoading(false);
     }
@@ -155,7 +155,7 @@ const SmartRouting = ({ onRouteSelect, onStartNavigation, className = '' }) => {
       
     } catch (err) {
       setError(err.message || 'Failed to get route suggestions');
-      console.error('Error getting routes:', err);
+
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   FileText,
   Shield,
@@ -32,6 +34,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import MapView from '../components/MapView';
+import SmartRoutePanel from '../components/SmartRoutePanel';
 import reportService from '../services/reportService';
 import violationService from '../services/violationService';
 import notificationService from '../services/notificationService';
@@ -40,9 +43,12 @@ import weatherService from '../services/weatherService';
 import emergencyService from '../services/emergencyService';
 import websocketService from '../services/websocketService';
 import { useAuth } from '../context/AuthContext';
+import { DashboardSkeleton } from '../components/LoadingSkeleton';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const isStaff = ['admin', 'lgu_staff'].includes(user?.role?.toLowerCase());
   const [stats, setStats] = useState({
     totalReports: 0,
     pendingReports: 0,
@@ -60,6 +66,14 @@ const Dashboard = () => {
   const [activeIncidents, setActiveIncidents] = useState([]);
   const [activeEmergencies, setActiveEmergencies] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Smart Route states
+  const [showRoutePanel, setShowRoutePanel] = useState(false);
+  const [routes, setRoutes] = useState([]);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [routeOrigin, setRouteOrigin] = useState(null);
+  const [routeDestination, setRouteDestination] = useState(null);
+  const [showAllRoutes, setShowAllRoutes] = useState(false);
 
   // Enhanced state management
   const [liveUpdates, setLiveUpdates] = useState([]);
@@ -68,6 +82,29 @@ const Dashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [emergencyBanner, setEmergencyBanner] = useState(null); // { title, location }
+
+  // simple audible alert (beep)
+  const playBeep = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+      setTimeout(() => {
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.2);
+        osc.stop(ctx.currentTime + 0.25);
+      }, 160);
+    } catch (_) {}
+  };
 
   // Real-time update handlers
   const handleRealTimeUpdate = useCallback((data) => {
@@ -87,20 +124,41 @@ const Dashboard = () => {
 
     setLiveUpdates(prev => [newUpdate, ...prev.slice(0, 9)]); // Keep last 10 updates
 
+    // If a new emergency report is submitted by a citizen, route admins to Moderation first
+    if (isStaff && (data.type === 'emergency_reported' || data.category === 'emergency')) {
+      const title = data.title || 'New Emergency Reported';
+      const locationText = data.location_name || data.address || data.location || '';
+      // toast notification for new emergency
+      toast((t) => (
+        <div className="flex items-start gap-3">
+          <span>🚨</span>
+          <div className="text-sm">
+            <div className="font-semibold">{title}</div>
+            {locationText && <div className="text-gray-600">{locationText}</div>}
+          </div>
+        </div>
+      ), { duration: 3000 });
+      // show persistent banner and play sound
+      setEmergencyBanner({ title, location: locationText });
+      playBeep();
+      // brief delay to let notification UI show
+      setTimeout(() => navigate('/emergency-moderation'), 600);
+    }
+
     // Note: Removed automatic fetchDashboardData() call to prevent infinite loops
     // Data will be refreshed manually or through periodic updates
-  }, [isRealTimeActive]);
+  }, [isRealTimeActive, isStaff, navigate]);
 
   // Helper function to get appropriate icons for updates
   const getUpdateIcon = (type) => {
     const icons = {
       traffic: '🚦',
       weather: '🌤️',
-      report: '📋',
+      report: '📃',
       emergency: '🚨',
       violation: '⚠️'
     };
-    return icons[type] || '📢';
+    return icons[type] || '📰';
   };
 
   // Filter and search functionality
@@ -125,7 +183,7 @@ const Dashboard = () => {
       websocketService.on('weather_update', handleRealTimeUpdate);
       websocketService.on('report_update', handleRealTimeUpdate);
     } catch (error) {
-      console.warn('WebSocket connection failed:', error.message);
+      
     }
 
     return () => {
@@ -135,7 +193,7 @@ const Dashboard = () => {
         websocketService.off('weather_update', handleRealTimeUpdate);
         websocketService.off('report_update', handleRealTimeUpdate);
       } catch (error) {
-        console.warn('Error disconnecting WebSocket listeners:', error);
+        
       }
     };
   }, []); // Remove handleRealTimeUpdate dependency to prevent infinite loops
@@ -169,7 +227,7 @@ const Dashboard = () => {
       
       // Fetch violations (only for authorized users)
       let violationsData = [];
-      if (user.role !== 'citizen') {
+      if (isStaff) {
         violationsData = await violationService.getViolations({ limit: 5 });
         setRecentViolations(violationsData);
       }
@@ -185,7 +243,7 @@ const Dashboard = () => {
         trafficService.getRoadIncidents({ is_active: true, limit: 10 }).catch(() => []),
         weatherService.getCurrentWeather().catch(() => []),
         weatherService.getWeatherAlerts({ is_active: true }).catch(() => []),
-        user.role !== 'citizen' ? emergencyService.getActiveEmergencies().catch(() => []) : Promise.resolve([]),
+        emergencyService.getActiveEmergencies().catch(() => []),
         notificationService.getUnreadCount().catch(() => 0)
       ]);
 
@@ -211,7 +269,7 @@ const Dashboard = () => {
       });
 
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      
     } finally {
       setLoading(false);
     }
@@ -345,22 +403,42 @@ const Dashboard = () => {
   );
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="text-center">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-24 w-24 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
-            <div className="absolute inset-0 rounded-full h-24 w-24 border-4 border-transparent border-t-purple-600 mx-auto animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
-          </div>
-          <p className="mt-6 text-lg font-medium text-gray-600">Loading Dashboard...</p>
-          <p className="mt-2 text-sm text-gray-500">Fetching latest updates</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      {isStaff && emergencyBanner && (
+        <div className="fixed top-0 inset-x-0 z-50">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 text-red-800 shadow flex items-center justify-between p-3">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">🚨</span>
+                <div>
+                  <div className="font-semibold">{emergencyBanner.title}</div>
+                  {emergencyBanner.location && (
+                    <div className="text-sm text-red-700">{emergencyBanner.location}</div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate('/emergency-moderation')}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700"
+                >
+                  Review now
+                </button>
+                <button
+                  onClick={() => setEmergencyBanner(null)}
+                  className="px-3 py-1.5 rounded-lg bg-white text-red-700 border border-red-300 text-sm hover:bg-red-100"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         <div className="space-y-6 lg:space-y-8">
 
@@ -373,7 +451,7 @@ const Dashboard = () => {
                     <Gauge className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Traffic Management Dashboard</h1>
+                    <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">{isStaff ? 'Admin Dashboard' : 'My Dashboard'}</h1>
                     <p className="text-gray-600 mt-1">Welcome back, {user.full_name}</p>
                   </div>
                 </div>
@@ -449,6 +527,65 @@ const Dashboard = () => {
             />
           </div>
 
+          {/* Admin Controls - visible only to admin/staff */}
+          {isStaff && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <Settings className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Admin Controls</h2>
+                    <p className="text-sm text-gray-500">Manage system data and operations</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <button onClick={() => (window.location.href = '/reports')}
+                  className="group p-4 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all text-left">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <div className="font-semibold text-gray-900">Manage Reports</div>
+                      <div className="text-xs text-gray-500">Review and triage</div>
+                    </div>
+                  </div>
+                </button>
+                <button onClick={() => (window.location.href = '/violations')}
+                  className="group p-4 border border-gray-200 rounded-xl hover:bg-red-50 hover:border-red-300 transition-all text-left">
+                  <div className="flex items-center space-x-3">
+                    <Shield className="w-5 h-5 text-red-600" />
+                    <div>
+                      <div className="font-semibold text-gray-900">Violations</div>
+                      <div className="text-xs text-gray-500">Issue and track</div>
+                    </div>
+                  </div>
+                </button>
+                <button onClick={() => (window.location.href = '/notifications')}
+                  className="group p-4 border border-gray-200 rounded-xl hover:bg-amber-50 hover:border-amber-300 transition-all text-left">
+                  <div className="flex items-center space-x-3">
+                    <Bell className="w-5 h-5 text-amber-600" />
+                    <div>
+                      <div className="font-semibold text-gray-900">Notifications</div>
+                      <div className="text-xs text-gray-500">Send advisories</div>
+                    </div>
+                  </div>
+                </button>
+                <button onClick={() => (window.location.href = '/traffic')}
+                  className="group p-4 border border-gray-200 rounded-xl hover:bg-emerald-50 hover:border-emerald-300 transition-all text-left">
+                  <div className="flex items-center space-x-3">
+                    <Activity className="w-5 h-5 text-emerald-600" />
+                    <div>
+                      <div className="font-semibold text-gray-900">Traffic Monitoring</div>
+                      <div className="text-xs text-gray-500">Live operations</div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Current Weather Widget */}
           {currentWeather && (
             <div className="bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 text-white rounded-2xl p-6 lg:p-8 shadow-lg">
@@ -494,8 +631,8 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Modern Alert Banner */}
-          {(stats.activeEmergencies > 0 || stats.weatherAlerts > 0 || stats.trafficCondition === 'heavy') && (
+          {/* Modern Alert Banner (admin/staff only) */}
+          {isStaff && (stats.activeEmergencies > 0 || stats.weatherAlerts > 0 || stats.trafficCondition === 'heavy') && (
             <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-6">
               <div className="flex items-start space-x-4">
                 <div className="flex-shrink-0">
@@ -538,10 +675,12 @@ const Dashboard = () => {
 
           {/* Modern Widgets Grid */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
-            {/* Live Updates Widget - Full Width */}
-            <div className="xl:col-span-2">
-              <LiveUpdatesWidget />
-            </div>
+            {/* Live Updates Widget - Full Width (admin/staff only) */}
+            {isStaff && (
+              <div className="xl:col-span-2">
+                <LiveUpdatesWidget />
+              </div>
+            )}
 
             {/* Community Stats Widget */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 p-6">
@@ -609,6 +748,13 @@ const Dashboard = () => {
                     </div>
                     <div className="flex items-center space-x-3">
                       <button
+                        onClick={() => setShowRoutePanel(true)}
+                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span className="text-sm font-medium">Smart Route</span>
+                      </button>
+                      <button
                         onClick={() => setIsRealTimeActive(!isRealTimeActive)}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                           isRealTimeActive
@@ -616,7 +762,7 @@ const Dashboard = () => {
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
-                        {isRealTimeActive ? '🟢 Live' : '⭕ Paused'}
+                        {isRealTimeActive ? '🟢 Live' : '⏸️ Paused'}
                       </button>
                       <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
                         <ExternalLink className="w-4 h-4 text-gray-400" />
@@ -624,15 +770,27 @@ const Dashboard = () => {
                     </div>
                   </div>
                 </div>
-                <div className="p-6 pt-0">
+                <div className="p-6 pt-0 relative">
                   <MapView
                     reports={mapData}
                     height="450px"
+                    routes={routes}
+                    selectedRoute={selectedRoute}
+                    origin={routeOrigin}
+                    destination={routeDestination}
+                    onRouteClick={(route) => setSelectedRoute(route)}
+                    showAllRoutes={showAllRoutes}
                   />
                   <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between text-sm text-gray-500 gap-2">
                     <span className="flex items-center space-x-2">
                       <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                       <span>Showing {mapData.length} active reports</span>
+                      {routes.length > 0 && (
+                        <span className="ml-3 flex items-center space-x-1">
+                          <Navigation className="w-3 h-3" />
+                          <span>{routes.length} route{routes.length > 1 ? 's' : ''} available</span>
+                        </span>
+                      )}
                     </span>
                     <span>Last updated: {lastUpdateTime.toLocaleTimeString()}</span>
                   </div>
@@ -759,7 +917,7 @@ const Dashboard = () => {
             </div>
 
             {/* Recent Violations (for authorized users) or Quick Actions */}
-            {user.role !== 'citizen' ? (
+            {isStaff ? (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300">
                 <div className="p-6 border-b border-gray-100">
                   <div className="flex items-center space-x-3">
@@ -1022,6 +1180,22 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Smart Route Panel */}
+      <SmartRoutePanel
+        isOpen={showRoutePanel}
+        onClose={() => setShowRoutePanel(false)}
+        onRouteSelect={(route, origin, destination, allRoutes) => {
+          setSelectedRoute(route);
+          setRouteOrigin(origin);
+          setRouteDestination(destination);
+          setRoutes(allRoutes || []);
+        }}
+        onStartNavigation={(route) => {
+          // Navigate to traffic map with route
+          window.location.href = `/traffic?route=${route.route_id}`;
+        }}
+      />
     </div>
   );
 };

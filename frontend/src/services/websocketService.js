@@ -32,7 +32,7 @@ class WebSocketService {
     // Ensure we pass a numeric user id expected by the backend WS route
     const numericUserId = Number(user.id);
     if (!Number.isInteger(numericUserId)) {
-      console.warn('Cannot connect to WebSocket: User id is not numeric');
+
       return;
     }
 
@@ -44,7 +44,7 @@ class WebSocketService {
 
       this.setupSocketHandlers();
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
+
       this.isConnecting = false;
     }
   }
@@ -52,13 +52,13 @@ class WebSocketService {
   connectWithFirebaseAuth() {
     // For Firebase users, we'll use a general connection without user-specific routing
     // The backend should handle this case differently or we can skip WebSocket for Firebase users
-    console.log('Firebase user detected - WebSocket connection not available for Firebase-only sessions');
+
     return;
   }
 
   setupSocketHandlers() {
     this.socket.onopen = () => {
-      console.log('WebSocket connected');
+
       this.isConnecting = false;
       this.reconnectAttempts = 0;
 
@@ -74,12 +74,12 @@ class WebSocketService {
         const message = JSON.parse(event.data);
         this.handleMessage(message);
       } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+
       }
     };
 
     this.socket.onclose = (event) => {
-      console.log('WebSocket disconnected:', event.code, event.reason);
+
       this.isConnecting = false;
 
       if (this.pingInterval) {
@@ -90,18 +90,17 @@ class WebSocketService {
       // Attempt to reconnect
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
         setTimeout(() => {
           this.connect();
         }, this.reconnectInterval);
       } else {
-        console.error('Max reconnection attempts reached');
+
       }
     };
 
     this.socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
+
       this.isConnecting = false;
     };
   }
@@ -168,7 +167,7 @@ class WebSocketService {
         break;
       
       default:
-        console.log('Unknown message type:', type, data);
+
     }
   }
 
@@ -196,7 +195,7 @@ class WebSocketService {
         try {
           callback(data);
         } catch (error) {
-          console.error(`Error in WebSocket event handler for ${event}:`, error);
+
         }
       });
     }

@@ -23,3 +23,35 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Frontend test files - All test files and directories
+test_*.js
+test_*.ts
+test_*.jsx
+test_*.tsx
+**/*test*.js
+**/*test*.ts
+**/*test*.jsx
+**/*test*.tsx
+**/*_test.js
+**/*_test.ts
+**/*_test.jsx
+**/*_test.tsx
+tests/
+spec/
+__tests__/
+__test__/
+testing/
+**/testing/**
+**/*.test.js
+**/*.test.ts
+**/*.test.jsx
+**/*.test.tsx
+**/*.spec.js
+**/*.spec.ts
+**/*.spec.jsx
+**/*.spec.tsx
+
+# Ignore all Markdown files (.md files) in frontend
+*.md
+**/*.md

@@ -20,10 +20,13 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 
 def require_admin_or_staff(current_user: User = Depends(get_current_user)):
     """Require admin or staff role for logs access."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    # Case-insensitive role check - enum values are uppercase (ADMIN, LGU_STAFF)
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    role_upper = role_value.upper()
+    if role_upper not in ["ADMIN", "LGU_STAFF"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin and LGU staff can access logs"
+            detail=f"Only admin and LGU staff can access logs. Your role: {role_value}"
         )
     return current_user
 

@@ -10,6 +10,7 @@ from ..db import get_db
 from ..auth import get_current_user
 from ..models.user import User
 from ..models.traffic import IncidentProneArea, IncidentProneAreaType
+from ..utils.role_helpers import is_authorized, is_admin
 from ..schemas.incident_prone_schema import (
     IncidentProneArea as IncidentProneAreaSchema,
     IncidentProneAreaCreate,
@@ -98,6 +99,81 @@ async def get_incident_prone_areas(
             per_page=per_page
         )
 
+@router.post("/scrape", response_model=ScrapingResult)
+async def scrape_incident_data(
+    request: ScrapingRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Scrape incident prone areas data from various sources (Admin/LGU Staff only)"""
+    
+    # Check authorization using helper function (handles enum/string, case-insensitive)
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
+        raise HTTPException(status_code=403, detail="Not authorized to scrape incident data")
+    
+    start_time = time.time()
+    errors = []
+    new_areas = 0
+    updated_areas = 0
+    total_scraped = 0
+    
+    try:
+        # Perform scraping
+        scraped_data = await incident_scraper_service.perform_full_scraping()
+        total_scraped = len(scraped_data)
+        
+        # Save to database
+        for area_data in scraped_data:
+            try:
+                # Check if area already exists
+                existing_area = db.query(IncidentProneArea).filter(
+                    and_(
+                        IncidentProneArea.area_name == area_data['area_name'],
+                        IncidentProneArea.area_type == area_data['area_type']
+                    )
+                ).first()
+                
+                if existing_area and request.update_existing:
+                    # Update existing area
+                    for key, value in area_data.items():
+                        if hasattr(existing_area, key):
+                            setattr(existing_area, key, value)
+                    existing_area.updated_at = datetime.now(timezone.utc)
+                    if request.verify_data:
+                        existing_area.is_verified = True
+                        existing_area.last_verified = datetime.now(timezone.utc)
+                    updated_areas += 1
+                    
+                elif not existing_area:
+                    # Create new area
+                    new_area = IncidentProneArea(**area_data)
+                    if request.verify_data:
+                        new_area.is_verified = True
+                        new_area.last_verified = datetime.now(timezone.utc)
+                    db.add(new_area)
+                    new_areas += 1
+                    
+            except Exception as e:
+                errors.append(f"Error processing {area_data.get('area_name', 'Unknown')}: {str(e)}")
+        
+        db.commit()
+        
+    except Exception as e:
+        db.rollback()
+        errors.append(f"General scraping error: {str(e)}")
+    
+    duration = time.time() - start_time
+    
+    return ScrapingResult(
+        success=len(errors) == 0,
+        total_scraped=total_scraped,
+        new_areas=new_areas,
+        updated_areas=updated_areas,
+        errors=errors,
+        duration_seconds=duration
+    )
+
 @router.get("/{area_id}", response_model=IncidentProneAreaSchema)
 async def get_incident_prone_area(
     area_id: int,
@@ -119,7 +195,8 @@ async def create_incident_prone_area(
 ):
     """Create a new incident prone area (Admin/LGU Staff only)"""
     
-    if current_user.role not in ["admin", "lgu_staff"]:
+    # Check authorization using helper function (handles enum/string, case-insensitive)
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(status_code=403, detail="Not authorized to create incident prone areas")
     
     # Check if area already exists
@@ -152,7 +229,8 @@ async def update_incident_prone_area(
 ):
     """Update an incident prone area (Admin/LGU Staff only)"""
     
-    if current_user.role not in ["admin", "lgu_staff"]:
+    # Check authorization using helper function (handles enum/string, case-insensitive)
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(status_code=403, detail="Not authorized to update incident prone areas")
     
     area = db.query(IncidentProneArea).filter(IncidentProneArea.id == area_id).first()
@@ -179,7 +257,8 @@ async def delete_incident_prone_area(
 ):
     """Delete an incident prone area (Admin only)"""
     
-    if current_user.role != "admin":
+    # Check authorization using helper function (handles enum/string, case-insensitive)
+    if not is_admin(current_user.role):
         raise HTTPException(status_code=403, detail="Not authorized to delete incident prone areas")
     
     area = db.query(IncidentProneArea).filter(IncidentProneArea.id == area_id).first()
@@ -285,80 +364,6 @@ async def get_incident_prone_areas_stats(
         last_updated=last_updated_area.updated_at if last_updated_area else None
     )
 
-@router.post("/scrape", response_model=ScrapingResult)
-async def scrape_incident_data(
-    request: ScrapingRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Scrape incident prone areas data from various sources (Admin/LGU Staff only)"""
-    
-    if current_user.role not in ["admin", "lgu_staff"]:
-        raise HTTPException(status_code=403, detail="Not authorized to scrape incident data")
-    
-    start_time = time.time()
-    errors = []
-    new_areas = 0
-    updated_areas = 0
-    total_scraped = 0
-    
-    try:
-        # Perform scraping
-        scraped_data = await incident_scraper_service.perform_full_scraping()
-        total_scraped = len(scraped_data)
-        
-        # Save to database
-        for area_data in scraped_data:
-            try:
-                # Check if area already exists
-                existing_area = db.query(IncidentProneArea).filter(
-                    and_(
-                        IncidentProneArea.area_name == area_data['area_name'],
-                        IncidentProneArea.area_type == area_data['area_type']
-                    )
-                ).first()
-                
-                if existing_area and request.update_existing:
-                    # Update existing area
-                    for key, value in area_data.items():
-                        if hasattr(existing_area, key):
-                            setattr(existing_area, key, value)
-                    existing_area.updated_at = datetime.now(timezone.utc)
-                    if request.verify_data:
-                        existing_area.is_verified = True
-                        existing_area.last_verified = datetime.now(timezone.utc)
-                    updated_areas += 1
-                    
-                elif not existing_area:
-                    # Create new area
-                    new_area = IncidentProneArea(**area_data)
-                    if request.verify_data:
-                        new_area.is_verified = True
-                        new_area.last_verified = datetime.now(timezone.utc)
-                    db.add(new_area)
-                    new_areas += 1
-                    
-            except Exception as e:
-                errors.append(f"Error processing {area_data.get('area_name', 'Unknown')}: {str(e)}")
-        
-        db.commit()
-        
-    except Exception as e:
-        db.rollback()
-        errors.append(f"General scraping error: {str(e)}")
-    
-    duration = time.time() - start_time
-    
-    return ScrapingResult(
-        success=len(errors) == 0,
-        total_scraped=total_scraped,
-        new_areas=new_areas,
-        updated_areas=updated_areas,
-        errors=errors,
-        duration_seconds=duration
-    )
-
 @router.post("/{area_id}/verify")
 async def verify_incident_prone_area(
     area_id: int,
@@ -367,7 +372,8 @@ async def verify_incident_prone_area(
 ):
     """Verify an incident prone area (Admin/LGU Staff only)"""
     
-    if current_user.role not in ["admin", "lgu_staff"]:
+    # Check authorization using helper function (handles enum/string, case-insensitive)
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(status_code=403, detail="Not authorized to verify incident prone areas")
     
     area = db.query(IncidentProneArea).filter(IncidentProneArea.id == area_id).first()

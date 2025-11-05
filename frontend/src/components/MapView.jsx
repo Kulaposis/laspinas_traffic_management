@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import reportService from '../services/reportService';
+import RouteLayer from './RouteLayer';
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -32,7 +33,13 @@ const MapView = ({
   center = [14.5995, 120.9842], // Manila coordinates
   zoom = 13,
   height = '400px',
-  onMapClick = null 
+  onMapClick = null,
+  routes = [],
+  selectedRoute = null,
+  origin = null,
+  destination = null,
+  onRouteClick = null,
+  showAllRoutes = false
 }) => {
   const [mapInstance, setMapInstance] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -172,6 +179,18 @@ const MapView = ({
             </Popup>
           </Circle>
         ))}
+
+        {/* Route Layer */}
+        {(routes.length > 0 || selectedRoute) && (
+          <RouteLayer
+            routes={routes}
+            selectedRoute={selectedRoute}
+            onRouteClick={onRouteClick}
+            showAllRoutes={showAllRoutes}
+            origin={origin}
+            destination={destination}
+          />
+        )}
       </MapContainer>
     </div>
   );

@@ -5,6 +5,7 @@ from ..db import get_db
 from ..auth import get_current_active_user, get_current_user
 from ..models.user import User
 from ..schemas.user_schema import UserResponse, UserUpdate, UserCreate
+from ..utils.role_helpers import is_admin, is_authorized
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -21,7 +22,7 @@ def get_users(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get list of users (admin or staff only)."""
-    if current_user.role.value not in ['admin', 'lgu_staff']:
+    if not is_authorized(current_user.role, ['admin', 'lgu_staff']):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
@@ -64,7 +65,7 @@ def update_current_user(
     update_data = user_update.dict(exclude_unset=True)
     
     # Regular users cannot change their role
-    if 'role' in update_data and current_user.role.value != 'admin':
+    if 'role' in update_data and not is_admin(current_user.role):
         del update_data['role']
     
     for field, value in update_data.items():
@@ -83,7 +84,7 @@ def update_user(
     current_user: User = Depends(get_current_active_user)
 ):
     """Update user by ID (admin only)."""
-    if current_user.role.value != 'admin':
+    if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can update other users"
@@ -113,7 +114,7 @@ def delete_user(
     current_user: User = Depends(get_current_active_user)
 ):
     """Delete user by ID (admin only)."""
-    if current_user.role.value != 'admin':
+    if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can delete users"
@@ -146,7 +147,7 @@ def create_user(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create new user (admin only)."""
-    if current_user.role.value != 'admin':
+    if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can create users"

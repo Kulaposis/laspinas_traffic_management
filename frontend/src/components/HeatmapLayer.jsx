@@ -34,7 +34,7 @@ const HeatmapLayer = ({ points, options = {} }) => {
           radius: Math.max(8, (options.radius || 25) * 0.4),
           blur: Math.max(15, (options.blur || 20) * 0.8),
           max: (options.max || 0.5) * 0.5,
-          minOpacity: Math.max(0.05, (options.minOpacity || 0.1) * 0.4)
+          minOpacity: Math.max(0.15, (options.minOpacity || 0.2) * 0.6) // Increased for brightness
         };
       } else if (zoom >= 14) {
         // Close zoom - moderate settings
@@ -42,7 +42,7 @@ const HeatmapLayer = ({ points, options = {} }) => {
           radius: Math.max(12, (options.radius || 25) * 0.6),
           blur: Math.max(18, (options.blur || 20) * 0.9),
           max: (options.max || 0.5) * 0.6,
-          minOpacity: (options.minOpacity || 0.1) * 0.5
+          minOpacity: (options.minOpacity || 0.2) * 0.7 // Increased for brightness
         };
       } else if (zoom >= 12) {
         // Medium zoom - balanced settings
@@ -50,7 +50,7 @@ const HeatmapLayer = ({ points, options = {} }) => {
           radius: Math.max(15, (options.radius || 25) * 0.8),
           blur: Math.max(20, (options.blur || 20)),
           max: (options.max || 0.5) * 0.7,
-          minOpacity: (options.minOpacity || 0.1) * 0.6
+          minOpacity: (options.minOpacity || 0.2) * 0.8 // Increased for brightness
         };
       } else {
         // Far zoom - full intensity for overview
@@ -58,7 +58,7 @@ const HeatmapLayer = ({ points, options = {} }) => {
           radius: options.radius || 25,
           blur: options.blur || 20,
           max: options.max || 0.5,
-          minOpacity: options.minOpacity || 0.1
+          minOpacity: options.minOpacity || 0.2 // Increased default for brightness
         };
       }
     };
@@ -83,11 +83,11 @@ const HeatmapLayer = ({ points, options = {} }) => {
       max: responsiveOptions.max,
       minOpacity: responsiveOptions.minOpacity,
       gradient: options.gradient || {
-        0.0: '#0066ff',    // Blue for low traffic
-        0.3: '#00ff00',    // Green for light traffic
-        0.5: '#ffff00',    // Yellow for moderate traffic
-        0.7: '#ff9900',    // Orange for heavy traffic
-        1.0: '#ff0000'     // Red for extreme traffic
+        0.0: '#2196F3',    // Bright blue for low traffic
+        0.3: '#4CAF50',    // Bright green for light traffic
+        0.5: '#FFEB3B',    // Bright yellow for moderate traffic
+        0.7: '#FF9800',    // Bright orange for heavy traffic
+        1.0: '#F44336'     // Bright red for extreme traffic
       },
       ...options
     });

@@ -223,7 +223,7 @@ const ReportForm = ({ onSubmit, onCancel, initialData = null }) => {
           setLocationLoading(false);
         },
         (error) => {
-          console.error('Error getting location:', error);
+
           alert('Unable to get your location. Please enter coordinates manually.');
           setLocationLoading(false);
         }
@@ -248,7 +248,7 @@ const ReportForm = ({ onSubmit, onCancel, initialData = null }) => {
 
       await onSubmit(submitData);
     } catch (error) {
-      console.error('Error submitting report:', error);
+
       alert('Failed to submit report. Please try again.');
     } finally {
       setLoading(false);

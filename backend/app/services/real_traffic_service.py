@@ -274,9 +274,25 @@ class RealTrafficService:
             "data_source": "fallback_generator"
         }
     
+    def _normalize_road_type(self, road_type_value):
+        """Ensure road type is always a RoadType enum (accepts enum or string)."""
+        if isinstance(road_type_value, RoadType):
+            return road_type_value
+        if isinstance(road_type_value, str):
+            normalized = road_type_value.strip().upper()
+            try:
+                return RoadType[normalized]
+            except KeyError:
+                logger.warning(f"Unknown road type '{road_type_value}', defaulting to MAIN_ROAD")
+                return RoadType.MAIN_ROAD
+        logger.warning(f"Unexpected road type value '{road_type_value}', defaulting to MAIN_ROAD")
+        return RoadType.MAIN_ROAD
+
     async def update_traffic_record(self, db: Session, road_info: Dict, traffic_data: Dict):
         """Update or create traffic monitoring record"""
         try:
+            road_type_enum = self._normalize_road_type(road_info.get("type"))
+
             # Check if record exists
             existing_traffic = db.query(TrafficMonitoring).filter(
                 TrafficMonitoring.road_name == road_info["name"]
@@ -284,6 +300,7 @@ class RealTrafficService:
             
             if existing_traffic:
                 # Update existing record
+                existing_traffic.road_type = road_type_enum
                 existing_traffic.traffic_status = traffic_data["traffic_status"]
                 existing_traffic.congestion_percentage = traffic_data["congestion_percentage"]
                 existing_traffic.average_speed_kmh = traffic_data["average_speed_kmh"]
@@ -299,7 +316,7 @@ class RealTrafficService:
                 # Create new record
                 new_traffic = TrafficMonitoring(
                     road_name=road_info["name"],
-                    road_type=road_info["type"],
+                    road_type=road_type_enum,
                     latitude=road_info["lat"],
                     longitude=road_info["lng"],
                     barangay=road_info["barangay"],

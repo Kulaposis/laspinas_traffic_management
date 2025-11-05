@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
 import logsService from '../services/logsService';
+import sessionService from '../services/sessionService';
+import cacheService from '../services/cacheService';
 import {
   signInWithGoogle,
   signInWithEmailPassword,
@@ -26,6 +28,20 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authMethod, setAuthMethod] = useState(null); // 'firebase' or 'backend'
+
+  // Initialize session management with auto-logout
+  useEffect(() => {
+    const handleAutoLogout = (reason) => {
+      console.log(`🚪 Auto-logout triggered: ${reason}`);
+      logout();
+    };
+
+    sessionService.init(handleAutoLogout);
+
+    return () => {
+      sessionService.destroy();
+    };
+  }, []);
 
   useEffect(() => {
     // Debounce auth state changes to prevent rapid firing
@@ -124,8 +140,18 @@ export const AuthProvider = ({ children }) => {
           const backendToken = authService.getToken();
 
           if (backendUser && backendToken) {
-            setUser(backendUser);
+            // Map backend user to include emailVerified and normalize role
+            const mappedBackendUser = {
+              ...backendUser,
+              emailVerified: backendUser.email_verified !== undefined ? backendUser.email_verified : true,
+              email_verified: backendUser.email_verified !== undefined ? backendUser.email_verified : true,
+              // Normalize role to lowercase for frontend compatibility
+              role: backendUser.role?.toLowerCase() || backendUser.role
+            };
+            setUser(mappedBackendUser);
             setAuthMethod('backend');
+            // Update localStorage with mapped user
+            localStorage.setItem('user', JSON.stringify(mappedBackendUser));
           } else {
             setUser(null);
             setAuthMethod(null);
@@ -149,8 +175,18 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       const result = await authService.login(username, password);
-      setUser(result.user);
+      // Map backend user to include emailVerified and normalize role (backend users don't need email verification)
+      const mappedUser = {
+        ...result.user,
+        emailVerified: result.user.email_verified !== undefined ? result.user.email_verified : true, // Default to true for backend users
+        email_verified: result.user.email_verified !== undefined ? result.user.email_verified : true,
+        // Normalize role to lowercase for frontend compatibility
+        role: result.user.role?.toLowerCase() || result.user.role
+      };
+      setUser(mappedUser);
       setAuthMethod('backend');
+      // Store mapped user in localStorage
+      localStorage.setItem('user', JSON.stringify(mappedUser));
 
       // Log successful login activity
       try {
@@ -249,6 +285,10 @@ export const AuthProvider = ({ children }) => {
     } catch (logError) {
       console.error('Failed to log logout activity:', logError);
     }
+
+    // Clear session and cache
+    sessionService.logout('User initiated logout');
+    cacheService.clearAll();
 
     setUser(null);
     setAuthMethod(null);

@@ -25,7 +25,7 @@ const Violations = () => {
       const data = await violationService.getViolations({ limit: 100 });
       setViolations(data);
     } catch (error) {
-      console.error('Error fetching violations:', error);
+
     } finally {
       setLoading(false);
     }

@@ -10,9 +10,40 @@ from ..schemas.travel_history import (
     FavoriteRouteResponse, TravelStatsResponse, FrequentLocationResponse
 )
 from ..auth import get_current_user
-from typing import Optional
 
 router = APIRouter()
+
+def determine_location_type(name: str) -> str:
+    """Determine location type from name"""
+    if not name:
+        return 'general'
+    
+    name_lower = name.lower()
+    
+    if 'mall' in name_lower or 'shopping' in name_lower:
+        return 'shopping'
+    if 'hospital' in name_lower or 'medical' in name_lower or 'clinic' in name_lower:
+        return 'healthcare'
+    if 'school' in name_lower or 'university' in name_lower or 'college' in name_lower:
+        return 'education'
+    if 'church' in name_lower or 'cathedral' in name_lower:
+        return 'religious'
+    if 'park' in name_lower or 'garden' in name_lower:
+        return 'recreation'
+    if 'restaurant' in name_lower or 'cafe' in name_lower or 'food' in name_lower:
+        return 'food'
+    if 'hotel' in name_lower or 'resort' in name_lower:
+        return 'accommodation'
+    if 'bank' in name_lower or 'atm' in name_lower:
+        return 'financial'
+    if 'gas' in name_lower or 'station' in name_lower or 'fuel' in name_lower:
+        return 'fuel'
+    if 'road' in name_lower or 'street' in name_lower or 'avenue' in name_lower or 'highway' in name_lower:
+        return 'road'
+    if 'city hall' in name_lower or 'municipal' in name_lower or 'government' in name_lower:
+        return 'government'
+    
+    return 'general'
 
 @router.post("/sessions", response_model=TravelSessionResponse)
 async def create_travel_session(
@@ -82,15 +113,23 @@ async def get_frequent_locations(
             if key not in location_counts:
                 location_counts[key] = {
                     "name": session.destination_name,
-                    "lat": session.destination_lat,
-                    "lng": session.destination_lng,
-                    "count": 0
+                    "lat": float(session.destination_lat),
+                    "lng": float(session.destination_lng),
+                    "count": 0,
+                    "type": determine_location_type(session.destination_name)
                 }
             location_counts[key]["count"] += 1
     
     # Sort by count and return top locations
     frequent = sorted(location_counts.values(), key=lambda x: x["count"], reverse=True)[:limit]
-    return frequent
+    
+    # Ensure type field is always present (defensive programming)
+    for loc in frequent:
+        if "type" not in loc or not loc["type"]:
+            loc["type"] = determine_location_type(loc.get("name", ""))
+    
+    # Convert to Pydantic models explicitly to catch validation errors early
+    return [FrequentLocationResponse(**loc) for loc in frequent]
 
 @router.get("/stats", response_model=TravelStatsResponse)
 async def get_travel_stats(
@@ -120,22 +159,44 @@ async def get_travel_stats(
     total_time = sum(s.duration_minutes or 0 for s in sessions)
     avg_speed = (total_distance / (total_time / 60)) if total_time > 0 else 0
     
-    # Find most frequent destination
+    # Find most frequent destination with details
     dest_counts = {}
     for s in sessions:
-        if s.destination_name:
-            dest_counts[s.destination_name] = dest_counts.get(s.destination_name, 0) + 1
+        if s.destination_name and s.destination_lat and s.destination_lng:
+            key = s.destination_name
+            if key not in dest_counts:
+                dest_counts[key] = {
+                    "name": s.destination_name,
+                    "lat": float(s.destination_lat),
+                    "lng": float(s.destination_lng),
+                    "count": 0
+                }
+            dest_counts[key]["count"] += 1
     
-    most_frequent = max(dest_counts.items(), key=lambda x: x[1])[0] if dest_counts else None
+    # Get the most frequent destination as a dictionary
+    most_frequent_dict = None
+    if dest_counts:
+        most_frequent_entry = max(dest_counts.values(), key=lambda x: x["count"])
+        most_frequent_dict = {
+            "name": most_frequent_entry["name"],
+            "lat": most_frequent_entry["lat"],
+            "lng": most_frequent_entry["lng"],
+            "count": most_frequent_entry["count"],
+            "type": determine_location_type(most_frequent_entry["name"])
+        }
     
-    return {
+    # Build response and validate it matches the schema
+    response_data = {
         "total_trips": total_trips,
         "total_distance_km": round(total_distance, 2),
         "total_time_minutes": round(total_time, 2),
         "average_speed_kmh": round(avg_speed, 2),
-        "most_frequent_destination": most_frequent,
+        "most_frequent_destination": most_frequent_dict,  # This is now always a dict or None
         "travel_patterns": []
     }
+    
+    # Validate the response structure
+    return TravelStatsResponse(**response_data)
 
 @router.post("/favorites", response_model=FavoriteRouteResponse)
 async def create_favorite_route(

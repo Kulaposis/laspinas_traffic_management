@@ -84,7 +84,7 @@ class GeocodingService {
       
       return finalResults;
     } catch (error) {
-      console.error('Error searching locations:', error);
+
       // Return local results as fallback
       return this.searchLocalLocations(query, limit);
     }
@@ -175,7 +175,7 @@ class GeocodingService {
       }
       
     } catch (error) {
-      console.error('Error with external location search:', error);
+
     }
     
     return results.slice(0, limit);
@@ -207,7 +207,7 @@ class GeocodingService {
         address: item.address || {}
       }));
     } catch (error) {
-      console.error('Nominatim search error:', error);
+
       return [];
     }
   }
@@ -248,7 +248,7 @@ class GeocodingService {
         address: feature.properties || {}
       }));
     } catch (error) {
-      console.error('Photon search error:', error);
+
       return [];
     }
   }
@@ -291,7 +291,7 @@ class GeocodingService {
 
       return result;
     } catch (error) {
-      console.error('Reverse geocoding error:', error);
+
       return {
         display_name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         name: 'Unknown Location',

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from ..db import get_db, SessionLocal
 from ..models.weather import WeatherData, FloodMonitoring, WeatherAlert, WeatherCondition, FloodLevel
@@ -26,7 +26,8 @@ async def update_realtime_weather(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger real-time weather data update for all monitoring areas"""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    from ..utils.role_helpers import is_authorized
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Access denied. User role '{current_user.role.value}' not authorized. Only admins and LGU staff can trigger weather updates"
@@ -308,9 +309,14 @@ def get_current_weather(
     lng_max: Optional[float] = None,
     db: Session = Depends(get_db)
 ):
-    """Get current weather data with optional filtering by area or coordinates."""
+    """Get current weather data with optional filtering by area or coordinates. Only returns today's data."""
     try:
-        query = db.query(WeatherData)
+        # Get start of today in UTC
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        query = db.query(WeatherData).filter(
+            WeatherData.recorded_at >= today_start
+        )
         
         if area_name:
             query = query.filter(WeatherData.area_name.ilike(f"%{area_name}%"))
@@ -321,11 +327,8 @@ def get_current_weather(
                 WeatherData.longitude.between(lng_min, lng_max)
             )
         
-        # Get latest weather data for each area (within last 2 hours)
-        cutoff_time = datetime.utcnow() - timedelta(hours=2)
-        results = query.filter(
-            WeatherData.recorded_at >= cutoff_time
-        ).order_by(WeatherData.recorded_at.desc()).all()
+        # Get latest weather data for each area (today only)
+        results = query.order_by(WeatherData.recorded_at.desc()).all()
         
         return results
     except Exception as e:
@@ -403,17 +406,24 @@ def get_flood_alerts(
     active_only: bool = Query(True, description="Only show active alerts"),
     db: Session = Depends(get_db)
 ):
-    """Get flood alerts and warnings."""
+    """Get flood alerts and warnings. Only returns today's alerts."""
+    # Get start of today in UTC
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
     flood_areas = db.query(FloodMonitoring).filter(
-        FloodMonitoring.alert_level > 0
+        FloodMonitoring.alert_level > 0,
+        FloodMonitoring.last_updated >= today_start
     ).all()
     
-    weather_alerts = db.query(WeatherAlert).filter(
+    weather_alerts_query = db.query(WeatherAlert).filter(
         WeatherAlert.alert_type == "flood",
-        WeatherAlert.is_active == active_only
-    ).all() if active_only else db.query(WeatherAlert).filter(
-        WeatherAlert.alert_type == "flood"
-    ).all()
+        WeatherAlert.created_at >= today_start
+    )
+    
+    if active_only:
+        weather_alerts_query = weather_alerts_query.filter(WeatherAlert.is_active == True)
+    
+    weather_alerts = weather_alerts_query.all()
     
     return {
         "flood_monitoring_alerts": flood_areas,
@@ -476,8 +486,14 @@ def get_weather_alerts(
     is_active: bool = Query(True, description="Filter by active alerts"),
     db: Session = Depends(get_db)
 ):
-    """Get weather alerts with filtering options."""
-    query = db.query(WeatherAlert).filter(WeatherAlert.is_active == is_active)
+    """Get weather alerts with filtering options. Only returns today's alerts."""
+    # Get start of today in UTC
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    query = db.query(WeatherAlert).filter(
+        WeatherAlert.is_active == is_active,
+        WeatherAlert.created_at >= today_start
+    )
     
     if alert_type:
         query = query.filter(WeatherAlert.alert_type == alert_type)
@@ -496,7 +512,10 @@ def get_nearby_weather_alerts(
     radius_km: float = Query(10.0, description="Search radius in kilometers"),
     db: Session = Depends(get_db)
 ):
-    """Get weather alerts near a specific location."""
+    """Get weather alerts near a specific location. Only returns today's alerts."""
+    # Get start of today in UTC
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
     # Simple proximity calculation
     lat_range = radius_km / 111.0
     lng_range = radius_km / (111.0 * abs(latitude))
@@ -504,7 +523,8 @@ def get_nearby_weather_alerts(
     alerts = db.query(WeatherAlert).filter(
         WeatherAlert.is_active == True,
         WeatherAlert.latitude.between(latitude - lat_range, latitude + lat_range),
-        WeatherAlert.longitude.between(longitude - lng_range, longitude + lng_range)
+        WeatherAlert.longitude.between(longitude - lng_range, longitude + lng_range),
+        WeatherAlert.created_at >= today_start
     ).all()
     
     return {"alerts": alerts, "radius_km": radius_km}
@@ -588,8 +608,11 @@ def get_weather_traffic_advisory(
     radius_km: float = Query(5.0, description="Search radius in kilometers"),
     db: Session = Depends(get_db)
 ):
-    """Get combined weather and traffic advisory for a location."""
+    """Get combined weather and traffic advisory for a location. Only returns today's data."""
     from ..models.traffic import RoadIncident
+    
+    # Get start of today in UTC
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Get weather data
     lat_range = radius_km / 111.0
@@ -598,28 +621,31 @@ def get_weather_traffic_advisory(
     weather_data = db.query(WeatherData).filter(
         WeatherData.latitude.between(latitude - lat_range, latitude + lat_range),
         WeatherData.longitude.between(longitude - lng_range, longitude + lng_range),
-        WeatherData.recorded_at >= datetime.utcnow() - timedelta(hours=2)
+        WeatherData.recorded_at >= today_start
     ).order_by(WeatherData.recorded_at.desc()).first()
     
-    # Get weather alerts
+    # Get weather alerts (only today's active alerts)
     weather_alerts = db.query(WeatherAlert).filter(
         WeatherAlert.is_active == True,
         WeatherAlert.latitude.between(latitude - lat_range, latitude + lat_range),
-        WeatherAlert.longitude.between(longitude - lng_range, longitude + lng_range)
+        WeatherAlert.longitude.between(longitude - lng_range, longitude + lng_range),
+        WeatherAlert.created_at >= today_start
     ).all()
     
-    # Get flood monitoring
+    # Get flood monitoring (only today's alerts)
     flood_alerts = db.query(FloodMonitoring).filter(
         FloodMonitoring.latitude.between(latitude - lat_range, latitude + lat_range),
         FloodMonitoring.longitude.between(longitude - lng_range, longitude + lng_range),
-        FloodMonitoring.alert_level > 0
+        FloodMonitoring.alert_level > 0,
+        FloodMonitoring.last_updated >= today_start
     ).all()
     
-    # Get related traffic incidents
+    # Get related traffic incidents (only today's active incidents)
     traffic_incidents = db.query(RoadIncident).filter(
         RoadIncident.is_active == True,
         RoadIncident.latitude.between(latitude - lat_range, latitude + lat_range),
-        RoadIncident.longitude.between(longitude - lng_range, longitude + lng_range)
+        RoadIncident.longitude.between(longitude - lng_range, longitude + lng_range),
+        RoadIncident.created_at >= today_start
     ).all()
     
     return {

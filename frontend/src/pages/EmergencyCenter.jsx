@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import emergencyService from '../services/emergencyService';
+import { CardSkeleton, ListItemSkeleton } from '../components/LoadingSkeleton';
 import logsService from '../services/logsService';
 import { useAuth } from '../context/AuthContext';
 
@@ -78,7 +79,19 @@ const EmergencyCenter = () => {
     offset: 0
   });
 
-  const isStaff = ['admin', 'lgu_staff', 'traffic_enforcer'].includes(user?.role);
+  const isStaff = ['admin', 'lgu_staff'].includes((user?.role || '').toLowerCase());
+
+  // Restrict page to admin-side only
+  if (!user || !isStaff) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center p-6 bg-white rounded-2xl shadow border border-gray-100">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Restricted</h1>
+          <p className="text-gray-600">This page is available to administrators only.</p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchData = useCallback(async () => {
     try {
@@ -98,7 +111,12 @@ const EmergencyCenter = () => {
         ]);
         
         // Handle results
-        setActiveEmergencies(results[0].status === 'fulfilled' ? results[0].value : []);
+        // Show only VERIFIED emergencies in the Emergency Center; pending ones go to Moderation first
+        const active = results[0].status === 'fulfilled' ? results[0].value : [];
+        const verifiedActive = Array.isArray(active)
+          ? active.filter((e) => (e.verification_status || 'pending') === 'verified')
+          : [];
+        setActiveEmergencies(verifiedActive);
         setAllEmergencies(results[1].status === 'fulfilled' ? results[1].value : []);
         setComplaints(results[2].status === 'fulfilled' ? results[2].value : []);
         setStatistics(results[3].status === 'fulfilled' ? results[3].value : null);
@@ -106,7 +124,7 @@ const EmergencyCenter = () => {
         // Check for any failures
         const failures = results.filter(result => result.status === 'rejected');
         if (failures.length > 0) {
-          console.warn('Some data failed to load:', failures);
+
           setError(`Some data may not be up to date. ${failures.length} service(s) unavailable.`);
         }
       } else {
@@ -122,12 +140,12 @@ const EmergencyCenter = () => {
         // Check for failures
         const failures = results.filter(result => result.status === 'rejected');
         if (failures.length > 0) {
-          console.warn('Some data failed to load:', failures);
+
           setError(`Some data may not be up to date. Please refresh the page.`);
         }
       }
     } catch (err) {
-      console.error('Error fetching emergency data:', err);
+
       setError('Unable to load emergency data. Please check your connection and try again.');
     } finally {
       setLoading(false);
@@ -169,7 +187,7 @@ const EmergencyCenter = () => {
       setAuditLogs(auditData);
       setLogsStatistics(statsData);
     } catch (err) {
-      console.error('Error fetching logs data:', err);
+
       setError('Failed to fetch logs data');
     } finally {
       setLogsLoading(false);
@@ -195,7 +213,7 @@ const EmergencyCenter = () => {
           setIsGettingLocation(false);
         },
         (error) => {
-          console.error('Error getting location:', error);
+
           setIsGettingLocation(false);
           // Keep default Las Piñas coordinates
         }
@@ -340,7 +358,7 @@ const EmergencyCenter = () => {
           setIsGettingComplaintLocation(false);
         },
         (error) => {
-          console.error('Error getting location:', error);
+
           setIsGettingComplaintLocation(false);
         }
       );
@@ -577,8 +595,23 @@ const EmergencyCenter = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-6">
+            <div className="h-10 bg-gray-200 rounded w-64 mb-4 animate-pulse"></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <ListItemSkeleton key={i} />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -1532,7 +1565,7 @@ const EmergencyCenter = () => {
 
         {/* Enhanced Emergency Wizard Modal */}
         {showEmergencyButton && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl transform transition-all duration-300 scale-100 max-h-[90vh] overflow-y-auto">
               {/* Modal Header with Progress */}
               <div className="px-8 py-6 bg-gradient-to-r from-red-500 to-orange-600 text-white">
@@ -1592,7 +1625,7 @@ const EmergencyCenter = () => {
                             type="button"
                             onClick={() => {
                               setEmergencyType(type.value);
-                              console.log('Emergency type selected:', type.value);
+
                             }}
                             className={`relative p-6 rounded-2xl border-2 transition-all duration-300 text-left group hover:scale-105 focus:outline-none focus:ring-4 focus:ring-red-500/20 ${
                               emergencyType === type.value
@@ -1991,7 +2024,7 @@ const EmergencyCenter = () => {
 
         {/* Emergency Success Modal */}
         {showSuccessModal && submittedEmergency && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[120] p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl transform transition-all duration-500 scale-100 max-h-[95vh] overflow-y-auto animate-in fade-in zoom-in duration-300 mx-auto">
               {/* Success Animation Header */}
               <div className="relative overflow-hidden">
@@ -2252,7 +2285,7 @@ const EmergencyCenter = () => {
 
         {/* Emergency Detail Modal */}
         {showEmergencyDetail && selectedEmergency && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
               <div className="px-8 py-6 bg-gradient-to-r from-red-500 to-orange-600 text-white">
@@ -2648,7 +2681,7 @@ const EmergencyCenter = () => {
 
       {/* Enhanced Complaint/Report Form Modal */}
       {showComplaintForm && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100">
             {/* Modal Header with Progress */}
             <div className="px-8 py-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
@@ -2949,7 +2982,7 @@ const EmergencyCenter = () => {
 
       {/* Complaint Success Modal */}
       {showComplaintSuccess && submittedComplaint && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl transform transition-all duration-300 scale-100 overflow-hidden">
             {/* Modal Header */}
             <div className="px-8 py-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white">
@@ -3043,7 +3076,7 @@ const EmergencyCenter = () => {
 
       {/* Photo Modal */}
       {showPhotoModal && selectedPhoto && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
           <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center">
             {/* Close Button */}
             <button

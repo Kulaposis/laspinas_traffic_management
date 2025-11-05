@@ -36,7 +36,7 @@ services:
       DATABASE_URL: postgresql://traffic_user:traffic_password@postgres:5432/traffic_management
       SECRET_KEY: your-super-secret-jwt-key-here-change-in-production
       ENVIRONMENT: production
-      CORS_ORIGINS: "*"
+      CORS_ORIGINS: "https://laspinastrafficmanagement.vercel.app,https://laspinastrafficmanagement-adenj8873-0xfe2ns0.apn.leapcell.dev"
     ports:
       - "8000:8000"
     depends_on:

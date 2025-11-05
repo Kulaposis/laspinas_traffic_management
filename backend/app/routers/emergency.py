@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
 import json
+import logging
+import uuid
+import base64
+import os
 from ..db import get_db
 from ..models.events import Emergency, EmergencyType, EmergencyStatus, ComplaintSuggestion
 from ..models.user import User
@@ -14,9 +18,29 @@ from ..schemas.emergency_schema import (
     EmergencyModerationUpdate, EmergencyModerationResponse, ModerationQueueResponse
 )
 from ..services.activity_logger import get_activity_logger
-import uuid
+from ..utils.role_helpers import is_authorized, normalize_role, get_role_value
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/emergency", tags=["emergency"])
+
+# Debug endpoint to check user role
+@router.get("/debug/check-role")
+def debug_check_role(current_user: User = Depends(get_current_user)):
+    """Debug endpoint to check current user's role."""
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    return {
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "role": str(current_user.role),
+        "role_value": role_value,
+        "role_upper": role_value.upper(),
+        "is_admin_check": role_value.upper() == "ADMIN",
+        "is_lgu_staff_check": role_value.upper() == "LGU_STAFF",
+        "is_authorized_admin": is_authorized(current_user.role, ["admin", "lgu_staff"]),
+        "role_type": str(type(current_user.role))
+    }
 
 # Emergency Endpoints
 @router.get("/", response_model=List[EmergencyResponse])
@@ -24,24 +48,20 @@ def get_emergencies(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=1000),
     emergency_type: Optional[EmergencyType] = None,
-    status: Optional[EmergencyStatus] = None,
+    status_filter: Optional[EmergencyStatus] = Query(None, alias="status", description="Filter by emergency status"),
     severity: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get emergencies with filtering options."""
-    if current_user.role.value not in ["traffic_enforcer", "admin", "lgu_staff"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only authorized personnel can view emergencies"
-        )
-    
+    """Get emergencies with filtering options. All authenticated users can view emergencies for safety awareness."""
+    # Allow all authenticated users (including citizens) to view emergencies for safety
+    # Note: parameter renamed from 'status' to 'status_filter' to avoid shadowing FastAPI's 'status' module
     query = db.query(Emergency)
     
     if emergency_type:
         query = query.filter(Emergency.emergency_type == emergency_type)
-    if status:
-        query = query.filter(Emergency.status == status)
+    if status_filter:
+        query = query.filter(Emergency.status == status_filter)
     if severity:
         query = query.filter(Emergency.severity == severity)
     
@@ -64,12 +84,10 @@ def get_active_emergencies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all active emergencies for emergency responders."""
-    if current_user.role.value not in ["traffic_enforcer", "admin", "lgu_staff"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only authorized personnel can view active emergencies"
-        )
+    """Get all active emergencies. Citizens can view for safety awareness, authorized personnel get full access."""
+    # Allow all authenticated users (including citizens) to view active emergencies for safety
+    # No role check - all authenticated users can access this endpoint
+    logger.info(f"get_active_emergencies called by user {current_user.id} with role {current_user.role}")
     
     active_emergencies = db.query(Emergency).filter(
         Emergency.status.in_([EmergencyStatus.REPORTED, EmergencyStatus.DISPATCHED, EmergencyStatus.IN_PROGRESS])
@@ -117,12 +135,8 @@ def get_nearby_emergencies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get emergencies near a specific location."""
-    if current_user.role.value not in ["traffic_enforcer", "admin", "lgu_staff"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only authorized personnel can view nearby emergencies"
-        )
+    """Get emergencies near a specific location. All users can view nearby emergencies for safety awareness."""
+    # Allow all authenticated users (including citizens) to view nearby emergencies for safety
     
     # Simple proximity calculation
     lat_range = radius_km / 111.0
@@ -152,8 +166,15 @@ def report_emergency(
         emergency_dict = emergency_data.dict()
         
         # Handle photo URLs - convert list to JSON string for storage
+        # Accept both base64 data URLs and regular URLs
         if emergency_dict.get('photo_urls'):
-            emergency_dict['photo_urls'] = json.dumps(emergency_dict['photo_urls'])
+            photo_urls = emergency_dict['photo_urls']
+            # Filter out any empty or invalid URLs
+            photo_urls = [url for url in photo_urls if url and isinstance(url, str)]
+            if photo_urls:
+                emergency_dict['photo_urls'] = json.dumps(photo_urls)
+            else:
+                emergency_dict['photo_urls'] = None
         else:
             emergency_dict['photo_urls'] = None
         
@@ -281,7 +302,7 @@ def update_emergency(
     current_user: User = Depends(get_current_user)
 ):
     """Update emergency status and information."""
-    if current_user.role.value not in ["traffic_enforcer", "admin", "lgu_staff"]:
+    if not is_authorized(current_user.role, ["traffic_enforcer", "admin", "lgu_staff"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only authorized personnel can update emergencies"
@@ -315,10 +336,20 @@ def get_moderation_queue(
     current_user: User = Depends(get_current_user)
 ):
     """Get emergency reports pending moderation (Admin only)."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    # Debug logging
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    role_upper = role_value.upper()
+    logger.info(f"Moderation queue access attempt - User ID: {current_user.id}, Username: {current_user.username}, Role: {current_user.role}, Role Value: {role_value}, Role Upper: {role_upper}")
+    
+    # Check authorization - handle both enum and string roles
+    is_admin = role_upper in ["ADMIN", "LGU_STAFF"]
+    logger.info(f"Authorization check - is_admin: {is_admin}, role_upper: {role_upper}")
+    
+    if not is_admin:
+        logger.warning(f"Access denied for user {current_user.id} ({current_user.username}) with role {role_value}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can access moderation queue"
+            detail=f"Only admins can access moderation queue. Your role: {role_value}"
         )
     
     query = db.query(Emergency).filter(
@@ -367,10 +398,13 @@ def moderate_emergency_report(
     current_user: User = Depends(get_current_user)
 ):
     """Moderate an emergency report (Admin only)."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    # Case-insensitive role check
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    role_upper = role_value.upper()
+    if role_upper not in ["ADMIN", "LGU_STAFF"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can moderate reports"
+            detail=f"Only admins can moderate reports. Your role: {role_value}"
         )
     
     emergency = db.query(Emergency).filter(Emergency.id == emergency_id).first()
@@ -418,31 +452,40 @@ def get_complaints_suggestions(
     limit: int = Query(100, le=1000),
     type_filter: Optional[str] = Query(None, description="complaint or suggestion"),
     category: Optional[str] = None,
-    status: Optional[str] = None,
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by complaint status"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get complaints and suggestions (E-Complaint & Suggestion Box)."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
-        # Citizens can only see their own complaints
-        if current_user.role.value == "citizen":
-            query = db.query(ComplaintSuggestion).filter(
-                ComplaintSuggestion.reporter_id == current_user.id
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to view complaints"
-            )
+    # Note: parameter renamed from 'status' to 'status_filter' to avoid shadowing FastAPI's 'status' module
+    # Debug logging for role checking
+    user_role_raw = current_user.role
+    user_role_value = get_role_value(current_user.role) if hasattr(current_user.role, 'value') else str(current_user.role)
+    user_role_normalized = normalize_role(current_user.role)
+    
+    logger.info(f"get_complaints_suggestions - User ID: {current_user.id}, Role (raw): {user_role_raw}, Role (value): {user_role_value}, Role (normalized): {user_role_normalized}")
+    
+    # Staff (admin, lgu_staff) can see all complaints
+    if is_authorized(current_user.role, ["admin", "lgu_staff"]):
+        logger.info(f"User {current_user.id} authorized as staff - showing all complaints")
+        query = db.query(ComplaintSuggestion)
+    # Citizens can see their own complaints
+    elif user_role_normalized == "citizen":
+        logger.info(f"User {current_user.id} is citizen - showing own complaints only")
+        query = db.query(ComplaintSuggestion).filter(
+            ComplaintSuggestion.reporter_id == current_user.id
+        )
+    # Other roles (traffic_enforcer, etc.) can also see all complaints for operational purposes
     else:
+        logger.info(f"User {current_user.id} has role {user_role_normalized} - showing all complaints (operational access)")
         query = db.query(ComplaintSuggestion)
     
     if type_filter:
         query = query.filter(ComplaintSuggestion.type == type_filter)
     if category:
         query = query.filter(ComplaintSuggestion.category == category)
-    if status:
-        query = query.filter(ComplaintSuggestion.status == status)
+    if status_filter:
+        query = query.filter(ComplaintSuggestion.status == status_filter)
     
     return query.order_by(ComplaintSuggestion.created_at.desc()).offset(skip).limit(limit).all()
 
@@ -511,7 +554,7 @@ def update_complaint_suggestion(
     current_user: User = Depends(get_current_user)
 ):
     """Update complaint/suggestion (for staff response)."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only staff can update complaints"
@@ -545,7 +588,7 @@ def get_emergency_statistics(
     current_user: User = Depends(get_current_user)
 ):
     """Get emergency and complaint statistics for dashboard."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only staff can view statistics"

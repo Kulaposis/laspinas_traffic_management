@@ -15,10 +15,10 @@ class EnhancedGeocodingService {
   }
 
   /**
-   * Search for locations using backend API
+   * Search for locations using backend API proxy
    */
   async searchLocations(query, options = {}) {
-    if (!query || query.length < 2) {
+    if (!query || query.length < 1) {
       return [];
     }
 
@@ -33,27 +33,48 @@ class EnhancedGeocodingService {
     }
 
     try {
-      // Use backend API for geocoding (avoids CORS and API key issues)
-      const response = await api.get(`${this.baseEndpoint}/geocode`, {
-        params: {
-          query: query,
-          limit: options.limit || 10,
-          country: options.countrySet || 'PH'
-        }
+      // Use backend API proxy endpoint
+      const params = new URLSearchParams({
+        query: query,
+        limit: options.limit || 10,
+        country: options.countrySet || 'PH'
       });
 
-      const results = response.data || [];
+      const response = await api.get(`${this.baseEndpoint}/geocode?${params}`);
       
-      // Cache the results
-      this.cache.set(cacheKey, {
-        data: results,
-        timestamp: Date.now()
-      });
+      if (response.data && Array.isArray(response.data)) {
+        // Transform backend results to our format
+        const results = response.data.map(result => ({
+          id: result.id || `${result.lat}_${result.lng}`,
+          name: result.name || 'Unknown',
+          lat: result.lat,
+          lng: result.lng,
+          address: {
+            full: result.address?.full || result.name,
+            freeformAddress: result.address?.full || result.name,
+            streetName: result.address?.street || '',
+            streetNumber: '',
+            municipality: result.address?.city || '',
+            countrySubdivision: '',
+            postalCode: '',
+            country: result.address?.country || 'Philippines'
+          },
+          type: result.type || 'general',
+          score: result.confidence || 0.8,
+          provider: result.provider || 'OpenStreetMap'
+        }));
+        
+        // Cache the results
+        this.cache.set(cacheKey, {
+          data: results,
+          timestamp: Date.now()
+        });
 
-      return results;
+        return results;
+      }
+      
+      return [];
     } catch (error) {
-      console.error('Backend geocoding failed:', error);
-      
       // Return mock results for common locations as fallback
       return this.getMockResults(query);
     }
@@ -110,7 +131,7 @@ class EnhancedGeocodingService {
   }
 
   /**
-   * Reverse geocoding using backend API
+   * Reverse geocoding using backend API proxy
    */
   async reverseGeocode(lat, lng, options = {}) {
     const cacheKey = `reverse_${lat}_${lng}_${JSON.stringify(options)}`;
@@ -124,27 +145,50 @@ class EnhancedGeocodingService {
     }
 
     try {
-      // Use backend API for reverse geocoding
-      const response = await api.get(`${this.baseEndpoint}/reverse-geocode`, {
-        params: {
-          lat: lat,
-          lng: lng
-        }
+      // Use backend API proxy endpoint
+      const params = new URLSearchParams({
+        lat: lat.toString(),
+        lng: lng.toString()
       });
 
-      const result = response.data;
+      const response = await api.get(`${this.baseEndpoint}/reverse-geocode?${params}`);
       
-      // Cache the result
-      this.cache.set(cacheKey, {
-        data: result,
-        timestamp: Date.now()
-      });
+      if (response.data) {
+        const result = response.data;
+        
+        // Transform backend result to our format
+        const transformedResult = {
+          id: result.id || `${lat}_${lng}`,
+          name: result.name || `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          lat: result.lat || lat,
+          lng: result.lng || lng,
+          address: {
+            full: result.address?.full || result.name,
+            freeformAddress: result.address?.full || result.name,
+            streetName: result.address?.street || '',
+            streetNumber: '',
+            municipality: result.address?.city || 'Las Piñas',
+            countrySubdivision: '',
+            postalCode: '',
+            country: result.address?.country || 'Philippines'
+          },
+          type: result.type || 'general',
+          provider: result.provider || 'OpenStreetMap',
+          confidence: result.confidence || 0.8
+        };
+        
+        // Cache the result (as array for compatibility)
+        this.cache.set(cacheKey, {
+          data: [transformedResult],
+          timestamp: Date.now()
+        });
 
-      return result;
-    } catch (error) {
-      console.error('Backend reverse geocoding failed:', error);
-      // Return a basic result
-      return {
+        // Return as array for compatibility with code that expects array
+        return [transformedResult];
+      }
+      
+      // Fallback if no data - return as array
+      const fallbackResult = {
         id: `${lat}_${lng}`,
         name: `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         lat: lat,
@@ -159,6 +203,25 @@ class EnhancedGeocodingService {
         provider: 'Fallback',
         confidence: 0.3
       };
+      return [fallbackResult];
+    } catch (error) {
+      // Return a basic result on error - return as array
+      const errorResult = {
+        id: `${lat}_${lng}`,
+        name: `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        lat: lat,
+        lng: lng,
+        address: {
+          street: '',
+          city: 'Las Piñas',
+          country: 'Philippines',
+          full: `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+        },
+        type: 'general',
+        provider: 'Fallback',
+        confidence: 0.3
+      };
+      return [errorResult];
     }
   }
 
@@ -264,7 +327,7 @@ class EnhancedGeocodingService {
 
       return transformedResults;
     } catch (error) {
-      console.error('Fallback geocoding error:', error);
+
       return [];
     }
   }
@@ -308,7 +371,7 @@ class EnhancedGeocodingService {
 
       return transformedResult;
     } catch (error) {
-      console.error('Fallback reverse geocoding error:', error);
+
       return null;
     }
   }

@@ -17,7 +17,7 @@ cat > .env.production << EOF
 DATABASE_URL=postgresql://traffic_user:traffic_password@postgres:5432/traffic_management
 SECRET_KEY=$SECRET_KEY
 ENVIRONMENT=production
-CORS_ORIGINS=*
+CORS_ORIGINS=https://laspinastrafficmanagement.vercel.app,https://laspinastrafficmanagement-adenj8873-0xfe2ns0.apn.leapcell.dev
 PYTHONPATH=/app
 EOF
 

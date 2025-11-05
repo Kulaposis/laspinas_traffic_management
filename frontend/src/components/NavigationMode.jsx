@@ -125,7 +125,7 @@ const NavigationMode = ({
   // Initialize navigation
   useEffect(() => {
     if (!route || !route.route_coordinates || route.route_coordinates.length === 0) {
-      console.error('Invalid route for navigation');
+
       return;
     }
     
@@ -149,7 +149,7 @@ const NavigationMode = ({
   // Start GPS tracking and navigation
   const startNavigation = () => {
     if (!navigator.geolocation) {
-      console.error('Geolocation is not supported by your browser');
+
       return;
     }
     
@@ -234,7 +234,7 @@ const NavigationMode = ({
   
   // Handle position errors
   const handlePositionError = (error) => {
-    console.error('Error getting user location:', error.message);
+
     // Show error message to user
   };
   
@@ -473,7 +473,7 @@ const NavigationMode = ({
         setShowRecalculatePrompt(false);
       }
     } catch (error) {
-      console.error('Error recalculating route:', error);
+
     }
   };
   

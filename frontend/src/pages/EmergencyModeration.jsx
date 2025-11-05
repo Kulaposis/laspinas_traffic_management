@@ -100,12 +100,12 @@ const EmergencyModeration = () => {
       medical: '🚑',
       accident: '🚗',
       fire: '🔥',
-      crime: '🚔',
+      crime: '🚓',
       road_hazard: '⚠️',
-      vehicle_breakdown: '🔧',
-      other: '📞'
+      vehicle_breakdown: '🛠️',
+      other: '📟'
     };
-    return icons[type] || '📞';
+    return icons[type] || '📟';
   };
 
   if (!user || (user.role !== 'admin' && user.role !== 'lgu_staff')) {
@@ -120,61 +120,61 @@ const EmergencyModeration = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-4 sm:py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Emergency Report Moderation</h1>
-          <p className="text-gray-600">Review and verify emergency reports submitted by users</p>
+        <div className="mb-4 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Emergency Report Moderation</h1>
+          <p className="text-sm sm:text-base text-gray-600">Review and verify emergency reports submitted by users</p>
         </div>
 
         {/* Statistics Cards */}
         {moderationQueue && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-8">
+            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Pending Reports</p>
-                  <p className="text-2xl font-semibold text-gray-900">{moderationQueue.total_pending || 0}</p>
+                <div className="ml-3 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">Pending Reports</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-gray-900">{moderationQueue.total_pending || 0}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                     </svg>
                   </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">High Priority</p>
-                  <p className="text-2xl font-semibold text-gray-900">{moderationQueue.high_priority || 0}</p>
+                <div className="ml-3 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">High Priority</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-gray-900">{moderationQueue.high_priority || 0}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-gray-200">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
                     </svg>
                   </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Flagged Reports</p>
-                  <p className="text-2xl font-semibold text-gray-900">{moderationQueue.flagged_reports || 0}</p>
+                <div className="ml-3 sm:ml-4">
+                  <p className="text-xs sm:text-sm font-medium text-gray-500">Flagged Reports</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-gray-900">{moderationQueue.flagged_reports || 0}</p>
                 </div>
               </div>
             </div>
@@ -182,15 +182,15 @@ const EmergencyModeration = () => {
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-8 border border-gray-200">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Filters</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Priority</label>
               <select
                 value={filters.priority}
                 onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Priorities</option>
                 <option value="urgent">Urgent</option>
@@ -200,11 +200,11 @@ const EmergencyModeration = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Status</label>
               <select
                 value={filters.verification_status}
                 onChange={(e) => setFilters({ ...filters, verification_status: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Statuses</option>
                 <option value="pending">Pending</option>
@@ -216,52 +216,52 @@ const EmergencyModeration = () => {
 
         {/* Reports List */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Reports Pending Moderation</h3>
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Reports Pending Moderation</h3>
           </div>
 
           {loading ? (
-            <div className="p-8 text-center">
+            <div className="p-6 sm:p-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-600 mt-2">Loading reports...</p>
+              <p className="text-sm sm:text-base text-gray-600 mt-2">Loading reports...</p>
             </div>
           ) : error ? (
-            <div className="p-8 text-center">
-              <p className="text-red-600">{error}</p>
+            <div className="p-6 sm:p-8 text-center">
+              <p className="text-sm sm:text-base text-red-600">{error}</p>
             </div>
           ) : moderationQueue.pending_reports?.length === 0 ? (
-            <div className="p-8 text-center">
-              <div className="text-6xl mb-4">✅</div>
-              <p className="text-gray-600">No reports pending moderation</p>
+            <div className="p-6 sm:p-8 text-center">
+              <div className="text-4xl sm:text-6xl mb-4">✅</div>
+              <p className="text-sm sm:text-base text-gray-600">No reports pending moderation</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
               {moderationQueue.pending_reports?.map((report) => (
-                <div key={report.id} className="p-6 hover:bg-gray-50 transition-colors duration-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4">
-                      <div className="text-3xl">{getEmergencyIcon(report.emergency_type)}</div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h4 className="text-lg font-semibold text-gray-900">{report.title}</h4>
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(report.moderation_priority)}`}>
+                <div key={report.id} className="p-4 sm:p-6 hover:bg-gray-50 transition-colors duration-200">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                    <div className="flex items-start space-x-3 sm:space-x-4 flex-1 min-w-0">
+                      <div className="text-2xl sm:text-3xl flex-shrink-0">{getEmergencyIcon(report.emergency_type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                          <h4 className="text-base sm:text-lg font-semibold text-gray-900 break-words">{report.title}</h4>
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getPriorityColor(report.moderation_priority)}`}>
                             {report.moderation_priority.toUpperCase()}
                           </span>
-                          <span className={`text-sm font-medium ${getSeverityColor(report.severity)}`}>
+                          <span className={`text-xs sm:text-sm font-medium whitespace-nowrap ${getSeverityColor(report.severity)}`}>
                             {report.severity.toUpperCase()} SEVERITY
                           </span>
                         </div>
-                        <p className="text-gray-600 mb-2">#{report.emergency_number}</p>
-                        <p className="text-gray-700 mb-3">{report.description}</p>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <span>Reported by: {report.reporter_name || 'Anonymous'}</span>
-                          <span>•</span>
-                          <span>{new Date(report.created_at).toLocaleString()}</span>
+                        <p className="text-sm sm:text-base text-gray-600 mb-2 break-all">#{report.emergency_number}</p>
+                        <p className="text-sm sm:text-base text-gray-700 mb-3 break-words">{report.description}</p>
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
+                          <span className="whitespace-nowrap">Reported by: {report.reporter_name || 'Anonymous'}</span>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="whitespace-nowrap">{new Date(report.created_at).toLocaleString()}</span>
                           {report.photo_urls && report.photo_urls.length > 0 && (
                             <>
-                              <span>•</span>
-                              <span className="flex items-center space-x-1">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <span className="hidden sm:inline">•</span>
+                              <span className="flex items-center space-x-1 whitespace-nowrap">
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                                 <span>{report.photo_urls.length} photo{report.photo_urls.length > 1 ? 's' : ''}</span>
@@ -271,13 +271,13 @@ const EmergencyModeration = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex justify-end sm:justify-start sm:flex-shrink-0">
                       <button
                         onClick={() => {
                           setSelectedReport(report);
                           setShowDetailModal(true);
                         }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm sm:text-base whitespace-nowrap w-full sm:w-auto"
                       >
                         Review
                       </button>
@@ -291,27 +291,27 @@ const EmergencyModeration = () => {
 
         {/* Detail Modal */}
         {showDetailModal && selectedReport && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-3 sm:p-4">
             <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-900">Emergency Report Review</h3>
-                  <p className="text-gray-600">#{selectedReport.emergency_number}</p>
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex-1 min-w-0 pr-2">
+                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">Emergency Report Review</h3>
+                  <p className="text-sm sm:text-base text-gray-600 truncate">#{selectedReport.emergency_number}</p>
                 </div>
                 <button
                   onClick={() => setShowDetailModal(false)}
-                  className="text-gray-400 hover:text-gray-600 p-2"
+                  className="text-gray-400 hover:text-gray-600 p-2 flex-shrink-0"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
               {/* Modal Body */}
-              <div className="p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-4 sm:p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   {/* Report Details */}
                   <div className="space-y-4">
                     <div>
@@ -358,13 +358,13 @@ const EmergencyModeration = () => {
                   <div className="space-y-4">
                     <h4 className="font-semibold text-gray-900">Attached Photos</h4>
                     {selectedReport.photo_urls && selectedReport.photo_urls.length > 0 ? (
-                      <div className="grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {selectedReport.photo_urls.map((url, index) => (
-                          <div key={index} className="bg-gray-100 rounded-lg p-2">
+                          <div key={index} className="bg-white border border-gray-200 rounded-lg p-2 shadow-sm">
                             <img 
                               src={url} 
                               alt={`Evidence ${index + 1}`}
-                              className="w-full h-48 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity duration-200"
+                              className="w-full h-44 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity duration-200"
                               onClick={() => {
                                 setSelectedPhoto(url);
                                 setShowPhotoModal(true);
@@ -378,7 +378,7 @@ const EmergencyModeration = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-gray-50 rounded-lg p-8 text-center">
+                      <div className="bg-gray-50 rounded-lg p-8 text-center border border-dashed border-gray-200">
                         <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
@@ -389,27 +389,27 @@ const EmergencyModeration = () => {
                 </div>
 
                 {/* Moderation Actions */}
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-4">Moderation Actions</h4>
-                  <div className="flex flex-wrap gap-3">
+                <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+                  <h4 className="text-sm sm:text-base font-semibold text-gray-900 mb-3 sm:mb-4">Moderation Actions</h4>
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3">
                     <button
                       onClick={() => handleModeration(selectedReport.id, 'verified', 'Report verified as legitimate emergency')}
                       disabled={moderating}
-                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors duration-200"
+                      className="px-4 sm:px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors duration-200 text-sm sm:text-base"
                     >
                       {moderating ? 'Processing...' : 'Verify Report'}
                     </button>
                     <button
                       onClick={() => handleModeration(selectedReport.id, 'rejected', 'Report rejected - not a legitimate emergency')}
                       disabled={moderating}
-                      className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors duration-200"
+                      className="px-4 sm:px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors duration-200 text-sm sm:text-base"
                     >
                       {moderating ? 'Processing...' : 'Reject Report'}
                     </button>
                     <button
                       onClick={() => handleModeration(selectedReport.id, 'flagged', 'Report flagged for further review')}
                       disabled={moderating}
-                      className="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors duration-200"
+                      className="px-4 sm:px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors duration-200 text-sm sm:text-base"
                     >
                       {moderating ? 'Processing...' : 'Flag for Review'}
                     </button>
@@ -422,7 +422,7 @@ const EmergencyModeration = () => {
 
         {/* Photo Modal */}
         {showPhotoModal && selectedPhoto && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
             <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center">
               {/* Close Button */}
               <button

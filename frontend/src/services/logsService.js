@@ -52,7 +52,7 @@ const logsService = {
       const response = await api.get(`/logs/activity?${queryParams.toString()}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching activity logs:', error);
+
       throw error;
     }
   },
@@ -73,7 +73,7 @@ const logsService = {
       const response = await api.get(`/logs/system?${queryParams.toString()}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching system logs:', error);
+
       throw error;
     }
   },
@@ -95,7 +95,7 @@ const logsService = {
       const response = await api.get(`/logs/audit?${queryParams.toString()}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching audit logs:', error);
+
       throw error;
     }
   },
@@ -111,7 +111,7 @@ const logsService = {
       const response = await api.get(`/logs/statistics?${queryParams.toString()}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching logs statistics:', error);
+
       throw error;
     }
   },
@@ -127,7 +127,7 @@ const logsService = {
       const response = await api.get(`/logs/users/${userId}/summary?${queryParams.toString()}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching user activity summary:', error);
+
       throw error;
     }
   },
@@ -138,7 +138,7 @@ const logsService = {
       const response = await api.post('/logs/activity', logData);
       return response.data;
     } catch (error) {
-      console.error('Error creating activity log:', error);
+
       throw error;
     }
   },
@@ -149,7 +149,7 @@ const logsService = {
       const response = await api.post('/logs/system', logData);
       return response.data;
     } catch (error) {
-      console.error('Error creating system log:', error);
+
       throw error;
     }
   },
@@ -160,7 +160,7 @@ const logsService = {
       const response = await api.post('/logs/audit', logData);
       return response.data;
     } catch (error) {
-      console.error('Error creating audit log:', error);
+
       throw error;
     }
   },
@@ -178,7 +178,7 @@ const logsService = {
 
       return await this.createActivityLog(logData);
     } catch (error) {
-      console.error('Error logging activity:', error);
+
       // Don't throw error to prevent breaking the main functionality
     }
   },
@@ -355,7 +355,7 @@ const logsService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error exporting activity logs:', error);
+
       throw error;
     }
   }

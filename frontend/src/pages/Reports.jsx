@@ -4,6 +4,7 @@ import MapView from '../components/MapView';
 import ReportForm from '../components/ReportForm';
 import reportService from '../services/reportService';
 import { useAuth } from '../context/AuthContext';
+import { TableSkeleton, LoadingSpinner } from '../components/LoadingSkeleton';
 
 const Reports = () => {
   const { user } = useAuth();
@@ -31,7 +32,7 @@ const Reports = () => {
       const data = await reportService.getReports({ limit: 100 });
       setReports(data);
     } catch (error) {
-      console.error('Error fetching reports:', error);
+
     } finally {
       setLoading(false);
     }
@@ -118,8 +119,14 @@ const Reports = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-500"></div>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <div className="h-10 bg-gray-200 rounded w-64 mb-4 animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded w-96 animate-pulse"></div>
+          </div>
+          <TableSkeleton rows={10} columns={6} />
+        </div>
       </div>
     );
   }

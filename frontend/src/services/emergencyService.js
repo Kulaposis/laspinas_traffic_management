@@ -16,6 +16,10 @@ class EmergencyService {
       const response = await api.get('/emergency/active');
       return response.data;
     } catch (error) {
+      // Silently handle 403 errors (unauthorized access) - citizens don't have permission
+      if (error.response?.status === 403) {
+        return [];
+      }
       throw new Error(error.response?.data?.detail || 'Failed to fetch active emergencies');
     }
   }

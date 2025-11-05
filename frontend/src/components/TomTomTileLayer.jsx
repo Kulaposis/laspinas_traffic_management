@@ -33,9 +33,12 @@ const TomTomTileLayer = ({
 
   // OpenStreetMap fallback URL template
   const osmUrlTemplate = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  
+  // Esri World Imagery (satellite) fallback when TomTom satellite is unavailable
+  const esriWorldImageryUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
   const handleTileError = (error) => {
-    console.warn('TomTom tile error, falling back to OpenStreetMap:', error);
+
     setUseTomTom(false);
     setAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors');
     
@@ -43,6 +46,19 @@ const TomTomTileLayer = ({
       onError(error);
     }
   };
+
+  // Always use Esri for satellite to guarantee imagery
+  if (style === 'satellite') {
+    return (
+      <TileLayer
+        url={esriWorldImageryUrl}
+        attribution={'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'}
+        opacity={opacity}
+        zIndex={zIndex}
+        {...props}
+      />
+    );
+  }
 
   if (useTomTom && tomtomUrlTemplate) {
     return (
@@ -58,7 +74,7 @@ const TomTomTileLayer = ({
     );
   }
 
-  // Fallback to OpenStreetMap
+  // Fallback to OpenStreetMap for non-satellite styles
   return (
     <TileLayer
       url={osmUrlTemplate}

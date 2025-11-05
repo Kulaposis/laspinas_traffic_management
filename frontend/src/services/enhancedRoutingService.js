@@ -17,7 +17,6 @@ class EnhancedRoutingService {
    */
   async getDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     try {
-      console.log('Getting route from OSRM:', { originLat, originLng, destinationLat, destinationLng });
 
       // Use OSRM for reliable routing
       const osrmRoute = await this.getOSRMDetailedRoute(
@@ -25,13 +24,13 @@ class EnhancedRoutingService {
       );
 
       if (osrmRoute && osrmRoute.routes && osrmRoute.routes.length > 0) {
-        console.log('Successfully got OSRM route');
+
         return osrmRoute;
       }
 
       throw new Error('No valid route found');
     } catch (error) {
-      console.error('Error getting detailed route:', error);
+
       throw error;
     }
   }
@@ -41,7 +40,6 @@ class EnhancedRoutingService {
    */
   async getOSRMDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     try {
-      console.log('Fetching OSRM route...');
 
       // OSRM API expects coordinates in longitude,latitude order
       const response = await fetch(
@@ -53,7 +51,6 @@ class EnhancedRoutingService {
       }
 
       const data = await response.json();
-      console.log('OSRM response:', data);
 
       if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
         throw new Error(`No route found: ${data.message || 'Unknown error'}`);
@@ -67,7 +64,7 @@ class EnhancedRoutingService {
       // Transform OSRM format to our format
       return this.transformOSRMRoute(data);
     } catch (error) {
-      console.error('OSRM routing error:', error);
+
       throw error;
     }
   }
@@ -99,7 +96,7 @@ class EnhancedRoutingService {
       const result = await tomtomService.calculateRoute(origin, destination, routeOptions);
       return result;
     } catch (error) {
-      console.error('TomTom routing failed:', error);
+
       throw error;
     }
   }
@@ -109,14 +106,14 @@ class EnhancedRoutingService {
    */
   transformOSRMRoute(osrmData) {
     if (!osrmData || !osrmData.routes || osrmData.routes.length === 0) {
-      console.warn('No routes in OSRM response');
+
       return null;
     }
 
     const routes = osrmData.routes.map((route, index) => {
       const leg = route.legs?.[0];
       if (!leg) {
-        console.warn('Invalid route leg in OSRM response');
+
         return null;
       }
 
@@ -132,7 +129,7 @@ class EnhancedRoutingService {
       }
 
       if (coordinates.length === 0) {
-        console.warn('No valid coordinates found in route geometry');
+
         return null;
       }
 
@@ -156,7 +153,7 @@ class EnhancedRoutingService {
       }
 
       if (coordinates.length < 2) {
-        console.warn('Route has insufficient coordinates');
+
         return null;
       }
 
@@ -185,7 +182,7 @@ class EnhancedRoutingService {
     }).filter(route => route !== null);
 
     if (routes.length === 0) {
-      console.error('No valid routes after transformation');
+
       return null;
     }
 
@@ -248,7 +245,7 @@ class EnhancedRoutingService {
    */
   transformTomTomRoute(tomtomData) {
     if (!tomtomData || !tomtomData.routes || tomtomData.routes.length === 0) {
-      console.warn('No routes in TomTom response');
+
       return null;
     }
 
@@ -257,7 +254,7 @@ class EnhancedRoutingService {
       const summary = route.summary;
       
       if (!leg || !summary) {
-        console.warn('Invalid route structure from TomTom');
+
         return null;
       }
 
@@ -308,7 +305,7 @@ class EnhancedRoutingService {
 
       // Skip invalid routes
       if (coordinates.length < 2) {
-        console.warn('Route has insufficient coordinates');
+
         return null;
       }
 
@@ -350,7 +347,7 @@ class EnhancedRoutingService {
     
     // Validate we have at least one valid route
     if (routes.length === 0) {
-      console.error('No valid routes after transformation');
+
       return null;
     }
 
@@ -431,7 +428,7 @@ class EnhancedRoutingService {
 
       return response.data;
     } catch (error) {
-      console.error('Error fetching backend route:', error);
+
       throw error;
     }
   }
@@ -481,13 +478,7 @@ class EnhancedRoutingService {
     };
 
     this.currentRoute = route;
-    console.log('Navigation session started:', {
-      routePoints: route.route_coordinates.length,
-      steps: route.steps?.length || 0,
-      distance: route.distance_km,
-      duration: route.estimated_duration_minutes
-    });
-    
+
     return this.navigationSession;
   }
 

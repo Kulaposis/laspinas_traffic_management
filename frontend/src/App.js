@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -9,27 +9,42 @@ import toast from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Footer from './components/Footer';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Pages
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import EmailVerification from './pages/EmailVerification';
-import Dashboard from './pages/Dashboard';
-import Reports from './pages/Reports';
-// import Violations from './pages/Violations';
-// import Schools from './pages/Schools';
-// import Footprints from './pages/Footprints';
-import Parking from './pages/Parking';
-import Notifications from './pages/Notifications';
-import TrafficMonitoring from './pages/TrafficMonitoring';
 import TrafficMap from './pages/TrafficMap';
-import WeatherMonitoring from './pages/WeatherMonitoring';
-import ActivityLogs from './pages/ActivityLogs';
-import EmergencyCenter from './pages/EmergencyCenter';
-import EmergencyModeration from './pages/EmergencyModeration';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminUserManagement from './pages/AdminUserManagement';
-import AdminSystemSettings from './pages/AdminSystemSettings';
+
+// Lazy-loaded pages (non-map) for faster initial load
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Reports = lazy(() => import('./pages/Reports'));
+// const Violations = lazy(() => import('./pages/Violations'));
+// const Schools = lazy(() => import('./pages/Schools'));
+// const Footprints = lazy(() => import('./pages/Footprints'));
+const Parking = lazy(() => import('./pages/Parking'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const TrafficMonitoring = lazy(() => import('./pages/TrafficMonitoring'));
+const TrafficMonitorNew = lazy(() => import('./pages/TrafficMonitorNew'));
+const WeatherMonitoring = lazy(() => import('./pages/WeatherMonitoring'));
+const ActivityLogs = lazy(() => import('./pages/ActivityLogs'));
+const EmergencyCenter = lazy(() => import('./pages/EmergencyCenter'));
+const EmergencyModeration = lazy(() => import('./pages/EmergencyModeration'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AdminUserManagement = lazy(() => import('./pages/AdminUserManagement'));
+const AdminSystemSettings = lazy(() => import('./pages/AdminSystemSettings'));
+
+// Role-based redirect component
+const RoleBasedRedirect = () => {
+  const { user } = useAuth();
+  
+  // Check if user is admin or staff (non-citizen roles)
+  const isAdmin = user?.role === 'admin' || user?.role === 'lgu_staff';
+  
+  // Redirect to dashboard for admin/staff, traffic-map for citizens
+  return <Navigate to={isAdmin ? '/dashboard' : '/traffic-map'} replace />;
+};
 
 const AppContent = () => {
   const { isAuthenticated, user, authMethod } = useAuth();
@@ -44,11 +59,12 @@ const AppContent = () => {
     const email = urlParams.get('email');
 
     if (isVerified === 'true' && email && user?.emailVerified) {
-      // User was verified via email link, redirect to dashboard
+      // User was verified via email link, redirect based on role
       toast.success('Email verified successfully! Welcome!');
-      navigate('/dashboard', { replace: true });
+      const isAdmin = user?.role === 'admin' || user?.role === 'lgu_staff';
+      navigate(isAdmin ? '/dashboard' : '/traffic-map', { replace: true });
     }
-  }, [location.search, user?.emailVerified, navigate]);
+  }, [location.search, user?.emailVerified, user?.role, navigate]);
   
 
   // Check if current route is mobile-only view
@@ -83,16 +99,27 @@ const AppContent = () => {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        {/* Public guest mode entry for live map */}
+        <Route
+          path="/explore"
+          element={
+            <div className="traffic-map-fullscreen absolute inset-0 -mx-4 -my-6 sm:-mx-6 sm:-my-8 lg:mx-0 lg:my-0 lg:left-0 lg:right-0 lg:top-0 lg:bottom-0">
+              <TrafficMap />
+            </div>
+          }
+        />
+        {/* Public alias */}
+        <Route path="/map" element={<Navigate to="/explore" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
 
   // Check if user is authenticated but email not verified
-  // Only redirect to email verification for email/password sign-ups (not Google sign-in)
+  // Only redirect to email verification for Firebase email/password sign-ups (not Google sign-in or backend auth)
   // Google sign-in users have their email already verified by Google, so emailVerified will be true
-  // This condition will only be true for email/password registrations that need verification
-  if (user && !user.emailVerified) {
+  // Backend-authenticated users (admin accounts) don't need email verification
+  if (user && !user.emailVerified && authMethod === 'firebase') {
     return (
       <Routes>
         <Route path="/verify-email" element={<EmailVerification />} />
@@ -104,7 +131,10 @@ const AppContent = () => {
   // Mobile-only view without navbar/sidebar - removed
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row layout-container">
+    <div className="lg:flex min-h-screen bg-gray-50">
+      {/* PWA Install Prompt */}
+      <PWAInstallPrompt />
+      
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
         <div
@@ -114,24 +144,30 @@ const AppContent = () => {
         />
       )}
 
-      {/* Sidebar - Desktop: always visible, Mobile: drawer */}
+      {/* Fixed Sidebar */}
       <Sidebar
         isMobileOpen={isMobileSidebarOpen}
         onMobileClose={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-0">
+      {/* Main Content Area with left margin */}
+      <main className="ml-0 lg:ml-64 flex-1 overflow-y-auto bg-gray-50 touch-pan-y">
         {/* Sticky Navbar */}
         <div className="sticky top-0 z-30 bg-white shadow-sm">
           <Navbar onMobileMenuClick={() => setIsMobileSidebarOpen(true)} />
         </div>
 
-        {/* Main Content */}
-        <main className="flex-1 content-area overflow-x-hidden">
-          <div className="max-w-7xl mx-auto content-wrapper px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Page Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          {/* Special handling for fullscreen pages like TrafficMap */}
+          <Suspense fallback={<div className="py-12 text-center text-gray-500">Loading...</div>}>
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              {/* Default route - redirect based on user role */}
+              <Route path="/" element={<RoleBasedRedirect />} />
+
+              {/* Public map alias */}
+              <Route path="/map" element={<Navigate to="/explore" replace />} />
+
               <Route
                 path="/dashboard"
                 element={
@@ -197,11 +233,29 @@ const AppContent = () => {
                 }
               />
               <Route
-                path="/traffic-map"
+                path="/traffic-monitor-new"
                 element={
                   <ProtectedRoute>
-                    <TrafficMap />
+                    <TrafficMonitorNew />
                   </ProtectedRoute>
+                }
+              />
+              {/* Public guest mode entry */}
+              <Route
+                path="/explore"
+                element={
+                  <div className="traffic-map-fullscreen absolute inset-0 -mx-4 -my-6 sm:-mx-6 sm:-my-8 lg:mx-0 lg:my-0 lg:left-0 lg:right-0 lg:top-0 lg:bottom-0">
+                    <TrafficMap />
+                  </div>
+                }
+              />
+              {/* Keep protected version for signed-in sidebar layout if you link to /traffic-map internally */}
+              <Route
+                path="/traffic-map"
+                element={
+                  <div className="traffic-map-fullscreen absolute inset-0 -mx-4 -my-6 sm:-mx-6 sm:-my-8 lg:mx-0 lg:my-0 lg:left-0 lg:right-0 lg:top-0 lg:bottom-0">
+                    <TrafficMap />
+                  </div>
                 }
               />
               <Route
@@ -260,14 +314,15 @@ const AppContent = () => {
                   </ProtectedRoute>
                 }
               />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              {/* Catch-all route - redirect based on user role */}
+              <Route path="*" element={<RoleBasedRedirect />} />
             </Routes>
-          </div>
-        </main>
+          </Suspense>
+        </div>
 
         {/* Footer */}
         <Footer />
-      </div>
+      </main>
     </div>
   );
 };

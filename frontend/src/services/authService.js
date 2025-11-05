@@ -1,4 +1,4 @@
-import api from './api';
+﻿import api from './api';
 
 class AuthService {
   async login(username, password) {
@@ -20,11 +20,19 @@ class AuthService {
       
       // Get user info
       const userResponse = await api.get('/users/me');
-      localStorage.setItem('user', JSON.stringify(userResponse.data));
+      // Map backend user to include emailVerified and normalize role for frontend compatibility
+      const mappedUser = {
+        ...userResponse.data,
+        emailVerified: userResponse.data.email_verified !== undefined ? userResponse.data.email_verified : true,
+        email_verified: userResponse.data.email_verified !== undefined ? userResponse.data.email_verified : true,
+        // Normalize role to lowercase for frontend (backend returns lowercase from serializer)
+        role: userResponse.data.role?.toLowerCase() || userResponse.data.role
+      };
+      localStorage.setItem('user', JSON.stringify(mappedUser));
       
       return {
         token: access_token,
-        user: userResponse.data,
+        user: mappedUser,
       };
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Login failed');
@@ -66,7 +74,7 @@ class AuthService {
         token: response.data.access_token
       };
     } catch (error) {
-      console.error('Firebase sync error:', error);
+      
       // Don't throw - allow fallback to Firebase-only auth
       return null;
     }
@@ -77,7 +85,7 @@ class AuthService {
       // Call logout endpoint to log the activity
       await api.post('/auth/logout');
     } catch (error) {
-      console.error('Error calling logout endpoint:', error);
+      
     }
     
     localStorage.removeItem('access_token');
@@ -100,21 +108,28 @@ class AuthService {
 
   hasRole(role) {
     const user = this.getCurrentUser();
-    return user?.role === role;
+    // Normalize both to lowercase for comparison
+    const userRole = user?.role?.toLowerCase();
+    const checkRole = role?.toLowerCase();
+    return userRole === checkRole;
   }
 
   canCreateViolations() {
     const user = this.getCurrentUser();
-    return ['traffic_enforcer', 'admin'].includes(user?.role);
+    const userRole = user?.role?.toLowerCase();
+    return ['traffic_enforcer', 'admin'].includes(userRole);
   }
 
   canManageUsers() {
     const user = this.getCurrentUser();
-    return ['admin', 'lgu_staff'].includes(user?.role);
+    const userRole = user?.role?.toLowerCase();
+    return ['admin', 'lgu_staff'].includes(userRole);
   }
 
   isAdmin() {
-    return this.hasRole('admin');
+    const user = this.getCurrentUser();
+    const userRole = user?.role?.toLowerCase();
+    return userRole === 'admin';
   }
 }
 

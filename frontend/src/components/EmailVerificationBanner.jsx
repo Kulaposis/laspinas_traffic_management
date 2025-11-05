@@ -22,7 +22,7 @@ const EmailVerificationBanner = ({ className = '' }) => {
       }
     } catch (error) {
       toast.error('Failed to send verification email. Please try again.');
-      console.error('Error resending verification email:', error);
+
     } finally {
       setIsResending(false);
     }

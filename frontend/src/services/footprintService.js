@@ -11,7 +11,7 @@ class FootprintService {
       const response = await api.get(this.baseURL, { params });
       return response.data;
     } catch (error) {
-      console.error('Error fetching footprints:', error);
+
       throw error;
     }
   }
@@ -25,7 +25,7 @@ class FootprintService {
       });
       return response.data;
     } catch (error) {
-      console.error('Error fetching footprint heatmap:', error);
+
       throw error;
     }
   }
@@ -36,7 +36,7 @@ class FootprintService {
       const response = await api.get(`${this.baseURL}/statistics`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching footprint statistics:', error);
+
       throw error;
     }
   }
@@ -47,7 +47,7 @@ class FootprintService {
       const response = await api.get(`${this.baseURL}/areas`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching monitoring areas:', error);
+
       throw error;
     }
   }
@@ -58,7 +58,7 @@ class FootprintService {
       const response = await api.get(`${this.baseURL}/areas/${areaId}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching footprint area:', error);
+
       throw error;
     }
   }
@@ -69,7 +69,7 @@ class FootprintService {
       const response = await api.post(`${this.baseURL}/areas`, footprintData);
       return response.data;
     } catch (error) {
-      console.error('Error creating footprint area:', error);
+
       throw error;
     }
   }
@@ -80,7 +80,7 @@ class FootprintService {
       const response = await api.put(`${this.baseURL}/areas/${areaId}`, updateData);
       return response.data;
     } catch (error) {
-      console.error('Error updating footprint area:', error);
+
       throw error;
     }
   }
@@ -91,7 +91,7 @@ class FootprintService {
       const response = await api.delete(`${this.baseURL}/areas/${areaId}`);
       return response.data;
     } catch (error) {
-      console.error('Error deleting footprint area:', error);
+
       throw error;
     }
   }
@@ -102,7 +102,7 @@ class FootprintService {
       const response = await api.post(`${this.baseURL}/initialize`);
       return response.data;
     } catch (error) {
-      console.error('Error initializing footprint monitoring:', error);
+
       throw error;
     }
   }
@@ -113,7 +113,7 @@ class FootprintService {
       const response = await api.post(`${this.baseURL}/realtime/update`);
       return response.data;
     } catch (error) {
-      console.error('Error triggering real-time footprint update:', error);
+
       throw error;
     }
   }
@@ -124,7 +124,7 @@ class FootprintService {
       const response = await api.get(`${this.baseURL}/crowd-levels`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching crowd levels:', error);
+
       throw error;
     }
   }

@@ -44,7 +44,7 @@ const RouteLayer = ({
     if (!Array.isArray(routes)) return [];
     return routes.map(route => {
       if (!route || !Array.isArray(route.route_coordinates)) {
-        console.warn('Invalid route coordinates:', route);
+
         return { ...route, route_coordinates: [] };
       }
 
@@ -58,7 +58,7 @@ const RouteLayer = ({
       });
 
       if (validCoordinates.length < 2) {
-        console.warn('Route has insufficient valid coordinates:', route);
+
         return { ...route, route_coordinates: [] };
       }
 
@@ -72,7 +72,7 @@ const RouteLayer = ({
   const processedSelectedRoute = useMemo(() => {
     if (!selectedRoute) return null;
     if (!Array.isArray(selectedRoute.route_coordinates)) {
-      console.warn('Invalid selected route coordinates:', selectedRoute);
+
       return { ...selectedRoute, route_coordinates: [] };
     }
 
@@ -86,7 +86,7 @@ const RouteLayer = ({
     });
 
     if (validCoordinates.length < 2) {
-      console.warn('Selected route has insufficient valid coordinates:', selectedRoute);
+
       return { ...selectedRoute, route_coordinates: [] };
     }
 
@@ -110,7 +110,7 @@ const RouteLayer = ({
           });
         }
       } catch (error) {
-        console.warn('Error fitting bounds:', error);
+
       }
     }
   }, [processedRoutes, map]);
@@ -127,7 +127,7 @@ const RouteLayer = ({
           maxZoom: 16
         });
       } catch (error) {
-        console.warn('Error fitting route bounds:', error);
+
       }
     }
   }, [processedSelectedRoute, map]);
@@ -199,7 +199,7 @@ const RouteLayer = ({
           });
 
           if (safeCoordinates.length < 2) {
-            console.warn('Selected route has insufficient safe coordinates for rendering');
+
             return null;
           }
 

@@ -28,7 +28,7 @@ const EmailVerification = () => {
       }
     } catch (error) {
       toast.error('Failed to send verification email. Please try again.');
-      console.error('Error resending verification email:', error);
+
     } finally {
       setIsResending(false);
     }
@@ -40,7 +40,7 @@ const EmailVerification = () => {
       await logout();
       navigate('/login');
     } catch (error) {
-      console.error('Error logging out:', error);
+
       toast.error('Error logging out');
     }
   };
@@ -71,11 +71,11 @@ const EmailVerification = () => {
             }, 1000);
           } else {
             toast.error('Failed to verify email. Please try again.');
-            console.error('Email verification failed:', result.error);
+
           }
         } catch (error) {
           toast.error('Failed to verify email. Please try again.');
-          console.error('Error verifying email:', error);
+
         }
       } else {
         // Check if we're on a Firebase domain and should redirect

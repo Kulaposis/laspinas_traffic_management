@@ -22,6 +22,7 @@ import {
   Search
 } from 'lucide-react';
 import weatherService from '../services/weatherService';
+import { CardSkeleton, MapSkeleton } from '../components/LoadingSkeleton';
 import { useAuth } from '../context/AuthContext';
 import WeatherAnalytics from '../components/WeatherAnalytics';
 
@@ -90,7 +91,7 @@ const WeatherMonitoring = () => {
         evacuationCenters: evacuationCenters.evacuation_centers || []
       });
     } catch (err) {
-      console.error('Error fetching barangay data:', err);
+
     }
   }, []);
 
@@ -177,8 +178,22 @@ const WeatherMonitoring = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-6">
+            <div className="h-10 bg-gray-200 rounded w-64 mb-4 animate-pulse"></div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <MapSkeleton height="h-[500px]" />
+            </div>
+            <div className="space-y-4">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

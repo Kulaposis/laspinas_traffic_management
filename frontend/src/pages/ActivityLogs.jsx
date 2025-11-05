@@ -85,7 +85,7 @@ const ActivityLogs = () => {
         totalPages: Math.ceil((response.total || 0) / pagination.itemsPerPage)
       }));
     } catch (err) {
-      console.error('Error fetching activity logs:', err);
+
       setError('Failed to fetch activity logs');
     } finally {
       setLoading(false);
@@ -145,7 +145,7 @@ const ActivityLogs = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Error exporting logs:', err);
+
       setError('Failed to export logs');
     }
   };

@@ -141,7 +141,7 @@ const IncidentReportModal = ({
           });
         },
         (error) => {
-          console.error('Error getting location:', error);
+
           alert('Unable to get your location. Please enter manually.');
         }
       );

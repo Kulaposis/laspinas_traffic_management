@@ -100,13 +100,13 @@ const TrafficMonitoring = () => {
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Las Piñas City center coordinates
-  const defaultCenter = [14.4504, 121.0170];
+  // Default map center and bounds for requested heatmap area
+  const defaultCenter = [14.441781, 120.99996];
   const defaultBounds = {
-    lat_min: 14.4200,
-    lat_max: 14.4700,
-    lng_min: 120.9800,
-    lng_max: 121.0500
+    lat_min: 14.425741,
+    lat_max: 14.457820,
+    lng_min: 120.970614,
+    lng_max: 121.029305
   };
 
   // Web scraping function
@@ -125,7 +125,7 @@ const TrafficMonitoring = () => {
       // Show success message
       setError('');
     } catch (error) {
-      console.error('Scraping error:', error);
+      
       const errorMessage = error.response?.data?.detail || error.message || 'Unknown error occurred';
       setError(`Failed to scrape roadworks: ${errorMessage}`);
     } finally {
@@ -232,11 +232,18 @@ const TrafficMonitoring = () => {
           }
         });
         
-        setHeatmapData(roadHeatmapData);
+        // Limit points to requested bounds
+        const boundedHeatmapData = roadHeatmapData.filter(p => (
+          p.lat >= defaultBounds.lat_min &&
+          p.lat <= defaultBounds.lat_max &&
+          p.lng >= defaultBounds.lng_min &&
+          p.lng <= defaultBounds.lng_max
+        ));
+        setHeatmapData(boundedHeatmapData);
       
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching traffic data:', err);
+      
     } finally {
       setLoading(false);
     }
@@ -245,7 +252,7 @@ const TrafficMonitoring = () => {
   // Handle real-time heatmap updates via WebSocket
   const handleHeatmapUpdate = useCallback((data) => {
     if (isRealTimeActive && data.heatmap_data) {
-      console.log('Received real-time heatmap update:', data);
+      
       setHeatmapData(data.heatmap_data);
       setLastUpdateTime(new Date(data.timestamp || Date.now()));
       
@@ -259,7 +266,7 @@ const TrafficMonitoring = () => {
   // Handle real-time weather/flood updates via WebSocket
   const handleWeatherUpdate = useCallback((data) => {
     if (isRealTimeActive) {
-      console.log('Received real-time weather/flood update:', data);
+      
       setLastUpdateTime(new Date(data.timestamp || Date.now()));
       
       // Update flood data if included
@@ -287,7 +294,7 @@ const TrafficMonitoring = () => {
         const status = await trafficService.getSimulationStatus();
         setSimulationStatus(status);
       } catch (err) {
-        console.warn('Could not fetch simulation status:', err);
+        
       }
     }
   }, [user]);
@@ -566,7 +573,7 @@ const TrafficMonitoring = () => {
   const handleRouteSelect = async (route, origin = null, destination = null, allRoutes = []) => {
     // Validate route before selection
     if (!route) {
-      console.error('Invalid route: route is null');
+      
       setError('Invalid route selected');
       return;
     }
@@ -574,7 +581,7 @@ const TrafficMonitoring = () => {
     // If we have origin and destination, try to get detailed route with turn-by-turn instructions
     if (origin && destination && route && origin.lat && origin.lon && destination.lat && destination.lon) {
       try {
-        console.log('Fetching detailed route with turn-by-turn instructions...');
+        
         const detailedRoute = await enhancedRoutingService.getDetailedRoute(
           origin.lat,
           origin.lon,
@@ -587,20 +594,20 @@ const TrafficMonitoring = () => {
         if (detailedRoute && detailedRoute.recommended_route && 
             detailedRoute.recommended_route.route_coordinates && 
             detailedRoute.recommended_route.route_coordinates.length >= 2) {
-          console.log('Using detailed route with', detailedRoute.recommended_route.route_coordinates.length, 'points');
+          
           setSelectedRoute(detailedRoute.recommended_route);
         } else {
-          console.log('Detailed route invalid, using original route');
+          
           setSelectedRoute(route);
         }
       } catch (error) {
-        console.error('Error getting detailed route:', error);
+        
         setError('Could not get detailed route, using basic route');
         setSelectedRoute(route);
       }
     } else {
       // Use basic route if no origin/destination or route has coordinates
-      console.log('Using basic route');
+      
       setSelectedRoute(route);
     }
     
@@ -612,7 +619,7 @@ const TrafficMonitoring = () => {
     
     // Switch to map view if route is selected
     if (route && showSmartRouting) {
-      console.log('Selected route for visualization');
+      
     }
   };
   
@@ -633,17 +640,10 @@ const TrafficMonitoring = () => {
       setError('Invalid route: insufficient coordinates for navigation');
       return;
     }
-    
-    console.log('Starting navigation with route:', {
-      points: selectedRoute.route_coordinates?.length,
-      steps: selectedRoute.steps?.length,
-      distance: selectedRoute.distance_km,
-      duration: selectedRoute.estimated_duration_minutes
-    });
-    
+
     // Prepare route with turn-by-turn instructions if not already present
     if (!selectedRoute.steps || selectedRoute.steps.length === 0) {
-      console.log('Generating basic route steps...');
+      
       // Generate basic steps for the route based on coordinates
       const enhancedRoute = {
         ...selectedRoute,
@@ -748,7 +748,6 @@ const TrafficMonitoring = () => {
   const handleMapStyleChange = (style) => {
     setMapStyle(style.id);
     setUseTomTomMaps(style.provider === 'TomTom');
-    console.log(`Switched to ${style.name} (${style.provider})`);
   };
   
   // Handle fullscreen toggle
@@ -1415,7 +1414,7 @@ const TrafficMonitoring = () => {
                       opacity={1}
                       zIndex={1}
                       onError={(error) => {
-                        console.warn('TomTom tiles failed, falling back to OpenStreetMap:', error);
+                        
                         setUseTomTomMaps(false);
                         setMapError(true);
                       }}
@@ -2593,10 +2592,10 @@ const TrafficMonitoring = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              console.log('Pick on Map button clicked');
-                              console.log('Current showLocationPicker state:', showLocationPicker);
+                              
+                              
                               setShowLocationPicker(true);
-                              console.log('Setting showLocationPicker to true');
+                              
                             }}
                             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 text-sm font-medium"
                           >
@@ -2789,27 +2788,27 @@ const TrafficMonitoring = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          console.log('Continue button clicked, current step:', formStep);
-                          console.log('Current incident data:', newIncident);
+                          
+                          
                           
                           if (formStep === 1) {
                             // Validate only required fields for step 1
                             if (!newIncident.title.trim()) {
                               setFormErrors({ title: 'Incident title is required' });
-                              console.log('Validation failed: title required');
+                              
                               return;
                             }
                             if (newIncident.title.length < 5) {
                               setFormErrors({ title: 'Title must be at least 5 characters' });
-                              console.log('Validation failed: title too short');
+                              
                               return;
                             }
                             // Clear errors and proceed
                             setFormErrors({});
-                            console.log('Validation passed, moving to step 2');
+                            
                             setFormStep(2);
                           } else if (formStep === 2) {
-                            console.log('Moving from step 2 to step 3');
+                            
                             setFormStep(3);
                           }
                         }}
@@ -2951,7 +2950,7 @@ const TrafficMonitoring = () => {
                       opacity={1}
                       zIndex={1}
                       onError={(error) => {
-                        console.warn('TomTom tiles failed in modal, falling back to OpenStreetMap:', error);
+                        
                         setUseTomTomMaps(false);
                         setMapError(true);
                       }}
@@ -3140,7 +3139,7 @@ const TrafficMonitoring = () => {
                     opacity={1}
                     zIndex={1}
                     onError={(error) => {
-                      console.warn('TomTom tiles failed, falling back to OpenStreetMap:', error);
+                      
                       setUseTomTomMaps(false);
                       setMapError(true);
                     }}

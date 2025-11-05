@@ -41,7 +41,7 @@ class TravelHistoryService {
       
       return response.data;
     } catch (error) {
-      console.error('Error saving travel session:', error);
+
       throw error;
     }
   }
@@ -63,7 +63,7 @@ class TravelHistoryService {
 
       return response.data;
     } catch (error) {
-      console.error('Error fetching travel history:', error);
+
       // Return cached data or empty array if API fails
       // If it's an auth error, don't try to cache since user isn't authenticated
       if (error.response?.status === 401) {
@@ -87,7 +87,7 @@ class TravelHistoryService {
 
       return response.data;
     } catch (error) {
-      console.error('Error fetching frequent locations:', error);
+
       if (error.response?.status === 401) {
         return [];
       }
@@ -106,7 +106,7 @@ class TravelHistoryService {
 
       return response.data;
     } catch (error) {
-      console.error('Error fetching travel stats:', error);
+
       if (error.response?.status === 401) {
         return this.getDefaultStats();
       }
@@ -139,7 +139,7 @@ class TravelHistoryService {
       
       return response.data;
     } catch (error) {
-      console.error('Error saving favorite route:', error);
+
       throw error;
     }
   }
@@ -152,7 +152,7 @@ class TravelHistoryService {
       const response = await api.get(`${this.baseEndpoint}/favorites`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching favorite routes:', error);
+
       if (error.response?.status === 401) {
         return [];
       }
@@ -168,7 +168,7 @@ class TravelHistoryService {
       const response = await api.delete(`${this.baseEndpoint}/sessions/${sessionId}`);
       return response.data;
     } catch (error) {
-      console.error('Error deleting travel session:', error);
+
       throw error;
     }
   }
@@ -181,7 +181,7 @@ class TravelHistoryService {
       const cached = localStorage.getItem('travel_history');
       return cached ? JSON.parse(cached) : [];
     } catch (error) {
-      console.error('Error reading cached travel history:', error);
+
       return [];
     }
   }
@@ -193,7 +193,7 @@ class TravelHistoryService {
     try {
       localStorage.setItem('travel_history', JSON.stringify(history));
     } catch (error) {
-      console.error('Error caching travel history:', error);
+
     }
   }
 
@@ -205,7 +205,7 @@ class TravelHistoryService {
       const cached = localStorage.getItem('frequent_locations');
       return cached ? JSON.parse(cached) : [];
     } catch (error) {
-      console.error('Error reading cached frequent locations:', error);
+
       return [];
     }
   }
@@ -218,7 +218,7 @@ class TravelHistoryService {
       const cached = localStorage.getItem('favorite_routes');
       return cached ? JSON.parse(cached) : [];
     } catch (error) {
-      console.error('Error reading cached favorites:', error);
+
       return [];
     }
   }

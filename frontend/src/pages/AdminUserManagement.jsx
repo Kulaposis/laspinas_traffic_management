@@ -55,7 +55,7 @@ const AdminUserManagement = () => {
       setUsers(usersData);
       setUserStats(statsData);
     } catch (error) {
-      console.error('Error fetching user data:', error);
+
     } finally {
       setLoading(false);
     }
@@ -100,7 +100,7 @@ const AdminUserManagement = () => {
         alert(`Failed to ${action} ${result.failed} users: ${result.errors.join(', ')}`);
       }
     } catch (error) {
-      console.error(`Error performing bulk ${action}:`, error);
+
       alert(`Error performing bulk ${action}`);
     }
   };
@@ -112,7 +112,7 @@ const AdminUserManagement = () => {
       setUserActivity(activity);
       setShowUserModal(true);
     } catch (error) {
-      console.error('Error fetching user activity:', error);
+
       setSelectedUser(user);
       setUserActivity(null);
       setShowUserModal(true);

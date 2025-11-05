@@ -984,7 +984,7 @@ const TrafficMapDemo = ({ onUpgradeClick }) => {
 
   const handleAddFavorite = (location) => {
     // Simulate adding to favorites
-    console.log('Added to favorites:', location.name);
+
     // Could show a toast notification here
   };
 

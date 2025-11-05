@@ -33,7 +33,8 @@ def create_broadcast_notification(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a broadcast notification for all users (admin only)."""
-    if current_user.role.value != 'admin':
+    from ..utils.role_helpers import is_admin
+    if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can create broadcast notifications"
