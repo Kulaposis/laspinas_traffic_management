@@ -24,9 +24,15 @@ const SimulationPanel = ({
   if (!isSimulating) return null;
 
   return (
-    <div className={`absolute left-2 right-2 sm:left-4 sm:right-4 z-40 transition-all duration-300 ${
-      simulationMinimized ? 'bottom-4' : 'bottom-20 sm:bottom-24'
-    }`}>
+    <div 
+      className="absolute left-2 right-2 sm:left-4 sm:right-4 z-40 transition-all duration-300"
+      style={{
+        bottom: simulationMinimized 
+          ? `calc(16px + env(safe-area-inset-bottom, 0px))`
+          : `calc(80px + env(safe-area-inset-bottom, 0px))`,
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+      }}
+    >
       <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200">

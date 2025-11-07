@@ -670,6 +670,35 @@
     padding-right: env(safe-area-inset-right);
   }
 
+  /* Dynamic Viewport Height utilities */
+  .h-dvh {
+    height: 100dvh;
+  }
+
+  .min-h-dvh {
+    min-height: 100dvh;
+  }
+
+  .max-h-dvh {
+    max-height: 100dvh;
+  }
+
+  /* Bottom sheet safe positioning */
+  .bottom-sheet-safe {
+    bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+  }
+
+  /* Keyboard-aware max height */
+  .max-h-keyboard {
+    max-height: min(90vh, calc(100dvh - 200px));
+  }
+
+  /* iOS Safari viewport fix */
+  .ios-viewport-fix {
+    min-height: -webkit-fill-available;
+  }
+
   /* Prevent zoom on input focus (iOS) */
   @media (max-width: 768px) {
     input[type="text"],

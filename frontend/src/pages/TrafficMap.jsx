@@ -24,7 +24,14 @@ import {
   NavigationPanel,
   RouteInfoPanel,
   SimulationPanel,
-  RouteAlternativesPanel
+  RouteAlternativesPanel,
+  EnhancedSearchPanel,
+  EnhancedNavigationPanel,
+  MapControls,
+  MapMarkers,
+  HistoryPanel,
+  PlaceInfoPanel,
+  DirectionsPanel
 } from '../components/mapUI';
 // Custom Hooks
 import { useMapData } from '../hooks/useMapData';
@@ -100,6 +107,7 @@ import realTimeTrafficService from '../services/realTimeTrafficService';
 // NEW: 5 Priority Features Components
 import VoiceNavigationPanel from '../components/VoiceNavigationPanel';
 import IncidentReportModal from '../components/IncidentReportModal';
+import EmergencyReportsPanel from '../components/EmergencyReportsPanel';
 import MultiStopPlanner from '../components/MultiStopPlanner';
 import LocationSharePanel from '../components/LocationSharePanel';
 import WeatherAlertBanner from '../components/WeatherAlertBanner';
@@ -167,8 +175,9 @@ const TrafficMap = () => {
   const [searchHistory, setSearchHistory] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  // Mobile layout optimization states
+  // Layout optimization states
   const [navigationPanelMinimized, setNavigationPanelMinimized] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [showSecondaryActions, setShowSecondaryActions] = useState(false);
@@ -176,19 +185,36 @@ const TrafficMap = () => {
 
   // Popular Las Piñas City locations for quick suggestions
   const lasPinasSuggestions = [
-    { name: 'SM Southmall', lat: 14.4504, lng: 121.0170, category: 'Shopping', icon: '🛒' },
-    { name: 'Las Piñas City Hall', lat: 14.4378, lng: 121.0122, category: 'Government', icon: '🏛️' },
+    { name: 'SM Southmall', lat: 14.4328, lng: 121.0105, category: 'Shopping', icon: '🛒' },
+    { name: 'Las Piñas City Hall', lat: 14.4497, lng: 120.9826, category: 'Government', icon: '🏛️' },
     { name: 'Alabang-Zapote Road', lat: 14.4450, lng: 121.0200, category: 'Road', icon: '🛣️' },
-    { name: 'Robinsons Place Las Piñas', lat: 14.4420, lng: 121.0190, category: 'Shopping', icon: '🛒' },
-    { name: 'University of Perpetual Help System', lat: 14.4456, lng: 121.0156, category: 'Education', icon: '🎓' },
-    { name: 'Zapote Market', lat: 14.4456, lng: 121.0189, category: 'Market', icon: '🏪' },
+    { name: 'Robinsons Place Las Piñas', lat: 14.4419, lng: 120.9978, category: 'Shopping', icon: '🛒' },
+    { name: 'University of Perpetual Help System', lat: 14.4483, lng: 120.9856, category: 'Education', icon: '🎓' },
+    { name: 'Zapote Market', lat: 14.4624, lng: 120.9649, category: 'Market', icon: '🏪' },
     { name: 'BF Homes Las Piñas', lat: 14.4389, lng: 121.0344, category: 'Residential', icon: '🏘️' },
     { name: 'Las Piñas City Medical Center', lat: 14.4370, lng: 121.0130, category: 'Healthcare', icon: '🏥' },
     { name: 'St. Joseph Parish Church', lat: 14.4380, lng: 121.0120, category: 'Religious', icon: '⛪' },
-    { name: 'Evia Lifestyle Center', lat: 14.4280, lng: 121.0250, category: 'Shopping', icon: '🛒' },
+    { name: 'Evia Lifestyle Center', lat: 14.3760, lng: 121.0118, category: 'Shopping', icon: '🛒' },
     { name: 'Pillar Village', lat: 14.4350, lng: 121.0200, category: 'Residential', icon: '🏘️' },
     { name: 'Alabang', lat: 14.4195, lng: 121.0401, category: 'District', icon: '📍' }
   ];
+
+  // Load recent searches on component mount
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Prefer compact/minimized nav panel on desktop
+  useEffect(() => {
+    if (isNavigationActive && isDesktop) {
+      setNavigationPanelMinimized(true);
+    }
+  }, [isNavigationActive, isDesktop]);
 
   // Load recent searches on component mount
   useEffect(() => {
@@ -309,14 +335,25 @@ const TrafficMap = () => {
   // UI states
   const [showSidePanel, setShowSidePanel] = useState(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [showEmergencyReportsPanel, setShowEmergencyReportsPanel] = useState(false);
+  const [myEmergencyReports, setMyEmergencyReports] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedParkingZone, setSelectedParkingZone] = useState(null);
   const [showStreetView, setShowStreetView] = useState(false);
   const [mapStyle, setMapStyle] = useState('main');
+  const [previousMapStyle, setPreviousMapStyle] = useState('main'); // Store previous style for restoration
   const [heatmapEnabled, setHeatmapEnabled] = useState(false); // Disabled by default to remove random lines
   const [trafficLayerEnabled, setTrafficLayerEnabled] = useState(true); // Enabled - uses TomTom API for real traffic data
   const [trafficMonitorNewEnabled, setTrafficMonitorNewEnabled] = useState(false);
   // Removed 3D map overlay feature
+  
+  // Place Info Panel states
+  const [selectedPlace, setSelectedPlace] = useState(null);
+  const [showPlaceInfoPanel, setShowPlaceInfoPanel] = useState(false);
+  
+  // Directions Panel states
+  const [showDirectionsPanel, setShowDirectionsPanel] = useState(false);
+  const [directionsPanelMinimized, setDirectionsPanelMinimized] = useState(false);
   
   // Travel history and personalization
   const [travelHistory, setTravelHistory] = useState([]);
@@ -329,6 +366,7 @@ const TrafficMap = () => {
   const [trafficData, setTrafficData] = useState([]);
   const [routeTrafficData, setRouteTrafficData] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [isScrapingIncidentProne, setIsScrapingIncidentProne] = useState(false);
   const [showGuestIntro, setShowGuestIntro] = useState(false);
 
@@ -481,6 +519,35 @@ const TrafficMap = () => {
     }
   }, [selectedRoute, isSimulating]);
 
+  // Auto-calculate route when directions panel opens with both locations set
+  useEffect(() => {
+    if (showDirectionsPanel && !isLoadingRoute && !isSimulating) {
+      // Check if both origin and destination are set with valid coordinates
+      if (selectedOrigin && selectedDestination && 
+          selectedOrigin.lat && selectedOrigin.lng && 
+          selectedDestination.lat && selectedDestination.lng) {
+        // Only calculate if no route exists yet
+        const hasRoutes = (routeAlternatives && routeAlternatives.length > 0) || 
+                         (currentRoute && currentRoute.routes && currentRoute.routes.length > 0);
+        
+        if (!hasRoutes) {
+          // Use a ref to track if we've already triggered calculation for this panel opening
+          const timeoutId = setTimeout(() => {
+            // Double-check conditions before calculating
+            if (selectedOrigin && selectedDestination && 
+                selectedOrigin.lat && selectedOrigin.lng && 
+                selectedDestination.lat && selectedDestination.lng &&
+                !isLoadingRoute && !isSimulating) {
+              handleGetRoute({}, selectedOrigin, selectedDestination);
+            }
+          }, 300);
+          return () => clearTimeout(timeoutId);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDirectionsPanel]);
+
   const loadUserData = async () => {
     if (!user) {
       // Guest mode: no user-specific data
@@ -488,29 +555,37 @@ const TrafficMap = () => {
       setFrequentLocations([]);
       setFavoriteRoutes([]);
       setTravelStats(null);
+      setMyEmergencyReports([]);
       return;
     }
 
     try {
-      // Load travel history with individual error handling
+      // Load travel history and emergency reports with individual error handling
       const results = await Promise.allSettled([
         travelHistoryService.getTravelHistory({ limit: 20 }).catch(() => []),
         travelHistoryService.getFrequentLocations({ limit: 10 }).catch(() => []),
         travelHistoryService.getFavoriteRoutes().catch(() => []),
-        travelHistoryService.getTravelStats().catch(() => null)
+        travelHistoryService.getTravelStats().catch(() => null),
+        emergencyService.getMyEmergencyReports().catch(() => [])
       ]);
 
       setTravelHistory(results[0].status === 'fulfilled' ? results[0].value : []);
       setFrequentLocations(results[1].status === 'fulfilled' ? results[1].value : []);
       setFavoriteRoutes(results[2].status === 'fulfilled' ? results[2].value : []);
       setTravelStats(results[3].status === 'fulfilled' ? results[3].value : null);
+      
+      // Handle emergency reports (can be array or object with emergencies property)
+      const emergencyData = results[4].status === 'fulfilled' ? results[4].value : [];
+      const emergencyList = Array.isArray(emergencyData) ? emergencyData : (emergencyData.emergencies || []);
+      setMyEmergencyReports(emergencyList);
     } catch (error) {
       
-      // Gracefully handle missing travel history - set empty defaults
+      // Gracefully handle missing data - set empty defaults
       setTravelHistory([]);
       setFrequentLocations([]);
       setFavoriteRoutes([]);
       setTravelStats(null);
+      setMyEmergencyReports([]);
     }
   };
 
@@ -892,12 +967,31 @@ const TrafficMap = () => {
             
             setCurrentLocation(location);
 
+            const prevOrigin = mode === 'origin' ? selectedOrigin : (selectedOrigin);
+            const prevDestination = mode === 'destination' ? selectedDestination : (selectedDestination);
+
             if (mode === 'origin') {
               setSelectedOrigin(location);
               setOriginQuery(location.name);
+              // If destination is already set, trigger route calculation
+              if (prevDestination && location.lat && location.lng && prevDestination.lat && prevDestination.lng) {
+                if (showDirectionsPanel) {
+                  setTimeout(async () => {
+                    await handleGetRoute({}, location, prevDestination);
+                  }, 100);
+                }
+              }
             } else {
               setSelectedDestination(location);
               setDestinationQuery(location.name);
+              // If origin is already set, trigger route calculation
+              if (prevOrigin && location.lat && location.lng && prevOrigin.lat && prevOrigin.lng) {
+                if (showDirectionsPanel) {
+                  setTimeout(async () => {
+                    await handleGetRoute({}, prevOrigin, location);
+                  }, 100);
+                }
+              }
             }
             setShowSearchResults(false);
           } catch (error) {
@@ -911,12 +1005,31 @@ const TrafficMap = () => {
             };
             
             setCurrentLocation(location);
+            const prevOrigin = mode === 'origin' ? selectedOrigin : (selectedOrigin);
+            const prevDestination = mode === 'destination' ? selectedDestination : (selectedDestination);
+
             if (mode === 'origin') {
               setSelectedOrigin(location);
               setOriginQuery(location.name);
+              // If destination is already set, trigger route calculation
+              if (prevDestination && location.lat && location.lng && prevDestination.lat && prevDestination.lng) {
+                if (showDirectionsPanel) {
+                  setTimeout(async () => {
+                    await handleGetRoute({}, location, prevDestination);
+                  }, 100);
+                }
+              }
             } else {
               setSelectedDestination(location);
               setDestinationQuery(location.name);
+              // If origin is already set, trigger route calculation
+              if (prevOrigin && location.lat && location.lng && prevOrigin.lat && prevOrigin.lng) {
+                if (showDirectionsPanel) {
+                  setTimeout(async () => {
+                    await handleGetRoute({}, prevOrigin, location);
+                  }, 100);
+                }
+              }
             }
             setShowSearchResults(false);
           }
@@ -972,8 +1085,332 @@ const TrafficMap = () => {
     setShowSearchResults(false);
   };
 
+  // Show place info panel when a place is selected from search
+  const handleShowPlaceInfo = (location) => {
+    // Extract and validate coordinates
+    let lat = location.lat || location.latitude || location.position?.lat || location.position?.latitude;
+    let lng = location.lng || location.longitude || location.position?.lng || location.position?.lon || location.position?.longitude;
+    
+    // Validate coordinates
+    if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
+      console.warn('Invalid coordinates for location:', location);
+      lat = mapCenter[0];
+      lng = mapCenter[1];
+    } else {
+      lat = parseFloat(lat);
+      lng = parseFloat(lng);
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        console.warn('Coordinates out of valid range:', { lat, lng });
+        lat = mapCenter[0];
+        lng = mapCenter[1];
+      }
+    }
+    
+    // Ensure location has all required properties with validated coordinates
+    const locationWithDefaults = {
+      ...location,
+      name: location.name || location.display_name || location.poi?.name || 'Unknown Location',
+      lat: lat,
+      lng: lng,
+      address: location.address || {
+        full: location.address?.freeformAddress || location.address?.full || location.name || 'Address not available',
+        city: location.address?.municipality || location.address?.city || 'Las Piñas City',
+        country: location.address?.country || 'Philippines'
+      },
+      type: location.type || location.category || 'Location',
+      // Preserve position object for compatibility
+      position: {
+        lat: lat,
+        lon: lng
+      }
+    };
+
+    // Save to search history if it's a new search result
+    if (!location.isRecent && !location.isSuggestion) {
+      saveToHistory(locationWithDefaults);
+    }
+    
+    // Set the place and show panel
+    setSelectedPlace(locationWithDefaults);
+    setShowPlaceInfoPanel(true);
+    
+    // Close search results and other panels
+    setShowSearchResults(false);
+    setShowSuggestions(false);
+    setShowDirectionsPanel(false);
+    setShowSmartRoutePanel(false);
+    
+    // Center map on selected place with validated coordinates
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+      setMapCenter([lat, lng]);
+      setMapZoom(15); // Zoom in to show the place clearly
+      
+      // Also update map ref if available
+      if (mapRef.current) {
+        try {
+          mapRef.current.flyTo([lat, lng], 15, {
+            duration: 1.0
+          });
+        } catch (err) {
+          // Silently fail if map is not ready
+        }
+      }
+    }
+  };
+
+  // Handle place info panel actions
+  const handlePlaceDirections = async () => {
+    if (!selectedPlace) return;
+    
+    setIsLoadingRoute(true);
+    setIsLoadingData(true);
+    
+    // Set as destination if not already set
+    if (!selectedDestination || selectedDestination.name !== selectedPlace.name) {
+      setSelectedDestination(selectedPlace);
+      setDestinationQuery(selectedPlace.name || '');
+    }
+    
+    // Close place info panel
+    setShowPlaceInfoPanel(false);
+    
+    // Get GPS location automatically with better error handling
+    const getGPSLocation = () => {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Geolocation is not supported by your browser'));
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            // Validate coordinates
+            if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+              reject(new Error('Invalid GPS coordinates'));
+              return;
+            }
+            
+            try {
+              const results = await enhancedGeocodingService.reverseGeocode(lat, lng);
+              let location;
+              if (results && results.length > 0) {
+                location = {
+                  lat,
+                  lng,
+                  name: results[0].name || results[0].address?.freeformAddress || `Location near ${results[0].address?.municipality || 'here'}`,
+                  address: results[0].address
+                };
+              } else {
+                location = {
+                  lat,
+                  lng,
+                  name: `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                  address: { full: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }
+                };
+              }
+              resolve(location);
+            } catch (error) {
+              // Even if reverse geocoding fails, use coordinates
+              const location = {
+                lat,
+                lng,
+                name: `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                address: { full: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }
+              };
+              resolve(location);
+            }
+          },
+          (error) => {
+            reject(error);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+        );
+      });
+    };
+
+    try {
+      // Ensure destination is properly set (validate it has coordinates)
+      const destination = selectedPlace;
+      if (!destination || !destination.lat || !destination.lng) {
+        console.error('Invalid destination place:', destination);
+        toast.error('Invalid destination. Please try again.');
+        setIsLoadingRoute(false);
+        setIsLoadingData(false);
+        setShowDirectionsPanel(true);
+        setDirectionsPanelMinimized(false);
+        return;
+      }
+
+      // Set destination in state (for UI display)
+      setSelectedDestination(destination);
+      setDestinationQuery(destination.name || '');
+
+      // Get current location
+      toast.loading('Getting your current location...', { id: 'get-location' });
+      const origin = await getGPSLocation();
+      
+      // Set origin state (for UI display)
+      setSelectedOrigin(origin);
+      setOriginQuery(origin.name);
+      toast.success('Location found!', { id: 'get-location' });
+      
+      // Calculate route (TomTom with Geoapify fallback is already built in)
+      // Pass origin and destination directly to avoid state timing issues
+      toast.loading('Calculating route...', { id: 'calculate-route' });
+      
+      // Call handleGetRoute with explicit origin and destination
+      await handleGetRoute({}, origin, destination);
+      
+      // Wait for state to update (React state updates are async)
+      // Use a small delay to ensure route data is in state before showing panel
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Show directions panel with calculated route
+      // The panel will display the route once state is updated
+      setShowDirectionsPanel(true);
+      setDirectionsPanelMinimized(false);
+      toast.success('Route calculated!', { id: 'calculate-route' });
+    } catch (error) {
+      console.warn('Failed to get GPS location or calculate route:', error);
+      
+      // Show the directions panel even if GPS fails, so user can set origin manually
+      setShowDirectionsPanel(true);
+      setDirectionsPanelMinimized(false);
+      
+      if (error.message && error.message.includes('Geolocation')) {
+        toast.error('Unable to get your current location. Please set an origin manually in the directions panel.', { id: 'get-location' });
+      } else {
+        toast.error('Route calculation failed. Please try again or set origin manually.', { id: 'calculate-route' });
+      }
+    } finally {
+      setIsLoadingRoute(false);
+      setIsLoadingData(false);
+    }
+  };
+
+  const handlePlaceStart = () => {
+    if (!selectedPlace) return;
+    if (!selectedDestination || selectedDestination.name !== selectedPlace.name) {
+      setSelectedDestination(selectedPlace);
+      setDestinationQuery(selectedPlace.name || '');
+    }
+    setShowPlaceInfoPanel(false);
+    // Start navigation if route exists
+    if (selectedRoute) {
+      startNavigation();
+    } else {
+      handlePlaceDirections();
+    }
+  };
+
+  const handlePlaceCall = () => {
+    if (selectedPlace?.phone) {
+      window.location.href = `tel:${selectedPlace.phone}`;
+    }
+  };
+
+  const handlePlaceSave = () => {
+    // Save to favorites
+    if (selectedPlace && user) {
+      saveToHistory(selectedPlace);
+      toast.success('Place saved to favorites');
+    } else if (!user) {
+      setShowAuthPrompt(true);
+    }
+  };
+
+  const handlePlaceShare = async () => {
+    if (selectedPlace) {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: selectedPlace.name,
+            text: `Check out ${selectedPlace.name}`,
+            url: window.location.href
+          });
+        } catch (error) {
+          // Fallback: copy to clipboard
+          const shareText = `${selectedPlace.name}\n${selectedPlace.address?.full || ''}\n${window.location.href}`;
+          navigator.clipboard.writeText(shareText);
+          toast.success('Link copied to clipboard');
+        }
+      } else {
+        // Fallback: copy to clipboard
+        const shareText = `${selectedPlace.name}\n${selectedPlace.address?.full || ''}\n${window.location.href}`;
+        navigator.clipboard.writeText(shareText);
+        toast.success('Link copied to clipboard');
+      }
+    }
+  };
+
+  // Direct handlers for EnhancedSearchPanel to avoid relying on parent's searchMode
+  const handleOriginSelectDirect = async (location) => {
+    if (location) {
+      if (!location.isRecent) {
+        saveToHistory(location);
+      }
+      const prevDestination = selectedDestination; // Capture current destination
+      setSelectedOrigin(location);
+      setOriginQuery(location.name || '');
+      
+      // If destination is already set and both have valid coordinates, trigger route calculation
+      if (prevDestination && location.lat && location.lng && prevDestination.lat && prevDestination.lng) {
+        // Only auto-calculate if directions panel is open
+        if (showDirectionsPanel) {
+          // Use a small delay to ensure state is updated, but pass locations directly
+          setTimeout(async () => {
+            await handleGetRoute({}, location, prevDestination);
+          }, 100);
+        }
+      }
+    } else {
+      // Clear origin and routes when location is cleared
+      setSelectedOrigin(null);
+      setOriginQuery('');
+      // Clear routes when origin is cleared (route is invalid without origin)
+      setCurrentRoute(null);
+      setSelectedRoute(null);
+      setRouteAlternatives([]);
+    }
+    setShowSearchResults(false);
+  };
+
+  const handleDestinationSelectDirect = async (location) => {
+    if (location) {
+      if (!location.isRecent) {
+        saveToHistory(location);
+      }
+      const prevOrigin = selectedOrigin; // Capture current origin
+      setSelectedDestination(location);
+      setDestinationQuery(location.name || '');
+      
+      // If origin is already set and both have valid coordinates, trigger route calculation
+      if (prevOrigin && location.lat && location.lng && prevOrigin.lat && prevOrigin.lng) {
+        // Only auto-calculate if directions panel is open
+        if (showDirectionsPanel) {
+          // Use a small delay to ensure state is updated, but pass locations directly
+          setTimeout(async () => {
+            await handleGetRoute({}, prevOrigin, location);
+          }, 100);
+        }
+      }
+    } else {
+      // Clear destination and routes when location is cleared
+      setSelectedDestination(null);
+      setDestinationQuery('');
+      // Clear routes when destination is cleared (route is invalid without destination)
+      setCurrentRoute(null);
+      setSelectedRoute(null);
+      setRouteAlternatives([]);
+    }
+    setShowSearchResults(false);
+  };
+
   // Swap origin and destination
-  const swapLocations = () => {
+  const swapLocations = async () => {
     const tempOrigin = selectedOrigin;
     const tempOriginQuery = originQuery;
 
@@ -982,6 +1419,20 @@ const TrafficMap = () => {
 
     setSelectedDestination(tempOrigin);
     setDestinationQuery(tempOriginQuery);
+
+    // Trigger route calculation after swap if both locations are valid
+    setTimeout(async () => {
+      const newOrigin = selectedDestination;
+      const newDestination = tempOrigin;
+      if (newOrigin && newDestination && 
+          newOrigin.lat && newOrigin.lng && 
+          newDestination.lat && newDestination.lng) {
+        // Only auto-calculate if directions panel is open
+        if (showDirectionsPanel) {
+          await handleGetRoute({}, newOrigin, newDestination);
+        }
+      }
+    }, 100);
   };
 
   // Clear selected locations
@@ -996,56 +1447,69 @@ const TrafficMap = () => {
   };
 
   // Calculate and display route with alternatives
-  const handleGetRoute = async (routeOptions = {}) => {
+  const handleGetRoute = async (routeOptions = {}, overrideOrigin = null, overrideDestination = null) => {
     // Prevent route calculation during simulation to avoid API call loops
     if (isSimulating) {
       console.log('Route calculation blocked: simulation is active');
       return;
     }
 
-    if (!selectedOrigin || !selectedDestination) {
-      
+    // Use override parameters if provided, otherwise use state
+    const origin = overrideOrigin || selectedOrigin;
+    const destination = overrideDestination || selectedDestination;
+
+    if (!origin || !destination) {
+      console.warn('Cannot calculate route: origin or destination missing', { origin, destination });
       return;
     }
 
     // Validate coordinates
-    if (!selectedOrigin.lat || !selectedOrigin.lng || !selectedDestination.lat || !selectedDestination.lng) {
-      
+    if (!origin.lat || !origin.lng || !destination.lat || !destination.lng) {
+      console.warn('Invalid location coordinates:', { origin, destination });
       alert('Invalid location coordinates. Please select valid locations.');
       return;
     }
 
+    setIsLoadingRoute(true);
     setIsLoadingData(true);
+    
     try {
-
       const defaultOptions = {
         avoidTraffic: true,
         maxAlternatives: 3,
         ...routeOptions
       };
 
+      // Calculate route using TomTom API (with Geoapify fallback built in)
       const routeData = await enhancedRoutingService.getDetailedRoute(
-        selectedOrigin.lat,
-        selectedOrigin.lng,
-        selectedDestination.lat,
-        selectedDestination.lng,
+        origin.lat,
+        origin.lng,
+        destination.lat,
+        destination.lng,
         defaultOptions
       );
 
-      
-
       if (routeData && routeData.routes && routeData.routes.length > 0) {
-        // Validate route data structure
-        const validRoutes = routeData.routes.filter(route => {
+        // Validate route data structure and ensure duration/distance are present
+        const validRoutes = routeData.routes.map(route => {
+          // Ensure route has required properties
           if (!route.route_coordinates || !Array.isArray(route.route_coordinates) || route.route_coordinates.length < 2) {
-            
-            return false;
+            return null;
           }
-          return true;
-        });
+          
+          // Ensure duration and distance are set
+          if (!route.estimated_duration_minutes && route.summary?.travelTimeInSeconds) {
+            route.estimated_duration_minutes = route.summary.travelTimeInSeconds / 60;
+          }
+          if (!route.distance_km && route.summary?.lengthInMeters) {
+            route.distance_km = route.summary.lengthInMeters / 1000;
+          }
+          
+          return route;
+        }).filter(route => route !== null);
 
         if (validRoutes.length === 0) {
-          alert('No valid routes found. Please try different locations.');
+          toast.error('No valid routes found. Please try different locations.');
           return;
         }
 
@@ -1080,12 +1544,14 @@ const TrafficMap = () => {
           }
         }
       } else {
-        alert('No route found. Please check your locations and try again.');
+        toast.error('No route found. Please check your locations and try again.');
       }
     } catch (error) {
-      
-      alert('Error calculating route. Please check your locations and try again.');
+      console.error('Route calculation error:', error);
+      toast.error('Error calculating route. Please check your locations and try again.');
+      throw error; // Re-throw to allow caller to handle
     } finally {
+      setIsLoadingRoute(false);
       setIsLoadingData(false);
     }
   };
@@ -1094,6 +1560,32 @@ const TrafficMap = () => {
   const selectRoute = (route) => {
     setSelectedRoute(route);
     setShowRouteAlternatives(false);
+    
+    // Close directions panel when selecting a route option
+    setShowDirectionsPanel(false);
+    
+    // Center map on the selected route to ensure it's visible
+    if (route && route.bounds) {
+      const { southwest, northeast } = route.bounds;
+      if (southwest && northeast && southwest[0] && southwest[1] && northeast[0] && northeast[1]) {
+        setMapCenter([
+          (southwest[0] + northeast[0]) / 2,
+          (southwest[1] + northeast[1]) / 2
+        ]);
+        setMapZoom(12);
+      }
+    } else if (route && route.route_coordinates && Array.isArray(route.route_coordinates) && route.route_coordinates.length > 0) {
+      // Fallback: use route coordinates to center map if bounds are not available
+      const coords = route.route_coordinates;
+      const lats = coords.map(coord => coord[0]).filter(lat => typeof lat === 'number' && !isNaN(lat));
+      const lngs = coords.map(coord => coord[1]).filter(lng => typeof lng === 'number' && !isNaN(lng));
+      if (lats.length > 0 && lngs.length > 0) {
+        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+        const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+        setMapCenter([centerLat, centerLng]);
+        setMapZoom(12);
+      }
+    }
   };
 
   // Get route with specific criteria
@@ -1124,6 +1616,15 @@ const TrafficMap = () => {
     
     // Hide route alternatives panel when starting navigation
     setShowRouteAlternatives(false);
+    
+    // Close directions panel when starting navigation
+    setShowDirectionsPanel(false);
+
+    // Automatically switch to light driving map theme for navigation
+    if (mapStyle !== 'light_driving') {
+      setPreviousMapStyle(mapStyle); // Save current style
+      setMapStyle('light_driving'); // Switch to light driving theme
+    }
 
     // Start GPS tracking
     startLocationTracking();
@@ -1149,11 +1650,45 @@ const TrafficMap = () => {
       clearTimeout(navigationTimeoutRef.current);
     }
 
+    // Restore previous map style when navigation stops
+    if (mapStyle === 'light_driving' && previousMapStyle !== 'light_driving') {
+      setMapStyle(previousMapStyle);
+    }
+
     // Stop GPS tracking
     stopLocationTracking();
     
     // Stop simulation if active
     stopSimulation();
+  };
+
+  // Fully clear current trip: stop navigation/simulation, close panels, clear inputs and routes
+  const clearTrip = () => {
+    // Stop any active guidance/simulation
+    stopNavigation();
+    stopSimulation();
+
+    // Reset navigation/simulation UI state
+    setIsNavigationActive(false);
+    setNavigationStep(0);
+    setNavigationPanelMinimized(true);
+    setSimulatedLocation(null);
+    setSimulationProgress(0);
+
+    // Clear routes and alternatives
+    setSelectedRoute(null);
+    setCurrentRoute(null);
+    setRouteAlternatives([]);
+    setShowRouteAlternatives(false);
+
+    // Clear input selections/queries
+    setSelectedOrigin(null);
+    setSelectedDestination(null);
+    setOriginQuery('');
+    setDestinationQuery('');
+
+    // Close any related panels
+    setShowSmartRoutePanel(false);
   };
 
   // Handle device orientation for gyroscope-based map rotation
@@ -1375,6 +1910,15 @@ const TrafficMap = () => {
     setSimulationPaused(false);
     setSimulationStartTime(new Date());
     
+    // Close directions panel when starting simulation
+    setShowDirectionsPanel(false);
+    
+    // Automatically switch to light driving map theme for simulation
+    if (mapStyle !== 'light_driving') {
+      setPreviousMapStyle(mapStyle); // Save current style
+      setMapStyle('light_driving'); // Switch to light driving theme
+    }
+    
     // Set initial simulated location to origin
     const startCoords = selectedRoute.route_coordinates[0];
     setSimulatedLocation({
@@ -1474,6 +2018,11 @@ const TrafficMap = () => {
     setSimulationPaused(false);
     setSimulationMinimized(false);
     setCurrentSimulationIndex(0);
+    
+    // Restore previous map style when simulation stops (only if navigation is not active)
+    if (!isNavigationActive && mapStyle === 'light_driving' && previousMapStyle !== 'light_driving') {
+      setMapStyle(previousMapStyle);
+    }
   };
 
   // Complete simulation and save to history
@@ -1554,6 +2103,11 @@ const TrafficMap = () => {
     setSimulationPaused(false);
     setSimulationMinimized(false);
     setCurrentSimulationIndex(0);
+    
+    // Restore previous map style when simulation completes (only if navigation is not active)
+    if (!isNavigationActive && mapStyle === 'light_driving' && previousMapStyle !== 'light_driving') {
+      setMapStyle(previousMapStyle);
+    }
     
     // Show completion modal
     setSimulationCompleteData(modalData);
@@ -1749,6 +2303,17 @@ const TrafficMap = () => {
         // This will trigger the emergency data refresh
         window.dispatchEvent(new Event('refresh-emergencies'));
       }
+      
+      // Refresh user's emergency reports list
+      if (user) {
+        try {
+          const reports = await emergencyService.getMyEmergencyReports();
+          const reportsList = Array.isArray(reports) ? reports : (reports.emergencies || []);
+          setMyEmergencyReports(reportsList);
+        } catch (err) {
+          console.error('Error refreshing emergency reports:', err);
+        }
+      }
     } catch (error) {
       
       const errorMessage = error.message || 'Failed to report incident. Please try again.';
@@ -1756,34 +2321,6 @@ const TrafficMap = () => {
     }
   };
 
-  // Create incident icon
-  const createIncidentIcon = (type) => {
-    const incidentTypes = incidentReportingService.getIncidentTypes();
-    const incidentType = incidentTypes.find(t => t.id === type) || incidentTypes[incidentTypes.length - 1];
-    
-    return L.divIcon({
-      className: 'custom-incident-marker',
-      html: `
-        <div style="
-          background-color: ${incidentType.color};
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 3px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-        ">
-          ${incidentType.icon}
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32]
-    });
-  };
 
   // 3. MULTI-STOP ROUTE PLANNING FUNCTIONS
   // Toggle multi-stop mode
@@ -1800,7 +2337,7 @@ const TrafficMap = () => {
   // Calculate multi-stop route
   const calculateMultiStopRoute = async (options = {}) => {
     try {
-      setIsLoadingData(true);
+      setIsLoadingRoute(true);
       
       const multiStopRoute = await multiStopRoutingService.calculateMultiStopRoute(
         stops,
@@ -1824,7 +2361,7 @@ const TrafficMap = () => {
       
       alert('Failed to calculate route');
     } finally {
-      setIsLoadingData(false);
+      setIsLoadingRoute(false);
     }
   };
 
@@ -1883,7 +2420,7 @@ const TrafficMap = () => {
     if (!selectedOrigin || !selectedDestination) return;
     
     try {
-      setIsLoadingData(true);
+      setIsLoadingRoute(true);
       
       const weatherRoute = await weatherAwareRoutingService.getWeatherAwareRoute(
         selectedOrigin.lat,
@@ -1911,7 +2448,7 @@ const TrafficMap = () => {
         handleGetRoute();
       }
     } finally {
-      setIsLoadingData(false);
+      setIsLoadingRoute(false);
     }
   };
 
@@ -1975,7 +2512,15 @@ const TrafficMap = () => {
 
   return (
     <ErrorBoundary>
-      <div className="traffic-map-container fixed inset-0 w-full h-screen bg-gray-900 overflow-y-auto" style={{ zIndex: 9999, touchAction: 'pan-y' }}>
+      <div 
+        className="traffic-map-container fixed inset-0 w-full min-h-screen bg-gray-900 overflow-y-auto" 
+        style={{ 
+          zIndex: 9999, 
+          touchAction: 'pan-y',
+          height: '100dvh',
+          minHeight: '-webkit-fill-available' // iOS Safari fallback
+        }}
+      >
       {/* Full Screen Backdrop - Covers everything including navbar */}
       <div className="absolute inset-0 bg-gray-900" style={{ zIndex: 0 }}></div>
       
@@ -2040,138 +2585,25 @@ const TrafficMap = () => {
             />
           )}
 
-          {/* Temporary highlight when selecting from Insights */}
-          {highlightedIncident && (
-            <>
-              <Circle
-                center={[highlightedIncident.lat, highlightedIncident.lng]}
-                radius={120}
-                pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15, weight: 2 }}
-              />
-              <Marker position={[highlightedIncident.lat, highlightedIncident.lng]} icon={createCustomIcon('#3b82f6', 'pin')}>
-                <Tooltip direction="top" offset={[0, -10]} opacity={1} permanent>
-                  <div className="text-xs font-semibold text-gray-900">
-                    {highlightedIncident.title || 'Selected incident'}
-                  </div>
-                </Tooltip>
-              </Marker>
-            </>
-          )}
-
           {/* 3D Map Visualization removed */}
 
-
-          {/* Origin Marker */}
-          {selectedOrigin && (
-            <Marker
-              position={[selectedOrigin.lat, selectedOrigin.lng]}
-              icon={createCustomIcon('#4285f4', 'pin')}
-            >
-              <Popup>
-                <div className="p-2">
-                  <h3 className="font-semibold text-sm">Origin</h3>
-                  <p className="text-xs text-gray-600">{selectedOrigin.name}</p>
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* Destination Marker */}
-          {selectedDestination && (
-            <Marker
-              position={[selectedDestination.lat, selectedDestination.lng]}
-              icon={createCustomIcon('#ea4335', 'pin')}
-            >
-              <Popup>
-                <div className="p-2">
-                  <h3 className="font-semibold text-sm">Destination</h3>
-                  <p className="text-xs text-gray-600">{selectedDestination.name}</p>
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* User Location Marker with Custom Icon */}
-          {userLocation && !isSimulating && (
-            <Marker
-              position={[userLocation.lat, userLocation.lng]}
-              icon={createNavigationIcon(navigationIcon, userHeading)}
-              rotationAngle={userHeading}
-              rotationOrigin="center"
-            >
-              <Popup>
-                <div className="p-2">
-                  <h3 className="font-semibold text-sm">Your Location</h3>
-                  <p className="text-xs text-gray-600">
-                    Accuracy: ±{Math.round(userLocation.accuracy)}m
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {new Date(userLocation.timestamp).toLocaleTimeString()}
-                  </p>
-                  {gyroscopeEnabled && (
-                    <p className="text-xs text-blue-600 mt-1">
-                      🧭 Heading: {Math.round(userHeading)}°
-                    </p>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* Simulated Location Marker */}
-          {simulatedLocation && isSimulating && (
-            <Marker
-              position={[simulatedLocation.lat, simulatedLocation.lng]}
-              icon={createNavigationIcon(navigationIcon, userHeading)}
-              rotationAngle={userHeading}
-              rotationOrigin="center"
-            >
-              <Popup>
-                <div className="p-2">
-                  <h3 className="font-semibold text-sm">🚗 Simulated Position</h3>
-                  <p className="text-xs text-gray-600">
-                    Progress: {Math.round(simulationProgress)}%
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Speed: {simulationSpeed}x
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* NEW: Incident Markers */}
-          {emergencyEnabled && nearbyIncidents.map((incident) => (
-            <Marker
-              key={incident.id}
-              position={[incident.location.lat, incident.location.lng]}
-              icon={createIncidentIcon(incident.type)}
-            >
-              <Popup>
-                <div className="p-2">
-                  <h3 className="font-semibold text-sm capitalize">{incident.type.replace('_', ' ')}</h3>
-                  <p className="text-xs text-gray-600 mt-1">{incident.description}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {incident.distance ? `${incident.distance.toFixed(1)} km away` : ''}
-                  </p>
-                  <div className="flex items-center space-x-2 mt-2">
-                    <button 
-                      onClick={() => incidentReportingService.upvoteIncident(incident.id, user?.uid)}
-                      className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
-                    >
-                      👍 {incident.upvotes || 0}
-                    </button>
-                    <button 
-                      onClick={() => incidentReportingService.downvoteIncident(incident.id, user?.uid)}
-                      className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                    >
-                      👎 {incident.downvotes || 0}
-                    </button>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {/* Map Markers - All markers rendered here */}
+          <MapMarkers
+            selectedOrigin={selectedOrigin}
+            selectedDestination={selectedDestination}
+            userLocation={userLocation}
+            simulatedLocation={simulatedLocation}
+            isSimulating={isSimulating}
+            navigationIcon={navigationIcon}
+            userHeading={userHeading}
+            nearbyIncidents={nearbyIncidents}
+            emergencyEnabled={emergencyEnabled}
+            highlightedIncident={highlightedIncident}
+            user={user}
+            simulationProgress={simulationProgress}
+            simulationSpeed={simulationSpeed}
+            gyroscopeEnabled={gyroscopeEnabled}
+          />
 
           {/* Map Layer Components - All marker rendering is now handled by these components */}
           <WeatherLayer weatherAlerts={nearbyWeatherAlerts} enabled={weatherEnabled} />
@@ -2293,777 +2725,167 @@ const TrafficMap = () => {
         }
       )()}
 
-      {/* Compact Mobile-First Search Bar - Auto-Hide When Navigating */}
-      <div 
-        className={`absolute transition-all duration-300 ease-out ${
-          showSidePanel
-            ? 'left-80 right-4 sm:left-96 sm:right-6'
-            : (showHistoryPanel
-              ? 'left-72 right-4 sm:left-80 sm:right-6'
-              : 'left-2 right-2 sm:left-4 sm:right-4')
-        } top-2 sm:top-4 ${
-          isNavigationActive && !searchBarVisible
-            ? 'opacity-0 pointer-events-none translate-y-[-100%]'
-            : 'opacity-100 translate-y-0'
-        }`} 
-        style={{ zIndex: 40 }}
-      >
-        <div className="flex items-center justify-center space-x-2 max-w-5xl mx-auto">
-          {/* Hamburger Menu - Compact */}
-          <button
-            onClick={() => setShowSidePanel(!showSidePanel)}
-            className="bg-white/80 backdrop-blur-lg hover:bg-white rounded-full p-2.5 sm:p-3 flex-shrink-0 border border-white/50 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 min-w-[40px] min-h-[40px] flex items-center justify-center z-50"
-            style={{ zIndex: 41 }}
-          >
-            <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
-          </button>
-
-          {/* Compact Search Input - Single Row Design */}
-          <div ref={searchPanelRef} className="flex-1 max-w-3xl bg-white/75 backdrop-blur-xl backdrop-saturate-150 rounded-2xl shadow-xl border border-white/40 overflow-hidden transition-all duration-300">
-            {/* Compact Single Row Search */}
-            <div className="flex items-center px-3 py-2.5 sm:px-4 sm:py-3">
-              {/* Origin - Compact */}
-              <div className="flex items-center space-x-2 flex-1 min-w-0">
-                <div className="w-2.5 h-2.5 bg-blue-500 rounded-full flex-shrink-0"></div>
-                <input
-                  type="text"
-                  placeholder={selectedOrigin ? selectedOrigin.name : "From..."}
-                  value={originQuery}
-                  onChange={(e) => {
-                    setOriginQuery(e.target.value);
-                    setSearchMode('origin');
-                    setShowSuggestions(false);
-                    handleSearch(e.target.value, 'origin');
-                  }}
-                  onFocus={() => {
-                    setSearchMode('origin');
-                    setShowSuggestions(true);
-                    if (!originQuery) setShowSearchResults(true);
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => setShowSuggestions(false), 200);
-                  }}
-                  className="flex-1 text-sm sm:text-base text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none min-w-0"
-                />
-                {selectedOrigin && (
-                  <button
-                    onClick={() => setSelectedOrigin(null)}
-                    className="p-1 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
-                  >
-                    <X className="w-3 h-3 text-gray-400 hover:text-red-500" />
-                  </button>
-                )}
-              </div>
-
-              {/* Divider */}
-              <div className="w-px h-6 bg-gray-300 mx-2"></div>
-
-              {/* Destination - Compact */}
-              <div className="flex items-center space-x-2 flex-1 min-w-0">
-                <div className="w-2.5 h-2.5 bg-red-500 rounded-full flex-shrink-0"></div>
-                <input
-                  type="text"
-                  placeholder={selectedDestination ? selectedDestination.name : "To..."}
-                  value={destinationQuery}
-                  onChange={(e) => {
-                    setDestinationQuery(e.target.value);
-                    setSearchMode('destination');
-                    setShowSuggestions(false);
-                    handleSearch(e.target.value, 'destination');
-                  }}
-                  onFocus={() => {
-                    setSearchMode('destination');
-                    setShowSuggestions(true);
-                    if (!destinationQuery) setShowSearchResults(true);
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => setShowSuggestions(false), 200);
-                  }}
-                  className="flex-1 text-sm sm:text-base text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none min-w-0"
-                />
-                {selectedDestination && (
-                  <button
-                    onClick={() => setSelectedDestination(null)}
-                    className="p-1 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
-                  >
-                    <X className="w-3 h-3 text-gray-400 hover:text-red-500" />
-                  </button>
-                )}
-              </div>
-
-              {/* Action Buttons - Compact */}
-              <div className="ml-2 flex items-center space-x-1.5 flex-shrink-0">
-                {selectedOrigin && selectedDestination ? (
-                  <button
-                    onClick={() => setShowSmartRoutePanel(true)}
-                    disabled={isLoadingData || isSimulating}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-semibold transition-all disabled:opacity-50 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
-                    title={isSimulating ? "Finish simulation first" : "Smart Route Planning"}
-                  >
-                    {isLoadingData ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4" />
-                        <span>Go</span>
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowSmartRoutePanel(true)}
-                    disabled={isSimulating}
-                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-3 sm:px-4 py-2 rounded-xl text-sm sm:text-base font-semibold transition-all disabled:opacity-50 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
-                    title={isSimulating ? "Finish simulation first" : "Smart Route Planning"}
-                  >
-                    <Zap className="w-4 h-4" />
-                    <span>Smart</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Enhanced Search Results - Modern Dropdown with Glassmorphism */}
-            {showSearchResults && (
-              <div className="border-t border-gray-200/30 bg-white/95 backdrop-blur-xl backdrop-saturate-150 max-h-80 overflow-y-auto shadow-2xl animate-slide-down">
-                {/* Quick Actions Section - Enhanced */}
-                <div className="px-4 py-3 bg-gradient-to-r from-blue-50/90 to-blue-100/90 backdrop-blur-sm border-b border-blue-200/50">
-                  <button
-                    onClick={() => getCurrentLocation(searchMode)}
-                    className="w-full min-h-[56px] flex items-center space-x-3 p-3 hover:bg-white/80 rounded-xl transition-all duration-300 ease-out text-left group relative overflow-hidden touch-feedback"
-                  >
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center group-hover:from-blue-600 group-hover:to-blue-700 transition-all duration-300 shadow-lg group-hover:shadow-xl group-hover:scale-110">
-                      <Target className="w-5 h-5 text-white transition-transform duration-300 group-hover:scale-110" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900 transition-colors duration-200 group-hover:text-blue-700">Use current location</p>
-                      <p className="text-xs text-gray-600">
-                        Set as {searchMode === 'origin' ? 'starting point' : 'destination'}
-                      </p>
-                    </div>
-                    <span className="absolute inset-0 rounded-xl bg-blue-500/10 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-                  </button>
-                </div>
-
-                {/* Las Piñas City Suggestions - Show when field is empty */}
-                {showSuggestions && (originQuery === '' || destinationQuery === '') && (
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 flex items-center">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      Popular Places in Las Piñas City
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {lasPinasSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => {
-                            const location = {
-                              name: suggestion.name,
-                              lat: suggestion.lat,
-                              lng: suggestion.lng,
-                              address: {
-                                full: `${suggestion.name}, Las Piñas City`,
-                                city: 'Las Piñas',
-                                country: 'Philippines'
-                              },
-                              type: suggestion.category.toLowerCase(),
-                              isSuggestion: true
-                            };
-                            handleLocationSelect(location);
-                            setShowSuggestions(false);
-                          }}
-                          className="w-full min-h-[56px] flex items-center space-x-3 p-3 hover:bg-gradient-to-r hover:from-blue-50/80 hover:to-transparent rounded-xl transition-all duration-300 ease-out text-left group border border-gray-100/50 hover:border-blue-200 bg-white/80 backdrop-blur-sm relative overflow-hidden touch-feedback"
-                          style={{ animationDelay: `${index * 50}ms` }}
-                        >
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center group-hover:from-blue-600 group-hover:to-blue-700 transition-all duration-300 shadow-md group-hover:shadow-lg group-hover:scale-110 text-lg flex-shrink-0">
-                            {suggestion.icon}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate transition-colors duration-200 group-hover:text-blue-700">{suggestion.name}</p>
-                            <p className="text-xs text-gray-500 truncate">{suggestion.category} • Las Piñas City</p>
-                          </div>
-                          <span className="absolute inset-0 rounded-xl bg-blue-500/10 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Recent Searches */}
-                {recentSearches.length > 0 && (
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 flex items-center">
-                      <History className="w-4 h-4 mr-2" />
-                      Recent Searches
-                    </div>
-                    <div className="space-y-2">
-                      {recentSearches.slice(0, 3).map((recent, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleLocationSelect(recent)}
-                          className="w-full min-h-[56px] flex items-center space-x-3 p-3 hover:bg-gradient-to-r hover:from-gray-50/80 hover:to-transparent rounded-xl transition-all duration-300 ease-out text-left group border border-gray-100/50 hover:border-gray-200 bg-white/60 backdrop-blur-sm relative overflow-hidden touch-feedback"
-                        >
-                          <div className="w-8 h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300 shadow-sm group-hover:shadow-md group-hover:scale-110">
-                            <History className="w-4 h-4 text-gray-500 transition-transform duration-300 group-hover:scale-110" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate transition-colors duration-200 group-hover:text-gray-700">{recent.name}</p>
-                            {recent.address?.full && (
-                              <p className="text-xs text-gray-500 truncate">{recent.address.full}</p>
-                            )}
-                          </div>
-                          <span className="absolute inset-0 rounded-xl bg-gray-500/10 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Search Results */}
-                {searchResults.filter(result => !result.isRecent).length > 0 && (
-                  <div className="px-4 py-3">
-                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3 flex items-center">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      {searchResults.some(r => r.isPriority) ? 'Las Piñas & Nearby' : 'Search Results'}
-                    </div>
-                    <div className="space-y-2">
-                      {searchResults.filter(result => !result.isRecent).map((result, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleLocationSelect(result)}
-                          className={`w-full min-h-[56px] flex items-center space-x-3 p-3 hover:bg-gradient-to-r hover:from-blue-50/80 hover:to-transparent rounded-xl transition-all duration-300 ease-out text-left group border relative overflow-hidden touch-feedback ${
-                            result.isPriority 
-                              ? 'border-blue-200/50 bg-blue-50/40 backdrop-blur-sm hover:border-blue-300' 
-                              : 'border-gray-100/50 bg-white/60 backdrop-blur-sm hover:border-blue-200'
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm group-hover:shadow-md group-hover:scale-110 ${
-                            result.isPriority
-                              ? 'bg-gradient-to-br from-blue-500 to-blue-600 group-hover:from-blue-600 group-hover:to-blue-700'
-                              : 'bg-gradient-to-br from-blue-100 to-blue-200 group-hover:from-blue-200 group-hover:to-blue-300'
-                          }`}>
-                            <MapPin className={`w-4 h-4 transition-transform duration-300 group-hover:scale-110 ${result.isPriority ? 'text-white' : 'text-blue-600'}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2">
-                              <p className={`text-sm font-semibold truncate transition-colors duration-200 ${result.isPriority ? 'text-gray-900 group-hover:text-blue-700' : 'text-gray-900 group-hover:text-gray-700'}`}>{result.name}</p>
-                              {result.isPriority && (
-                                <span className="px-2 py-0.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium flex-shrink-0 shadow-sm">
-                                  Las Piñas
-                                </span>
-                              )}
-                            </div>
-                            {result.address?.full && (
-                              <p className="text-xs text-gray-500 truncate">{result.address.full}</p>
-                            )}
-                          </div>
-                          <span className="absolute inset-0 rounded-xl bg-blue-500/10 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Enhanced Search Panel */}
+      <div onClick={(e) => {
+        if (showSearchResults && !searchPanelRef.current?.contains(e.target)) {
+          setShowSearchResults(false);
+          setShowSuggestions(false);
+        }
+      }}>
+        <EnhancedSearchPanel
+          selectedOrigin={selectedOrigin}
+          selectedDestination={selectedDestination}
+          originQuery={originQuery}
+          destinationQuery={destinationQuery}
+          onOriginChange={setOriginQuery}
+          onDestinationChange={setDestinationQuery}
+          onOriginSelect={handleOriginSelectDirect}
+          onDestinationSelect={handleDestinationSelectDirect}
+          onGetCurrentLocation={getCurrentLocation}
+          onShowSmartRoutePanel={() => setShowSmartRoutePanel(true)}
+          onToggleSidePanel={() => setShowSidePanel(!showSidePanel)}
+          isLoadingRoute={isLoadingRoute}
+          isSimulating={isSimulating}
+          showSidePanel={showSidePanel}
+          showHistoryPanel={showHistoryPanel}
+          isNavigationActive={isNavigationActive}
+          searchBarVisible={searchBarVisible}
+          recentSearches={recentSearches}
+          lasPinasSuggestions={lasPinasSuggestions}
+          onSearchPanelRef={(ref) => { searchPanelRef.current = ref?.current; }}
+          onShowPlaceInfo={handleShowPlaceInfo}
+        />
       </div>
 
-      {/* Bottom Right Controls - Modern Floating Buttons - Mobile Optimized */}
-      <div className="absolute bottom-6 right-5 flex flex-col space-y-3 animate-fade-in" style={{ zIndex: 40 }}>
-        {/* Simulation Status Indicator - Modern Pill */}
-        {isSimulating && (
-          <div className="modern-pill bg-white rounded-full shadow-2xl px-4 py-3 transition-all duration-200 border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
-            <div className="flex items-center space-x-2">
-              <div className="w-2.5 h-2.5 rounded-full shadow-md bg-green-500 animate-pulse"></div>
-              <span className="text-sm font-bold text-green-700">
-                {simulationSpeed}x
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* GPS Status Indicator - Modern Pill */}
-        {!isSimulating && (
-          <div className={`modern-pill bg-white rounded-full shadow-2xl px-4 py-3 transition-all duration-200 border ${
-            isTrackingLocation
-              ? 'border-green-200 bg-gradient-to-r from-green-50 to-emerald-50'
-              : 'border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50'
-          }`}>
-            <div className="flex items-center space-x-2">
-              <div className={`w-2.5 h-2.5 rounded-full shadow-md ${
-                isTrackingLocation ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-              }`}></div>
-              <span className={`text-sm font-bold ${
-                isTrackingLocation ? 'text-green-700' : 'text-gray-600'
-              }`}>
-                GPS
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation Toggle - Large Floating Action Button - Enhanced */}
-        {selectedRoute && !isSimulating && (
-          <button
-            onClick={isNavigationActive ? stopNavigation : startNavigation}
-            className={`min-w-[64px] min-h-[64px] rounded-full shadow-2xl p-5 transition-all duration-300 ease-out transform hover:scale-110 active:scale-95 relative overflow-hidden group ${
-              isNavigationActive
-                ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 hover:from-red-600 hover:via-red-700 hover:to-red-800 text-white'
-                : 'bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 hover:from-blue-600 hover:via-blue-700 hover:to-blue-800 text-white'
-            }`}
-          >
-            <div className="relative z-10">
-              {isNavigationActive ? (
-                <Pause className="w-7 h-7 transition-transform duration-300 group-hover:scale-110" />
-              ) : (
-                <Play className="w-7 h-7 transition-transform duration-300 group-hover:scale-110" />
-              )}
-            </div>
-            <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-            {/* Pulse ring for active navigation */}
-            {isNavigationActive && (
-              <span className="absolute inset-0 rounded-full border-2 border-white/30 animate-ping"></span>
-            )}
-          </button>
-        )}
-      </div>
+      {/* Map Controls - GPS Status, Navigation Toggle, and FAB buttons */}
+      <MapControls
+        isNavigationActive={isNavigationActive}
+        isSimulating={isSimulating}
+        isTrackingLocation={isTrackingLocation}
+        simulationSpeed={simulationSpeed}
+        selectedRoute={selectedRoute}
+        onStartNavigation={startNavigation}
+        onStopNavigation={stopNavigation}
+        onShowIncidentModal={setShowIncidentModal}
+        onSetShowAuthPrompt={setShowAuthPrompt}
+        onSetWeatherEnabled={setWeatherEnabled}
+        weatherEnabled={weatherEnabled}
+        onSetShowSecondaryActions={setShowSecondaryActions}
+        showSecondaryActions={showSecondaryActions}
+        onSetShowPredictionsPanel={setShowPredictionsPanel}
+        onSetIsMiniOpen={setIsMiniOpen}
+        onToggleMultiStopMode={toggleMultiStopMode}
+        multiStopMode={multiStopMode}
+        isGuest={isGuest}
+        onSetVoiceEnabled={setVoiceEnabled}
+        voiceEnabled={voiceEnabled}
+      />
 
       {/* Simulation Control Panel */}
-      {isSimulating && (
-        <div className={`absolute left-2 right-2 sm:left-4 sm:right-4 z-40 transition-all duration-300 ${
-          simulationMinimized ? 'bottom-4' : 'bottom-20 sm:bottom-24'
-        }`}>
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200">
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
-                  <Car className="w-5 h-5 text-green-600" />
-                  <span>Travel Simulation</span>
-                </h3>
-                {!simulationMinimized && (
-                  <div className="text-sm text-gray-600 mt-1 truncate">
-                    {selectedOrigin?.name} → {selectedDestination?.name}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setSimulationMinimized(!simulationMinimized)}
-                  className="p-2 hover:bg-green-200 rounded-full transition-colors"
-                  title={simulationMinimized ? 'Maximize' : 'Minimize'}
-                >
-                  {simulationMinimized ? <ChevronUp className="w-5 h-5 text-gray-600" /> : <ChevronDown className="w-5 h-5 text-gray-600" />}
-                </button>
-                <button
-                  onClick={stopSimulation}
-                  className="p-2 hover:bg-green-200 rounded-full transition-colors"
-                  title="Stop simulation"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-            </div>
+      <SimulationPanel
+        isSimulating={isSimulating}
+        simulationProgress={simulationProgress}
+        simulationPaused={simulationPaused}
+        simulationSpeed={simulationSpeed}
+        simulationMinimized={simulationMinimized}
+        selectedOrigin={selectedOrigin}
+        selectedDestination={selectedDestination}
+        selectedRoute={selectedRoute}
+        currentStep={currentStep}
+        onTogglePause={toggleSimulationPause}
+        onChangeSpeed={changeSimulationSpeed}
+        onStop={stopSimulation}
+        onToggleMinimize={() => setSimulationMinimized(!simulationMinimized)}
+      />
 
-            {/* Progress Bar */}
-            {!simulationMinimized && (
-            <div className="p-4">
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                <span>Progress</span>
-                <span>{Math.round(simulationProgress)}%</span>
-              </div>
-              <div className="bg-gray-200 rounded-full h-3 overflow-hidden mb-4">
-                <div
-                  className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-300 ease-out relative"
-                  style={{ width: `${simulationProgress}%` }}
-                >
-                  <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                </div>
-              </div>
+      {/* Enhanced Navigation Panel */}
+      <EnhancedNavigationPanel
+        isNavigationActive={isNavigationActive}
+        selectedRoute={selectedRoute}
+        navigationStep={navigationStep}
+        navigationPanelMinimized={navigationPanelMinimized}
+        onToggleMinimize={() => setNavigationPanelMinimized(!navigationPanelMinimized)}
+        onClearTrip={clearTrip}
+        gyroscopeEnabled={gyroscopeEnabled}
+        onToggleGyroscope={() => setGyroscopeEnabled(!gyroscopeEnabled)}
+        currentStep={currentStep}
+        nextStep={nextStep}
+      />
 
-              {/* Controls */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={toggleSimulationPause}
-                    className={`p-3 rounded-lg transition-colors border-2 ${
-                      simulationPaused
-                        ? 'bg-green-50 border-green-300 text-green-600 hover:bg-green-100'
-                        : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-                    }`}
-                    title={simulationPaused ? 'Resume' : 'Pause'}
-                  >
-                    {simulationPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
-                  </button>
-                </div>
+      {/* Route Alternatives Panel */}
+      <RouteAlternativesPanel
+        routeAlternatives={routeAlternatives}
+        selectedRoute={selectedRoute}
+        onSelectRoute={selectRoute}
+        onClose={() => setShowRouteAlternatives(false)}
+        showRouteAlternatives={showRouteAlternatives}
+        isNavigationActive={isNavigationActive}
+        showSmartRoutePanel={showSmartRoutePanel}
+      />
 
-                {/* Speed Controls */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs text-gray-600 mr-2">Speed:</span>
-                  {[1, 2, 5, 10].map(speed => (
-                    <button
-                      key={speed}
-                      onClick={() => changeSimulationSpeed(speed)}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                        simulationSpeed === speed
-                          ? 'bg-green-600 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {speed}x
-                    </button>
-                  ))}
-                </div>
-              </div>
+      {/* Place Info Panel */}
+      <PlaceInfoPanel
+        place={selectedPlace}
+        isOpen={showPlaceInfoPanel}
+        isLoadingDirections={isLoadingData}
+        onClose={() => {
+          setShowPlaceInfoPanel(false);
+          setSelectedPlace(null);
+          // Clear routes when panel is closed by clicking outside
+          // Only clear if directions panel is also closed (routes were from place info)
+          if (!showDirectionsPanel) {
+            setCurrentRoute(null);
+            setSelectedRoute(null);
+            setRouteAlternatives([]);
+          }
+        }}
+        onDirections={handlePlaceDirections}
+        onStart={handlePlaceStart}
+        onCall={handlePlaceCall}
+        onSave={handlePlaceSave}
+        onShare={handlePlaceShare}
+        currentLocation={userLocation}
+        estimatedTravelTime={userLocation && selectedPlace && selectedPlace.lat && selectedPlace.lng ? 
+          (() => {
+            // Better travel time estimation using Haversine formula
+            const R = 6371; // Earth's radius in km
+            const dLat = (selectedPlace.lat - userLocation.lat) * Math.PI / 180;
+            const dLng = (selectedPlace.lng - userLocation.lng) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(userLocation.lat * Math.PI / 180) * Math.cos(selectedPlace.lat * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            // Estimate travel time: assume average speed of 30 km/h in city
+            const estimatedMinutes = Math.round((distance / 30) * 60);
+            return estimatedMinutes;
+          })() : null
+        }
+      />
 
-              {/* Current Step Info */}
-              {currentStep && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center border border-green-200">
-                      <span className="text-xl">
-                        {enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type)}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">{currentStep.instruction}</p>
-                      {currentStep.street_name && (
-                        <p className="text-xs text-gray-600">on {currentStep.street_name}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Trip Info */}
-              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {enhancedRoutingService.formatDistance(selectedRoute.distance_km * 1000)}
-                  </div>
-                  <div className="text-xs text-gray-500">Distance</div>
-                </div>
-                <div>
-                  <div className="text-lg font-semibold text-gray-900">
-                    {enhancedRoutingService.formatDuration(selectedRoute.estimated_duration_minutes)}
-                  </div>
-                  <div className="text-xs text-gray-500">Duration</div>
-                </div>
-                <div>
-                  <div className="text-lg font-semibold text-green-600">
-                    {Math.round(simulationProgress)}%
-                  </div>
-                  <div className="text-xs text-gray-500">Complete</div>
-                </div>
-              </div>
-            </div>
-            )}
-            
-            {/* Minimized View - Just Progress Bar */}
-            {simulationMinimized && (
-              <div className="p-3">
-                <div className="flex items-center space-x-3">
-                  <div className="flex-1">
-                    <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${simulationProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700 min-w-[3rem] text-right">
-                    {Math.round(simulationProgress)}%
-                  </span>
-                  <button
-                    onClick={toggleSimulationPause}
-                    className="p-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200"
-                  >
-                    {simulationPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Collapsible Navigation Panel - Swipeable Bottom Sheet */}
-      {isNavigationActive && !isSimulating && selectedRoute && (
-        <div className="absolute bottom-0 left-0 right-0 z-50">
-          {/* Swipe Handle */}
-          <div className="flex justify-center pt-2 pb-1">
-            <button
-              onClick={() => setNavigationPanelMinimized(!navigationPanelMinimized)}
-              className="w-12 h-1 bg-gray-300 rounded-full hover:bg-gray-400 transition-colors"
-            />
-          </div>
-
-          {/* Minimized Bar - Always Visible */}
-          <div className={`bg-white/90 backdrop-blur-xl border-t border-gray-200 shadow-2xl transition-all duration-300 ${
-            navigationPanelMinimized ? 'rounded-t-2xl' : ''
-          }`}>
-            <div className={`transition-all duration-300 ${
-              navigationPanelMinimized ? 'p-3' : 'p-4'
-            }`}>
-              {navigationPanelMinimized ? (
-                /* Minimized View - Compact Info Bar */
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center border-2 border-blue-200 flex-shrink-0">
-                      <span className="text-xl">
-                        {currentStep ? enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type) : '→'}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">
-                        {currentStep ? currentStep.instruction : 'Navigation active'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {currentStep ? (
-                          <>
-                            {enhancedRoutingService.formatDistance(currentStep.distance_meters || 0)} • {enhancedRoutingService.formatDuration((currentStep.travel_time_seconds || 0) / 60)}
-                          </>
-                        ) : (
-                          selectedRoute ? `${selectedRoute.distance_km?.toFixed(1) || 0} km • ${Math.round(selectedRoute.estimated_duration_minutes || 0)} min` : ''
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 flex-shrink-0">
-                    <button
-                      onClick={() => setNavigationPanelMinimized(false)}
-                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                      <ChevronUp className="w-5 h-5 text-gray-600" />
-                    </button>
-                    <button
-                      onClick={stopNavigation}
-                      className="p-2 hover:bg-red-100 rounded-full transition-colors"
-                    >
-                      <X className="w-5 h-5 text-red-600" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Expanded View - Full Navigation Details */
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">Turn-by-turn navigation</h3>
-                      <div className="text-sm text-gray-500">
-                        Step {navigationStep + 1} of {selectedRoute ? selectedRoute.steps.length : 0}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setGyroscopeEnabled(!gyroscopeEnabled)}
-                        className={`p-2 rounded-full transition-colors ${
-                          gyroscopeEnabled 
-                            ? 'bg-blue-500 text-white' 
-                            : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        <Navigation className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => setNavigationPanelMinimized(true)}
-                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                      >
-                        <ChevronDown className="w-5 h-5 text-gray-600" />
-                      </button>
-                      <button
-                        onClick={stopNavigation}
-                        className="p-2 hover:bg-red-100 rounded-full transition-colors"
-                      >
-                        <X className="w-5 h-5 text-red-600" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Current Instruction */}
-                  {currentStep ? (
-                    <div className="mb-4">
-                      <div className="flex items-start space-x-4">
-                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center border-2 border-blue-200 flex-shrink-0">
-                          <span className="text-3xl">
-                            {enhancedRoutingService.getManeuverIcon(currentStep.maneuver_type || 'straight')}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-lg font-semibold text-gray-900 leading-tight mb-1">
-                            {currentStep.instruction || 'Continue on route'}
-                          </p>
-                          {currentStep.street_name && (
-                            <p className="text-sm text-gray-600 mb-2">
-                              on {currentStep.street_name}
-                            </p>
-                          )}
-                          <div className="flex items-center space-x-2 text-sm">
-                            <span className="text-gray-500">
-                              {enhancedRoutingService.formatDistance(currentStep.distance_meters || 0)}
-                            </span>
-                            <span className="text-gray-400">•</span>
-                            <span className="text-gray-500">
-                              {enhancedRoutingService.formatDuration((currentStep.travel_time_seconds || 0) / 60)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mb-4 p-4 bg-blue-50 rounded-xl">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Navigation className="w-6 h-6 text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-gray-900">Navigation Active</p>
-                          <p className="text-xs text-gray-600">
-                            {selectedRoute ? (
-                              <>
-                                {selectedRoute.distance_km?.toFixed(1) || 0} km • {Math.round(selectedRoute.estimated_duration_minutes || 0)} min
-                              </>
-                            ) : (
-                              'Route information loading...'
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Next Instruction Preview */}
-                  {nextStep && (
-                    <div className="p-3 bg-gray-50 rounded-xl mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
-                          <span className="text-sm">
-                            {enhancedRoutingService.getManeuverIcon(nextStep.maneuver_type)}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-700">Next: {nextStep.instruction}</p>
-                          {nextStep.street_name && (
-                            <p className="text-xs text-gray-500">on {nextStep.street_name}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Progress Bar */}
-                  <div>
-                    <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                      <span>Progress</span>
-                      <span>
-                        {Math.round(((navigationStep + 1) / (selectedRoute ? selectedRoute.steps.length : 1)) * 100)}%
-                      </span>
-                    </div>
-                    <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-700"
-                        style={{ width: `${((navigationStep + 1) / (selectedRoute ? selectedRoute.steps.length : 1)) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Route Alternatives Panel - Modern Design - Responsive */}
-      {showRouteAlternatives && routeAlternatives.length > 0 && !isNavigationActive && !showSmartRoutePanel && (
-        <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-80 sm:max-h-96">
-            <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Choose Route</h3>
-                <button
-                  onClick={() => setShowRouteAlternatives(false)}
-                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-600" />
-                </button>
-              </div>
-            </div>
-
-            <div className="max-h-80 overflow-y-auto">
-              {routeAlternatives.map((route, index) => {
-                const isSelected = selectedRoute && selectedRoute.route_id === route.route_id;
-                return (
-                  <button
-                    key={route.route_id || index}
-                    onClick={() => selectRoute(route)}
-                    className={`w-full p-4 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors ${
-                      isSelected ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
-                    }`}
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        isSelected ? 'bg-blue-600 text-white' :
-                        index === 0 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {isSelected ? '✓' : index === 0 ? '🏆' : index + 1}
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="text-sm font-semibold text-gray-900">
-                            {route.route_name || `Alternative ${index + 1}`}
-                          </span>
-                          {isSelected && (
-                            <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-                              Selected
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-4 mb-2">
-                          <div className="flex items-center space-x-2">
-                            <Clock className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm font-medium text-gray-900">
-                              {enhancedRoutingService.formatDuration(route.estimated_duration_minutes)}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <Route className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm text-gray-700">
-                              {enhancedRoutingService.formatDistance(route.distance_km * 1000)}
-                            </span>
-                          </div>
-
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            route.traffic_conditions === 'heavy' ? 'bg-red-100 text-red-700' :
-                            route.traffic_conditions === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
-                          }`}>
-                            {route.traffic_conditions || 'Light'} traffic
-                          </div>
-                        </div>
-
-                        {route.hasTolls && (
-                          <div className="flex items-center space-x-1 mb-1">
-                            <span className="text-xs text-gray-500">💰 Has tolls</span>
-                          </div>
-                        )}
-
-                        {route.has_highways && (
-                          <div className="flex items-center space-x-1">
-                            <span className="text-xs text-gray-500">🛣️ Highway route</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Directions Panel */}
+      <DirectionsPanel
+        isOpen={showDirectionsPanel}
+        onClose={() => {
+          setShowDirectionsPanel(false);
+        }}
+        origin={selectedOrigin}
+        destination={selectedDestination}
+        routes={routeAlternatives.length > 0 ? routeAlternatives : (currentRoute?.routes || [])}
+        selectedRoute={selectedRoute}
+        onSelectRoute={selectRoute}
+        onStartNavigation={startNavigation}
+        onStartSimulation={startSimulation}
+        routeTrafficData={routeTrafficData}
+        isMinimized={directionsPanelMinimized}
+        onToggleMinimize={() => setDirectionsPanelMinimized(!directionsPanelMinimized)}
+        onOriginChange={setOriginQuery}
+        onDestinationChange={setDestinationQuery}
+        onOriginSelect={handleOriginSelectDirect}
+        onDestinationSelect={handleDestinationSelectDirect}
+        onSwapLocations={swapLocations}
+        onGetCurrentLocation={getCurrentLocation}
+      />
 
       {/* Route Found Panel removed - functionality moved to Smart Route Panel */}
 
@@ -3083,6 +2905,8 @@ const TrafficMap = () => {
           onBackToDashboard={() => navigate('/dashboard')}
           travelHistory={travelHistory}
           onOpenHistory={() => { setShowHistoryPanel(!showHistoryPanel); setShowSidePanel(false); }}
+          onOpenEmergencyReports={() => { setShowEmergencyReportsPanel(!showEmergencyReportsPanel); setShowSidePanel(false); }}
+          myEmergencyReports={myEmergencyReports}
           heatmapEnabled={heatmapEnabled}
           setHeatmapEnabled={setHeatmapEnabled}
           trafficLayerEnabled={trafficLayerEnabled}
@@ -3108,130 +2932,35 @@ const TrafficMap = () => {
         />
       )}
 
-      {/* History Panel Backdrop */}
-      {showHistoryPanel && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300 animate-fade-in backdrop-blur-sm"
-          style={{ zIndex: 45 }}
-          onClick={() => setShowHistoryPanel(false)}
-        />
-      )}
+      {/* History Panel */}
+      <HistoryPanel
+        isOpen={showHistoryPanel}
+        onClose={() => setShowHistoryPanel(false)}
+        travelHistory={travelHistory}
+        frequentLocations={frequentLocations}
+        onLocationSelect={handleLocationSelect}
+      />
 
-      {/* History Panel - Modern Design - Responsive */}
-      {showHistoryPanel && (
-        <div
-          className="fixed top-0 left-0 bottom-0 w-80 sm:w-96 bg-white shadow-2xl transform transition-all duration-300 ease-out rounded-r-3xl border-r border-gray-100 flex flex-col animate-slide-in-left overflow-hidden"
-          style={{ zIndex: 50 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="p-6 border-b border-gray-100 bg-white flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Travel History</h2>
-              <button
-                onClick={() => setShowHistoryPanel(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 transform hover:scale-110 hover:rotate-90"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-          </div>
+      {/* Emergency Reports Panel */}
+      <EmergencyReportsPanel
+        isOpen={showEmergencyReportsPanel}
+        onClose={() => setShowEmergencyReportsPanel(false)}
+        mapRef={mapRef}
+        onEmergencyClick={(emergency) => {
+          // Highlight the emergency on the map if needed
+          if (emergency.latitude && emergency.longitude) {
+            setHighlightedIncident({
+              lat: emergency.latitude,
+              lng: emergency.longitude,
+              title: emergency.title || emergency.emergency_type?.replace('_', ' '),
+              severity: emergency.severity,
+            });
+          }
+        }}
+      />
 
-          <div className="flex-1 overflow-y-auto p-6 modern-scrollbar">
-            {/* Frequent Locations */}
-            {frequentLocations.length > 0 && (
-              <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-3">Frequent Locations</h3>
-                <div className="space-y-2">
-                  {frequentLocations.slice(0, 5).map((location, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleLocationSelect(location)}
-                      className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors text-left border border-gray-200"
-                    >
-                      <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center border border-blue-200">
-                        <span className="text-xs font-semibold text-blue-600">{index + 1}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{location.name}</p>
-                        <p className="text-xs text-gray-500">{location.count} visits</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recent Trips */}
-            <div>
-              <h3 className="font-medium text-gray-900 mb-3">Recent Trips</h3>
-              {travelHistory.length > 0 ? (
-                <div className="space-y-3">
-                  {travelHistory.slice(0, 5).map((trip, index) => (
-                    <div key={index} className="p-4 bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200">
-                      {/* Route Title */}
-                      <div className="mb-3 pb-2 border-b border-gray-200">
-                        <h4 className="text-sm font-semibold text-gray-800 truncate">
-                          From {getTripPlaceName(trip, 'origin')} to {getTripPlaceName(trip, 'destination')}
-                        </h4>
-                        <span className="text-xs text-gray-500">
-                          {new Date(trip.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      </div>
-                      
-                      {/* Route Visual */}
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <p className="text-xs text-gray-600 truncate">
-                              {getTripPlaceName(trip, 'origin')}
-                            </p>
-                          </div>
-                          <div className="flex items-center space-x-2 ml-1">
-                            <div className="w-1 h-3 border-l-2 border-dashed border-gray-300"></div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0"></div>
-                            <p className="text-xs text-gray-600 truncate">
-                              {getTripPlaceName(trip, 'destination')}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                        <div className="flex items-center space-x-1 text-xs text-gray-600">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>{travelHistoryService.formatTravelTime(trip.duration_minutes)}</span>
-                        </div>
-                        <div className="flex items-center space-x-1 text-xs text-gray-600">
-                          <Route className="w-3.5 h-3.5" />
-                          <span>{travelHistoryService.formatDistance(trip.distance_km)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 px-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <History className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700 mb-1">No travel history yet</p>
-                  <p className="text-xs text-gray-500 mb-4">Your trips will appear here</p>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-xs text-blue-700">
-                      💡 Complete a simulation to add your first trip!
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Loading Overlay - Enhanced with Skeleton */}
-      {isLoadingData && (
+      {/* Route Loading Overlay - Enhanced with Skeleton */}
+      {isLoadingRoute && (
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-8 flex flex-col items-center space-y-4 shadow-2xl border border-white/30 animate-scale-in min-w-[280px]">
             <div className="relative">
@@ -3274,114 +3003,6 @@ const TrafficMap = () => {
         </div>
       )}
 
-      {/* Compact Floating Action Buttons - Right Side */}
-      {!showSmartRoutePanel && (
-      <div className={`absolute bottom-4 right-4 z-[45] flex flex-col space-y-2 transition-all duration-300 ${
-        isNavigationActive ? 'bottom-20 sm:bottom-24' : 'bottom-4'
-      }`}>
-        {/* Primary Actions - Always Visible */}
-        <div className="flex flex-col space-y-2">
-          {/* Incident Report */}
-          <button
-            onClick={() => {
-              if (isGuest) {
-                setShowAuthPrompt(true);
-                return;
-              }
-              setShowIncidentModal(true);
-            }}
-            className="w-12 h-12 bg-red-600/90 backdrop-blur-lg hover:bg-red-700 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
-            title="Report Incident"
-          >
-            <AlertTriangle className="w-5 h-5" />
-          </button>
-
-          {/* Voice Navigation */}
-          {!isGuest && (
-            <button
-              onClick={() => {
-                const newState = voiceNavigationService.toggle();
-                setVoiceEnabled(newState);
-              }}
-              className={`w-12 h-12 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${
-                voiceNavigationService.isEnabled()
-                  ? 'bg-blue-600/90 backdrop-blur-lg hover:bg-blue-700 text-white'
-                  : 'bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700'
-              }`}
-              title={voiceNavigationService.isEnabled() ? 'Mute Voice' : 'Enable Voice'}
-            >
-              {voiceNavigationService.isEnabled() ? (
-                <Volume2 className="w-5 h-5" />
-              ) : (
-                <VolumeX className="w-5 h-5" />
-              )}
-            </button>
-          )}
-
-          {/* Layers Toggle */}
-          <button
-            onClick={() => setShowSecondaryActions(!showSecondaryActions)}
-            className="w-12 h-12 bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
-            title="More Options"
-          >
-            <Layers className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Secondary Actions - Expandable */}
-        {showSecondaryActions && (
-          <div className="flex flex-col space-y-2 animate-fade-in">
-            <button
-              onClick={() => setWeatherEnabled(!weatherEnabled)}
-              className={`w-12 h-12 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${
-                weatherEnabled
-                  ? 'bg-blue-600/90 backdrop-blur-lg hover:bg-blue-700 text-white'
-                  : 'bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700'
-              }`}
-              title="Weather"
-            >
-              <Cloud className="w-5 h-5" />
-            </button>
-
-            <button
-              onClick={() => setIsMiniOpen(true)}
-              className="w-12 h-12 bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
-              title="Insights"
-            >
-              <BarChart3 className="w-5 h-5" />
-            </button>
-
-            {/* Traffic Predictions */}
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowPredictionsPanel(true);
-              }}
-              className="w-12 h-12 bg-cyan-600/90 backdrop-blur-lg hover:bg-cyan-700 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center"
-              title="View Traffic Predictions"
-            >
-              <BarChart3 className="w-5 h-5" />
-            </button>
-
-            {/* Multi-Stop Mode Toggle */}
-            {!isGuest && (
-              <button
-                onClick={toggleMultiStopMode}
-                className={`w-12 h-12 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center ${
-                  multiStopMode
-                    ? 'bg-purple-600/90 backdrop-blur-lg hover:bg-purple-700 text-white'
-                    : 'bg-white/80 backdrop-blur-lg hover:bg-white text-gray-700'
-                }`}
-                title="Multi-Stop Planning"
-              >
-                <Shuffle className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      )}
 
       {/* Voice Navigation Panel - Only show when navigation is active */}
       {isNavigationActive && (
@@ -3586,7 +3207,11 @@ const TrafficMap = () => {
       {/* Smart Route Panel - Bottom Sheet */}
       <SmartRoutePanel
         isOpen={showSmartRoutePanel}
-        onClose={() => setShowSmartRoutePanel(false)}
+        onClose={() => {
+          setShowSmartRoutePanel(false);
+          // Clear trip when user closes the panel to remove route and play button
+          clearTrip();
+        }}
         initialOrigin={selectedOrigin}
         initialDestination={selectedDestination}
         onRouteSelect={(route, origin, destination, allRoutes) => {
@@ -3637,7 +3262,7 @@ const TrafficMap = () => {
       />
 
       {/* Weather & Flood Advisory Panel - Bottom Overlay */}
-      {!showSmartRoutePanel && !isNavigationActive && (
+      {!showSmartRoutePanel && !isNavigationActive && !isMiniOpen && !showIncidentModal && !showPredictionsPanel && !showSharePanel && (
         <WeatherFloodAdvisory 
           mapCenter={mapCenter}
           locationName="Las Piñas City"
@@ -3663,25 +3288,40 @@ const TrafficMap = () => {
         />
       )}
 
-      {/* Simulation Completion Modal - Modern Design */}
+      {/* Simulation Completion Modal - Modern Design - Mobile Optimized */}
       {showSimulationCompleteModal && simulationCompleteData && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
           {/* Backdrop with blur */}
           <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
             onClick={() => {
               setShowSimulationCompleteModal(false);
               setSimulationCompleteData(null);
             }}
           />
           
-          {/* Modal Content */}
+          {/* Modal Content - Scrollable on mobile */}
           <div 
-            className="relative bg-white rounded-3xl sm:rounded-[2rem] shadow-2xl w-full max-w-md animate-scale-in overflow-hidden border border-gray-100"
+            className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-md my-auto animate-scale-in overflow-hidden border border-gray-100 flex flex-col"
+            style={{
+              maxHeight: 'min(95vh, calc(100dvh - 40px))'
+            }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Close Button - Top Right */}
+            <button
+              onClick={() => {
+                setShowSimulationCompleteModal(false);
+                setSimulationCompleteData(null);
+              }}
+              className="absolute top-3 right-3 z-20 p-2 bg-white/90 hover:bg-white rounded-full shadow-lg transition-all duration-200 hover:scale-110 active:scale-95"
+              aria-label="Close modal"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+
             {/* Success Icon Header with Gradient */}
-            <div className="relative bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-8 sm:p-10 text-center overflow-hidden">
+            <div className="relative bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 px-4 py-6 sm:px-8 sm:py-8 md:px-10 md:py-10 text-center overflow-hidden flex-shrink-0">
               {/* Animated Background Pattern */}
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 blur-2xl"></div>
@@ -3690,124 +3330,124 @@ const TrafficMap = () => {
               
               {/* Success Icon */}
               <div className="relative z-10">
-                <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-white/20 backdrop-blur-lg rounded-full mb-4 animate-scale-in">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center shadow-xl">
-                    <svg className="w-8 h-8 sm:w-10 sm:h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/20 backdrop-blur-lg rounded-full mb-3 sm:mb-4 animate-scale-in">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-white rounded-full flex items-center justify-center shadow-xl">
+                    <svg className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Trip Complete!</h2>
-                <p className="text-green-50 text-sm sm:text-base">Simulation finished successfully</p>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">Trip Complete!</h2>
+                <p className="text-green-50 text-xs sm:text-sm md:text-base">Simulation finished successfully</p>
               </div>
             </div>
 
-            {/* Content Section */}
-            <div className="p-6 sm:p-8">
-              {/* Trip Summary Cards */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+            {/* Content Section - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+              {/* Trip Summary Cards - Better mobile layout */}
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
                 {/* Distance Card */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 border border-blue-200">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Route className="w-4 h-4 text-blue-600" />
-                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Distance</span>
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-blue-200">
+                  <div className="flex items-center space-x-1.5 sm:space-x-2 mb-1.5 sm:mb-2">
+                    <Route className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 flex-shrink-0" />
+                    <span className="text-[10px] sm:text-xs font-semibold text-blue-700 uppercase tracking-wide">Distance</span>
                   </div>
-                  <p className="text-2xl font-bold text-blue-900">
+                  <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-900">
                     {simulationCompleteData.distanceKm.toFixed(1)} km
                   </p>
                 </div>
 
                 {/* Duration Card */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4 border border-purple-200">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Clock className="w-4 h-4 text-purple-600" />
-                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Duration</span>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-purple-200">
+                  <div className="flex items-center space-x-1.5 sm:space-x-2 mb-1.5 sm:mb-2">
+                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600 flex-shrink-0" />
+                    <span className="text-[10px] sm:text-xs font-semibold text-purple-700 uppercase tracking-wide">Duration</span>
                   </div>
-                  <p className="text-2xl font-bold text-purple-900">
+                  <p className="text-lg sm:text-xl md:text-2xl font-bold text-purple-900">
                     {Math.round(simulationCompleteData.durationMinutes)}m
                   </p>
                 </div>
               </div>
 
-              {/* Route Info */}
-              <div className="bg-gray-50 rounded-2xl p-4 sm:p-5 mb-6 border border-gray-200">
-                <div className="space-y-3">
+              {/* Route Info - Improved mobile layout */}
+              <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 border border-gray-200">
+                <div className="space-y-2 sm:space-y-3">
                   {/* Origin */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                  <div className="flex items-start space-x-2 sm:space-x-3">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-white rounded-full"></div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Origin</p>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{simulationCompleteData.origin}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-0.5 sm:mb-1">Origin</p>
+                      <p className="text-xs sm:text-sm font-semibold text-gray-900 break-words">{simulationCompleteData.origin}</p>
                     </div>
                   </div>
 
                   {/* Route Line */}
-                  <div className="flex items-center space-x-3 ml-4">
-                    <div className="w-0.5 h-8 bg-gradient-to-b from-blue-400 to-red-400"></div>
+                  <div className="flex items-center space-x-2 sm:space-x-3 ml-3.5 sm:ml-4">
+                    <div className="w-0.5 h-6 sm:h-8 bg-gradient-to-b from-blue-400 to-red-400"></div>
                   </div>
 
                   {/* Destination */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                  <div className="flex items-start space-x-2 sm:space-x-3">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-white rounded-full"></div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Destination</p>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{simulationCompleteData.destination}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-0.5 sm:mb-1">Destination</p>
+                      <p className="text-xs sm:text-sm font-semibold text-gray-900 break-words">{simulationCompleteData.destination}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Status Messages */}
+              {/* Status Messages - Mobile optimized */}
               {simulationCompleteData.saveSuccess && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border border-green-200 flex items-start space-x-3 animate-slide-down">
-                  <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl sm:rounded-2xl border border-green-200 flex items-start space-x-2 sm:space-x-3 animate-slide-down">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-green-900 mb-1">Saved to Travel History</p>
-                    <p className="text-xs text-green-700">Your trip has been saved and added to your travel history.</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-semibold text-green-900 mb-0.5 sm:mb-1">Saved to Travel History</p>
+                    <p className="text-[10px] sm:text-xs text-green-700 break-words">Your trip has been saved and added to your travel history.</p>
                   </div>
                 </div>
               )}
 
               {simulationCompleteData.isGuest && (
-                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 flex items-start space-x-3 animate-slide-down">
-                  <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Info className="w-4 h-4 text-white" />
+                <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl sm:rounded-2xl border border-blue-200 flex items-start space-x-2 sm:space-x-3 animate-slide-down">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Info className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-blue-900 mb-1">Sign in to Save Trips</p>
-                    <p className="text-xs text-blue-700">Create an account to automatically save your trips and access travel history.</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-semibold text-blue-900 mb-0.5 sm:mb-1">Sign in to Save Trips</p>
+                    <p className="text-[10px] sm:text-xs text-blue-700 break-words">Create an account to automatically save your trips and access travel history.</p>
                   </div>
                 </div>
               )}
 
               {simulationCompleteData.saveError && !simulationCompleteData.isGuest && (
-                <div className={`mb-6 p-4 rounded-2xl border flex items-start space-x-3 animate-slide-down ${
+                <div className={`mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl sm:rounded-2xl border flex items-start space-x-2 sm:space-x-3 animate-slide-down ${
                   simulationCompleteData.isAuthError 
                     ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200'
                     : 'bg-gradient-to-r from-red-50 to-pink-50 border-red-200'
                 }`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                  <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
                     simulationCompleteData.isAuthError ? 'bg-yellow-500' : 'bg-red-500'
                   }`}>
-                    <AlertTriangle className={`w-4 h-4 ${
+                    <AlertTriangle className={`w-3 h-3 sm:w-4 sm:h-4 ${
                       simulationCompleteData.isAuthError ? 'text-yellow-900' : 'text-white'
                     }`} />
                   </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-semibold mb-1 ${
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs sm:text-sm font-semibold mb-0.5 sm:mb-1 ${
                       simulationCompleteData.isAuthError ? 'text-yellow-900' : 'text-red-900'
                     }`}>
                       {simulationCompleteData.isAuthError ? 'Authentication Required' : 'Save Failed'}
                     </p>
-                    <p className={`text-xs ${
+                    <p className={`text-[10px] sm:text-xs break-words ${
                       simulationCompleteData.isAuthError ? 'text-yellow-700' : 'text-red-700'
                     }`}>
                       {simulationCompleteData.isAuthError 
@@ -3819,8 +3459,8 @@ const TrafficMap = () => {
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3">
+              {/* Action Buttons - Mobile optimized */}
+              <div className="flex flex-col gap-2 sm:gap-3">
                 {simulationCompleteData.isGuest && (
                   <button
                     onClick={() => {
@@ -3828,9 +3468,9 @@ const TrafficMap = () => {
                       setSimulationCompleteData(null);
                       navigate('/login');
                     }}
-                    className="flex-1 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2"
+                    className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg sm:rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 min-h-[44px]"
                   >
-                    <span>Sign In</span>
+                    <span className="text-sm sm:text-base">Sign In</span>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -3844,9 +3484,9 @@ const TrafficMap = () => {
                       setSimulationCompleteData(null);
                       navigate('/login');
                     }}
-                    className="flex-1 px-6 py-3.5 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-xl font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full px-4 sm:px-6 py-3 sm:py-3.5 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-lg sm:rounded-xl font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] min-h-[44px]"
                   >
-                    Log In
+                    <span className="text-sm sm:text-base">Log In</span>
                   </button>
                 )}
 
@@ -3855,13 +3495,13 @@ const TrafficMap = () => {
                     setShowSimulationCompleteModal(false);
                     setSimulationCompleteData(null);
                   }}
-                  className={`px-6 py-3.5 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] ${
+                  className={`w-full px-4 sm:px-6 py-3 sm:py-3.5 rounded-lg sm:rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] min-h-[44px] ${
                     simulationCompleteData.isGuest || simulationCompleteData.saveError
                       ? 'bg-white text-gray-700 border-2 border-gray-300 hover:bg-gray-50'
                       : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700'
-                  } flex-1 sm:flex-none`}
+                  }`}
                 >
-                  {simulationCompleteData.saveSuccess ? 'Done' : 'Close'}
+                  <span className="text-sm sm:text-base">{simulationCompleteData.saveSuccess ? 'Done' : 'Close'}</span>
                 </button>
               </div>
             </div>
