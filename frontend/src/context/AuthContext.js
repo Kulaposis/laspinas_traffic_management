@@ -289,7 +289,8 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Clear session and cache
-    sessionService.logout('User initiated logout');
+    // Skip callback to prevent circular call (since we're already in logout)
+    sessionService.logout('User initiated logout', true);
     cacheService.clearAll();
 
     setUser(null);

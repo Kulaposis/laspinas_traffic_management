@@ -137,15 +137,26 @@ const RouteLayer = ({
 
   return (
     <>
-      {/* Show all routes if enabled */}
+      {/* Show all routes if enabled - ALTERNATIVE ROUTES ONLY (not selected) */}
       {showAllRoutes && processedRoutes.map((route, index) => {
         if (!route || !Array.isArray(route.route_coordinates) || route.route_coordinates.length < 2) return null;
 
-        const isSelected = selectedRoute && selectedRoute.route_id === route.route_id;
+        // Check if this route is the selected one - compare by route_id, or by reference, or by index
+        const isSelected = selectedRoute && (
+          selectedRoute.route_id === route.route_id || 
+          selectedRoute === route ||
+          (selectedRoute.route_id === undefined && route.route_id === undefined && 
+           processedRoutes.length > 0 && processedRoutes.indexOf(selectedRoute) === index)
+        );
+        
+        // Skip rendering selected route here - it will be rendered separately below
+        if (isSelected) return null;
+
         const visualStyle = route.visualStyle || {};
-        const routeColor = visualStyle.color || (smartRoutingService.getRoutePolylineColor ? smartRoutingService.getRoutePolylineColor(route) : '#3388ff');
-        const routeWeight = isSelected ? 6 : (visualStyle.weight || 3);
-        const routeOpacity = isSelected ? 1.0 : (visualStyle.opacity || 0.6);
+        // Use GRAY color for alternative routes to clearly distinguish from selected route
+        const routeColor = '#9ca3af'; // Gray color for alternatives
+        const routeWeight = 4; // Thinner than selected route
+        const routeOpacity = 0.7; // Slightly transparent
 
         const safeCoordinates = route.route_coordinates.filter(coord => {
           if (!Array.isArray(coord) || coord.length < 2) return false;
@@ -157,24 +168,28 @@ const RouteLayer = ({
 
         return (
           <Polyline
-            key={`route-${route.route_id ?? index}`}
+            key={`route-alt-${route.route_id ?? index}`}
             positions={safeCoordinates.map(toLatLng)}
             color={routeColor}
             weight={routeWeight}
             opacity={routeOpacity}
-            dashArray={isSelected ? null : visualStyle.dashArray}
+            dashArray="10, 10" // Dashed pattern for alternatives
             smoothFactor={visualStyle.smoothFactor || 1}
             lineCap={visualStyle.lineCap || "round"}
             lineJoin={visualStyle.lineJoin || "round"}
             eventHandlers={{
               click: () => { if (onRouteClick) onRouteClick(route); },
-              mouseover: (e) => e.target.setStyle({ weight: routeWeight + 2, opacity: 1.0 }),
-              mouseout: (e) => e.target.setStyle({ weight: routeWeight, opacity: routeOpacity })
+              mouseover: (e) => {
+                e.target.setStyle({ weight: routeWeight + 2, opacity: 0.9, color: '#6b7280' });
+              },
+              mouseout: (e) => {
+                e.target.setStyle({ weight: routeWeight, opacity: routeOpacity, color: routeColor });
+              }
             }}
           >
             <Popup>
               <div className="p-2">
-                <h3 className="font-semibold text-gray-900">{route.route_name}</h3>
+                <h3 className="font-semibold text-gray-900">{route.route_name || `Alternative Route ${index + 1}`}</h3>
                 <div className="text-sm text-gray-600 space-y-1">
                   <div>Duration: {smartRoutingService.formatDuration ? smartRoutingService.formatDuration(route.estimated_duration_minutes) : `${route.estimated_duration_minutes} min`}</div>
                   <div>Distance: {smartRoutingService.formatDistance ? smartRoutingService.formatDistance(route.distance_km) : `${route.distance_km} km`}</div>
@@ -183,6 +198,12 @@ const RouteLayer = ({
                     <div className="text-orange-600">Delays: +{route.traffic_delays} min</div>
                   )}
                 </div>
+                <button
+                  onClick={() => { if (onRouteClick) onRouteClick(route); }}
+                  className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                >
+                  Select this route
+                </button>
               </div>
             </Popup>
           </Polyline>
@@ -204,7 +225,8 @@ const RouteLayer = ({
           }
 
           const vs = processedSelectedRoute.visualStyle || {};
-          const mainColor = vs.color || (smartRoutingService.getRoutePolylineColor ? smartRoutingService.getRoutePolylineColor(processedSelectedRoute) : '#ff0000');
+          // Use BLUE color for selected route (Google Maps style) - clearly different from gray alternatives
+          const mainColor = '#4285f4'; // Google Maps blue - clearly different from gray alternatives
 
           // Split route into passed and remaining sections if simulation is active
           const isSimulating = simulationProgress !== null && simulationProgress >= 0;
@@ -217,12 +239,12 @@ const RouteLayer = ({
 
           return (
             <>
-              {/* Outline for visibility */}
+              {/* Outline for visibility - white outline to make selected route stand out */}
               <Polyline
                 positions={safeCoordinates.map(toLatLng)}
                 color="#ffffff"
-                weight={Math.max(10, vs.weight ? vs.weight + 4 : 12)}
-                opacity={0.8}
+                weight={Math.max(12, vs.weight ? vs.weight + 6 : 14)}
+                opacity={0.9}
                 className="route-outline"
                 interactive={false}
                 smoothFactor={vs.smoothFactor || 1}
@@ -245,17 +267,18 @@ const RouteLayer = ({
                 />
               )}
 
-              {/* Remaining route (red or original color) */}
+              {/* Selected route - BLUE, BOLD, SOLID LINE (clearly different from gray dashed alternatives) */}
               {remainingCoordinates.length >= 2 && (
                 <Polyline
                   positions={remainingCoordinates.map(toLatLng)}
                   color={mainColor}
-                  weight={vs.weight || 8}
-                  opacity={vs.opacity || 0.9}
+                  weight={vs.weight || 10} // Thicker than alternatives (10 vs 4)
+                  opacity={1.0} // Fully opaque, not transparent
                   className="selected-route-line"
                   smoothFactor={vs.smoothFactor || 1}
                   lineCap={vs.lineCap || "round"}
                   lineJoin={vs.lineJoin || "round"}
+                  dashArray={null} // Solid line, no dashes
                 >
                 <Popup>
                   <div className="p-3">

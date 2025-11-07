@@ -47,13 +47,34 @@ class UserService {
 
   // Update user by ID (admin only)
   async updateUser(userId, userData) {
-    const response = await this.api.put(`/${userId}`, userData);
+    const roleMap = {
+      admin: 'ADMIN',
+      lgu_staff: 'LGU_STAFF',
+      traffic_enforcer: 'TRAFFIC_ENFORCER',
+      citizen: 'CITIZEN'
+    };
+    const payload = {
+      ...userData,
+      role: userData.role ? (roleMap[(userData.role || '').toLowerCase()] || userData.role) : undefined
+    };
+    const response = await this.api.put(`/${userId}`, payload);
     return response.data;
   }
 
   // Create new user (admin only)
   async createUser(userData) {
-    const response = await this.api.post('/', userData);
+    // Backend expects enum values in uppercase (ADMIN, LGU_STAFF, TRAFFIC_ENFORCER, CITIZEN)
+    const roleMap = {
+      admin: 'ADMIN',
+      lgu_staff: 'LGU_STAFF',
+      traffic_enforcer: 'TRAFFIC_ENFORCER',
+      citizen: 'CITIZEN'
+    };
+    const payload = {
+      ...userData,
+      role: roleMap[(userData.role || '').toLowerCase()] || userData.role
+    };
+    const response = await this.api.post('/', payload);
     return response.data;
   }
 

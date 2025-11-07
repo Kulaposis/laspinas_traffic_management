@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from sqlalchemy import func, desc, and_, or_
 from fastapi import HTTPException, status
 from typing import List, Dict, Any, Optional
@@ -381,8 +382,8 @@ class AdminService:
     # System Health Checks
     def get_system_health(self) -> Dict[str, Any]:
         try:
-            # Database connectivity
-            self.db.execute("SELECT 1")
+            # Database connectivity (SQLAlchemy 2.0 requires text())
+            self.db.execute(text("SELECT 1"))
             db_status = "healthy"
         except:
             db_status = "unhealthy"

@@ -3,7 +3,7 @@ import { Cloud, AlertTriangle, Droplets, X, ChevronUp, ChevronDown, MapPin, Cloc
 import weatherService from '../services/weatherService';
 import enhancedGeocodingService from '../services/enhancedGeocodingService';
 
-const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 'Las Piñas City', sidebarOpen = false }) => {
+const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 'Las Piñas City', sidebarOpen = false, avoidCenter = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [isClosed, setIsClosed] = useState(false);
@@ -457,8 +457,8 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
         className="fixed bottom-4 z-[1000] px-4 py-2 bg-white/90 backdrop-blur-lg rounded-full shadow-lg border border-gray-200 flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-white transition-all duration-200"
         style={{ 
           maxWidth: '90vw',
-          left: sidebarOpen ? 'calc(50% + 160px)' : '50%',
-          transform: 'translateX(-50%)',
+          left: avoidCenter ? '1rem' : (sidebarOpen ? 'calc(50% + 160px)' : '50%'),
+          transform: avoidCenter ? 'none' : 'translateX(-50%)',
           transition: 'left 0.3s ease-out'
         }}
       >

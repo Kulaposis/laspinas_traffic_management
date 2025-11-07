@@ -16,6 +16,8 @@ class EnhancedRoutingService {
    * Get detailed route with turn-by-turn instructions using TomTom API (with OSRM fallback)
    */
   async getDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
+    const maxAlternatives = options.maxAlternatives || 3;
+    
     try {
       // Try TomTom API first for better routing with traffic data
       try {
@@ -28,15 +30,35 @@ class EnhancedRoutingService {
           const transformedRoute = this.transformTomTomRoute(tomtomRoute);
           
           if (transformedRoute && transformedRoute.routes && transformedRoute.routes.length > 0) {
-            console.log('✅ Using TomTom API for routing');
-            return transformedRoute;
+            // If TomTom only returned 1 route but we requested multiple, try to get alternatives
+            if (transformedRoute.routes.length === 1 && maxAlternatives > 1) {
+              console.log('TomTom returned only 1 route, attempting to get alternatives via different route types...');
+              
+              // Try to get alternatives by requesting different route types
+              const alternativeRoutes = await this.getTomTomAlternativesByType(
+                originLat, originLng, destinationLat, destinationLng, transformedRoute.routes[0]
+              );
+              
+              if (alternativeRoutes && alternativeRoutes.length > 1) {
+                transformedRoute.routes = alternativeRoutes;
+                transformedRoute.recommended_route = alternativeRoutes[0];
+                console.log(`✅ Generated ${alternativeRoutes.length} alternative routes using different route types`);
+                return transformedRoute;
+              }
+              
+              // If TomTom alternatives failed, fall through to OSRM
+              console.log('TomTom alternatives failed, falling back to OSRM for alternatives');
+            } else {
+              console.log('✅ Using TomTom API for routing');
+              return transformedRoute;
+            }
           }
         }
       } catch (tomtomError) {
         console.warn('TomTom routing failed, falling back to OSRM:', tomtomError.message);
       }
 
-      // Fallback to OSRM for reliable routing
+      // Fallback to OSRM for reliable routing (OSRM typically provides better alternatives)
       const osrmRoute = await this.getOSRMDetailedRoute(
         originLat, originLng, destinationLat, destinationLng, options
       );
@@ -54,14 +76,88 @@ class EnhancedRoutingService {
   }
 
   /**
+   * Get alternative routes from TomTom by requesting different route types
+   */
+  async getTomTomAlternativesByType(originLat, originLng, destinationLat, destinationLng, primaryRoute) {
+    const routeTypes = ['fastest', 'shortest', 'eco'];
+    const alternativeRoutes = [primaryRoute]; // Start with the primary route
+    
+    try {
+      // Request routes with different types to get alternatives
+      for (const routeType of routeTypes) {
+        if (alternativeRoutes.length >= 3) break; // We have enough routes
+        
+        try {
+          const routeOptions = {
+            routeType: routeType,
+            maxAlternatives: 1, // Just get one route of this type
+            travelMode: 'car',
+            traffic: 'true'
+          };
+          
+          const result = await tomtomService.calculateRoute(
+            { lat: originLat, lng: originLng },
+            { lat: destinationLat, lng: destinationLng },
+            routeOptions
+          );
+          
+          if (result && result.routes && result.routes.length > 0) {
+            const transformed = this.transformTomTomRoute(result);
+            if (transformed && transformed.routes && transformed.routes.length > 0) {
+              const newRoute = transformed.routes[0];
+              
+              // Check if this route is different from existing ones (by distance/duration)
+              const isDifferent = alternativeRoutes.every(existing => {
+                const distanceDiff = Math.abs(existing.distance_km - newRoute.distance_km);
+                const durationDiff = Math.abs(existing.estimated_duration_minutes - newRoute.estimated_duration_minutes);
+                // Consider it different if distance or duration differs by more than 5%
+                return distanceDiff > existing.distance_km * 0.05 || durationDiff > existing.estimated_duration_minutes * 0.05;
+              });
+              
+              if (isDifferent) {
+                newRoute.route_name = routeType === 'fastest' ? 'Fastest Route' : 
+                                    routeType === 'shortest' ? 'Shortest Route' : 
+                                    'Eco Route';
+                alternativeRoutes.push(newRoute);
+              }
+            }
+          }
+        } catch (error) {
+          // Continue to next route type if one fails
+          console.warn(`Failed to get ${routeType} route:`, error.message);
+        }
+      }
+      
+      // Sort by distance (shortest first)
+      alternativeRoutes.sort((a, b) => (a.distance_km || Infinity) - (b.distance_km || Infinity));
+      
+      // Update route names
+      alternativeRoutes.forEach((route, index) => {
+        if (index === 0) {
+          route.route_name = 'Fastest Route';
+        } else {
+          route.route_name = `Alternative ${index}`;
+        }
+      });
+      
+      return alternativeRoutes;
+    } catch (error) {
+      console.error('Error getting TomTom alternatives by type:', error);
+      return [primaryRoute]; // Return at least the primary route
+    }
+  }
+
+  /**
    * Get route from OSRM (Open Source Routing Machine)
    */
   async getOSRMDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     try {
-
+      const maxAlternatives = options.maxAlternatives || 3;
+      
       // OSRM API expects coordinates in longitude,latitude order
+      // Use alternatives=true to get multiple routes (OSRM supports this better than TomTom)
       const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destinationLng},${destinationLat}?overview=full&geometries=geojson&steps=true&alternatives=${options.maxAlternatives || 3}`
+        `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destinationLng},${destinationLat}?overview=full&geometries=geojson&steps=true&alternatives=true`
       );
 
       if (!response.ok) {
@@ -73,6 +169,10 @@ class EnhancedRoutingService {
       if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
         throw new Error(`No route found: ${data.message || 'Unknown error'}`);
       }
+
+      // Log how many routes were returned for debugging
+      const requestedAlternatives = options.maxAlternatives || 3;
+      console.log(`OSRM API returned ${data.routes.length} route(s) (requested ${requestedAlternatives} alternatives)`);
 
       // Validate response structure
       if (!data.routes[0].geometry || !data.routes[0].geometry.coordinates) {
@@ -94,25 +194,33 @@ class EnhancedRoutingService {
     const origin = { lat: originLat, lng: originLng };
     const destination = { lat: destinationLat, lng: destinationLng };
 
-    // TomTom API parameters - optimized for better routing
+    // TomTom API parameters - optimized for better routing results
+    // Note: tomtomService.calculateRoute will convert these to proper URL params
     const routeOptions = {
-      traffic: 'true', // Enable real-time traffic
+      traffic: 'true', // Enable real-time traffic for accurate ETAs
       travelMode: options.travelMode || 'car',
-      instructionsType: 'text', // Get text instructions
-      routeRepresentation: 'polyline', // Get polyline - TomTom will include points in legs
+      instructionsType: 'text', // Get detailed text instructions
+      routeRepresentation: 'polyline', // Get polyline with detailed points in legs
       computeBestOrder: 'false',
-      maxAlternatives: String(options.maxAlternatives || 3), // Get up to 3 alternative routes
+      maxAlternatives: options.maxAlternatives || 3, // Get multiple route alternatives
       language: 'en-US'
     };
     
-    // Add avoid parameters if requested
+    // Add avoid parameters if requested for better route quality
     if (options.avoidTraffic === true) {
       routeOptions.avoid = 'unpavedRoads';
     }
     
-    // Set route type based on options
-    if (options.routeType) {
+    // Set route type based on options for optimal routing
+    // Note: Don't set routeType if we want alternatives - TomTom returns more alternatives without routeType
+    // We'll sort by distance after getting routes to make fastest = shortest
+    // Only set routeType if explicitly requested AND we're not requesting multiple alternatives
+    const maxAlternatives = options.maxAlternatives || 3;
+    if (options.routeType && maxAlternatives <= 1) {
       routeOptions.routeType = options.routeType; // fastest, shortest, eco, thrilling
+    } else {
+      // Explicitly don't set routeType when requesting alternatives to get more diverse routes
+      delete routeOptions.routeType;
     }
 
     try {
@@ -122,6 +230,9 @@ class EnhancedRoutingService {
       if (!result || !result.routes || result.routes.length === 0) {
         throw new Error('TomTom API returned no routes');
       }
+      
+      // Log how many routes were returned for debugging
+      console.log(`TomTom API returned ${result.routes.length} route(s) (requested ${maxAlternatives} alternatives)`);
       
       return result;
     } catch (error) {
@@ -215,9 +326,16 @@ class EnhancedRoutingService {
       return null;
     }
 
+    // Sort routes by distance (shortest first) - fastest route = lowest km
+    routes.sort((a, b) => {
+      const distanceA = a.distance_km || Infinity;
+      const distanceB = b.distance_km || Infinity;
+      return distanceA - distanceB;
+    });
+
     return {
       routes: routes,
-      recommended_route: routes[0],
+      recommended_route: routes[0], // First route is now the shortest (fastest)
       origin: {
         lat: routes[0].route_coordinates[0][0],
         lon: routes[0].route_coordinates[0][1]
@@ -472,9 +590,16 @@ class EnhancedRoutingService {
       return null;
     }
 
+    // Sort routes by distance (shortest first) - fastest route = lowest km
+    routes.sort((a, b) => {
+      const distanceA = a.distance_km || Infinity;
+      const distanceB = b.distance_km || Infinity;
+      return distanceA - distanceB;
+    });
+
     return {
       routes: routes,
-      recommended_route: routes[0],
+      recommended_route: routes[0], // First route is now the shortest (fastest)
       origin: {
         lat: routes[0].route_coordinates[0][0],
         lon: routes[0].route_coordinates[0][1]

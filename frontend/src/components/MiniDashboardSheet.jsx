@@ -41,14 +41,6 @@ const MiniDashboardSheet = ({
       role="dialog"
       aria-modal={isOpen ? 'true' : 'false'}
     >
-      {/* Backdrop */}
-      <div
-        className={`absolute inset-0 bg-black/30 transition-opacity duration-200 ${
-          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0'
-        }`}
-        onClick={onClose}
-      />
-
       {/* Sheet */}
       <div
         className={`pointer-events-auto relative ${containerAlignment} w-[calc(100%-1.5rem)] sm:w-auto max-w-md md:max-w-2xl rounded-t-2xl bg-white/90 backdrop-blur-xl shadow-2xl border border-white/60 ring-1 ring-black/5 transition-transform duration-300 ease-out overflow-hidden ${

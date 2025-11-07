@@ -1,9 +1,11 @@
 /**
  * TomTom Maps Service
  * Provides TomTom Maps API integration with usage limit management
+ * Falls back to Geoapify API when TomTom returns 403/429 errors or exceeds limits
  */
 
 import tomtomConfig from '../config/tomtom.js';
+import geoapifyService from './geoapifyService.js';
 
 class TomTomService {
   constructor() {
@@ -95,10 +97,18 @@ class TomTomService {
     // TomTom map tiles:
     // - Basic styles (main, night, labels, etc.): /tile/basic/{style}/{z}/{x}/{y}.png
     // - Satellite imagery: /tile/satellite/{z}/{x}/{y}.jpg
+    // Note: TomTom tile API doesn't support "light-driving" style directly
+    // The "main" style is already light and suitable for driving navigation
     const normalizedStyle = (style || 'main').toLowerCase();
 
     if (normalizedStyle === 'satellite') {
       return `${this.mapBaseUrl}/tile/satellite/{z}/{x}/{y}.jpg?key=${this.apiKey}`;
+    }
+
+    // Handle light driving style - use "main" style since tile API doesn't have separate light-driving
+    // The "main" style is already optimized for general use and is light-colored
+    if (normalizedStyle === 'light_driving' || normalizedStyle === 'light-driving') {
+      return `${this.mapBaseUrl}/tile/basic/main/{z}/{x}/{y}.png?key=${this.apiKey}`;
     }
 
     // Default to basic tiles with the requested style (main/night/...)
@@ -209,11 +219,18 @@ class TomTomService {
 
   /**
    * Get traffic flow data
+   * DISABLED by default to save API calls - returns cached/mock data only
    */
   async getTrafficFlow(lat, lng, options = {}) {
+    // Check if traffic flow is enabled in config
+    if (tomtomConfig.trafficFlowEnabled === false) {
+      // Return fallback/mock data without making API call
+      return this.fallbackTrafficFlow(lat, lng, options);
+    }
+
     const cacheKey = `traffic_${lat}_${lng}_${JSON.stringify(options)}`;
     
-    // Check cache first (longer cache for traffic data to match rate limiting)
+    // Check cache first (24 hour cache to reduce API calls)
     if (this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey);
       if (Date.now() - cached.timestamp < tomtomConfig.trafficCacheTimeout) {
@@ -221,10 +238,12 @@ class TomTomService {
       }
     }
 
+    // Don't make API calls if we're at the limit
     if (!this.canMakeRequest()) {
       return this.fallbackTrafficFlow(lat, lng, options);
     }
 
+    // Only make API call if explicitly enabled and not cached
     try {
       const params = new URLSearchParams({
         key: this.apiKey,
@@ -243,7 +262,7 @@ class TomTomService {
       this.trackRequest();
       const data = await response.json();
       
-      // Cache the result
+      // Cache the result for 24 hours
       this.cache.set(cacheKey, {
         data: data,
         timestamp: Date.now()
@@ -251,13 +270,13 @@ class TomTomService {
 
       return data;
     } catch (error) {
-
+      // Return fallback instead of making more API calls
       return this.fallbackTrafficFlow(lat, lng, options);
     }
   }
 
   /**
-   * Calculate route between two points
+   * Calculate route between two points - Enhanced with better parameters
    */
   async calculateRoute(origin, destination, options = {}) {
     // Validate coordinates
@@ -277,18 +296,33 @@ class TomTomService {
     }
 
     if (!this.canMakeRequest()) {
-      return this.fallbackRoute(origin, destination, options);
+      console.warn('TomTom API limit reached. Falling back to Geoapify for routing.');
+      return await geoapifyService.calculateRoute(origin, destination, options);
     }
 
     try {
+      // Enhanced parameters for better routing results
       const params = new URLSearchParams({
         key: this.apiKey,
-        ...options
+        traffic: options.traffic !== undefined ? String(options.traffic) : 'true',
+        travelMode: options.travelMode || 'car',
+        instructionsType: options.instructionsType || 'text',
+        routeRepresentation: options.routeRepresentation || 'polyline',
+        computeBestOrder: options.computeBestOrder || 'false',
+        maxAlternatives: String(options.maxAlternatives || 3),
+        language: options.language || 'en-US',
+        ...(options.avoid && { avoid: options.avoid }),
+        ...(options.routeType && { routeType: options.routeType })
       });
 
       const response = await fetch(`${this.baseUrl}/routing/1/calculateRoute/${origin.lat},${origin.lng}:${destination.lat},${destination.lng}/json?${params}`);
 
       if (!response.ok) {
+        // Handle rate limiting (429) and forbidden (403) - fallback to Geoapify
+        if (response.status === 429 || response.status === 403) {
+          console.warn(`TomTom API ${response.status === 403 ? 'forbidden' : 'rate limit'} reached. Falling back to Geoapify for routing.`);
+          return await geoapifyService.calculateRoute(origin, destination, options);
+        }
         throw new Error(`TomTom routing failed: ${response.status}`);
       }
 
@@ -303,8 +337,400 @@ class TomTomService {
 
       return data;
     } catch (error) {
+      console.warn('TomTom routing error:', error);
+      // Fallback to Geoapify on any error
+      console.warn('Falling back to Geoapify for routing.');
+      return await geoapifyService.calculateRoute(origin, destination, options);
+    }
+  }
 
-      return this.fallbackRoute(origin, destination, options);
+  /**
+   * Search for places/POIs using TomTom Search API
+   * Enhanced to use Geoapify autocomplete when TomTom fails with 403/429 for autocomplete scenarios
+   */
+  async searchPlaces(query, options = {}) {
+    const cacheKey = `places_${query}_${JSON.stringify(options)}`;
+    
+    // Check cache first
+    if (this.cache.has(cacheKey)) {
+      const cached = this.cache.get(cacheKey);
+      if (Date.now() - cached.timestamp < this.cacheTimeout) {
+        return cached.data;
+      }
+    }
+
+    if (!this.canMakeRequest()) {
+      console.warn('TomTom API limit reached. Falling back to Geoapify for places search.');
+      // Use autocomplete for short queries (autocomplete scenario)
+      const isAutocompleteScenario = query.length <= 3 || options.typeahead === true;
+      if (isAutocompleteScenario) {
+        return await geoapifyService.autocompletePlaces(query, options);
+      }
+      return await geoapifyService.searchPlaces(query, options);
+    }
+
+    try {
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        query: query,
+        limit: String(options.limit || 10),
+        countrySet: options.countrySet || 'PH',
+        typeahead: options.typeahead !== undefined ? String(options.typeahead) : 'true',
+        ...(options.lat && options.lng && {
+          lat: String(options.lat),
+          lon: String(options.lng),
+          radius: String(options.radius || 5000)
+        }),
+        ...(options.categorySet && { categorySet: options.categorySet }),
+        ...(options.idxSet && { idxSet: options.idxSet })
+      });
+
+      const response = await fetch(`${this.baseUrl}/search/2/search/${encodeURIComponent(query)}.json?${params}`);
+      
+      if (!response.ok) {
+        // Handle rate limiting (429) and forbidden (403) - fallback to Geoapify
+        if (response.status === 429 || response.status === 403) {
+          console.warn(`TomTom API ${response.status === 403 ? 'forbidden' : 'rate limit'} reached. Falling back to Geoapify for places search.`);
+          // Use autocomplete for short queries or when typeahead is enabled (autocomplete scenario)
+          const isAutocompleteScenario = query.length <= 3 || options.typeahead === true;
+          if (isAutocompleteScenario) {
+            return await geoapifyService.autocompletePlaces(query, options);
+          }
+          return await geoapifyService.searchPlaces(query, options);
+        }
+        // Return cached data if available for other errors
+        if (this.cache.has(cacheKey)) {
+          const cached = this.cache.get(cacheKey);
+          return cached.data;
+        }
+        throw new Error(`TomTom places search failed: ${response.status}`);
+      }
+
+      this.trackRequest();
+      const data = await response.json();
+      
+      // Cache the result
+      this.cache.set(cacheKey, {
+        data: data,
+        timestamp: Date.now()
+      });
+
+      return data;
+    } catch (error) {
+      console.warn('TomTom places search error:', error);
+      // Fallback to Geoapify on any error
+      console.warn('Falling back to Geoapify for places search.');
+      // Use autocomplete for short queries or when typeahead is enabled (autocomplete scenario)
+      const isAutocompleteScenario = query.length <= 3 || options.typeahead === true;
+      if (isAutocompleteScenario) {
+        return await geoapifyService.autocompletePlaces(query, options);
+      }
+      return await geoapifyService.searchPlaces(query, options);
+    }
+  }
+
+  /**
+   * Get traffic incidents from TomTom Traffic Incidents API
+   * @param {Object} bounds - Bounding box {minLat, minLng, maxLat, maxLng}
+   * @param {Date} startTime - Start time for filtering incidents
+   * @param {Date} endTime - End time for filtering incidents
+   * @param {Object} options - Additional options
+   * @returns {Promise<Object>} Traffic incidents data
+   */
+  async getTrafficIncidents(bounds, startTime = null, endTime = null, options = {}) {
+    try {
+      // Default to last 3 days if not specified
+      if (!endTime) {
+        endTime = new Date();
+      }
+      if (!startTime) {
+        startTime = new Date();
+        startTime.setDate(startTime.getDate() - 3);
+      }
+
+      // Format bounding box as required by TomTom API: minLat,minLng,maxLat,maxLng
+      const bbox = `${bounds.minLat},${bounds.minLng},${bounds.maxLat},${bounds.maxLng}`;
+      
+      // Format times as ISO 8601 strings
+      const startTimeISO = startTime.toISOString();
+      const endTimeISO = endTime.toISOString();
+
+      // TomTom Traffic Incidents API endpoint
+      // Using version 4, s3 format (simplified)
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        startTime: startTimeISO,
+        endTime: endTimeISO,
+        ...(options.category && { category: options.category }),
+        ...(options.severity && { severity: options.severity })
+      });
+
+      const url = `${this.baseUrl}/traffic/services/4/incidentDetails/s3/${bbox}/json?${params}`;
+
+      // Check cache first
+      const cacheKey = `incidents_${bbox}_${startTimeISO}_${endTimeISO}`;
+      if (this.cache.has(cacheKey)) {
+        const cached = this.cache.get(cacheKey);
+        if (Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 minute cache for incidents
+          return cached.data;
+        }
+      }
+
+      if (!this.canMakeRequest()) {
+        console.warn('TomTom API limit reached, cannot fetch incidents');
+        return { incidents: [] };
+      }
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        },
+        timeout: this.timeout
+      });
+
+      if (!response.ok) {
+        throw new Error(`TomTom incidents API error: ${response.status}`);
+      }
+
+      this.trackRequest();
+      const data = await response.json();
+
+      // Cache the result
+      this.cache.set(cacheKey, {
+        data: data,
+        timestamp: Date.now()
+      });
+
+      return data;
+    } catch (error) {
+      console.error('TomTom traffic incidents error:', error);
+      return { incidents: [] };
+    }
+  }
+
+  /**
+   * Autocomplete places using TomTom Search API (typeahead)
+   * This is optimized for autocomplete with faster responses
+   * Enhanced to always use Geoapify autocomplete API when TomTom fails with 403/429
+   */
+  async autocompletePlaces(query, options = {}) {
+    if (!query || query.length < 1) {
+      return { results: [] };
+    }
+
+    const cacheKey = `autocomplete_${query}_${JSON.stringify(options)}`;
+    
+    // Check cache first (shorter cache for autocomplete)
+    if (this.cache.has(cacheKey)) {
+      const cached = this.cache.get(cacheKey);
+      if (Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 minutes cache for autocomplete
+        return cached.data;
+      }
+    }
+
+    if (!this.canMakeRequest()) {
+      console.warn('TomTom API limit reached. Falling back to Geoapify autocomplete API.');
+      return await geoapifyService.autocompletePlaces(query, options);
+    }
+
+    try {
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        query: query,
+        limit: String(options.limit || 10),
+        countrySet: options.countrySet || 'PH',
+        typeahead: 'true', // Always use typeahead for autocomplete
+        ...(options.lat && options.lng && {
+          lat: String(options.lat),
+          lon: String(options.lng),
+          radius: String(options.radius || 10000)
+        }),
+        ...(options.categorySet && { categorySet: options.categorySet })
+      });
+
+      const response = await fetch(`${this.baseUrl}/search/2/search/${encodeURIComponent(query)}.json?${params}`);
+      
+      if (!response.ok) {
+        // Handle rate limiting (429) and forbidden (403) - always fallback to Geoapify autocomplete
+        if (response.status === 429 || response.status === 403) {
+          console.warn(`TomTom API ${response.status === 403 ? 'forbidden' : 'rate limit'} reached. Falling back to Geoapify autocomplete API.`);
+          return await geoapifyService.autocompletePlaces(query, options);
+        }
+        throw new Error(`TomTom autocomplete failed: ${response.status}`);
+      }
+
+      this.trackRequest();
+      const data = await response.json();
+      
+      // Cache the result
+      this.cache.set(cacheKey, {
+        data: data,
+        timestamp: Date.now()
+      });
+
+      return data;
+    } catch (error) {
+      console.warn('TomTom autocomplete error:', error);
+      // Fallback to Geoapify autocomplete on any error
+      console.warn('Falling back to Geoapify autocomplete API.');
+      return await geoapifyService.autocompletePlaces(query, options);
+    }
+  }
+
+  /**
+   * Get POI photos using TomTom Search API
+   * Note: TomTom Search API may include photos in the response, or we extract from POI data
+   * This method extracts photos from search results or returns empty array
+   */
+  async getPOIPhotos(poiId, options = {}) {
+    if (!poiId) {
+      return { photos: [] };
+    }
+
+    // TomTom Search API doesn't have a separate POI Photos endpoint
+    // Photos are typically included in the Search API response itself
+    // Return empty array as photos should be extracted from search results
+    console.warn('TomTom POI Photos API endpoint not available. Photos should be extracted from Search API response.');
+    return { photos: [] };
+  }
+
+  /**
+   * Get POI details including reviews and ratings
+   * Note: TomTom Search API may include ratings in the response
+   * Reviews are typically not available in the free tier
+   * This method extracts details from search results
+   */
+  async getPOIDetails(poiId, options = {}) {
+    if (!poiId) {
+      return null;
+    }
+
+    // TomTom Search API doesn't have a separate POI Details endpoint for reviews
+    // Ratings may be included in the Search API response
+    // Reviews are typically not available in the free tier
+    console.warn('TomTom POI Details API endpoint not available. Details should be extracted from Search API response.');
+    return null;
+  }
+
+  /**
+   * Get place details by coordinates (POI search)
+   */
+  async getPlaceDetails(lat, lng, options = {}) {
+    const cacheKey = `place_${lat}_${lng}_${JSON.stringify(options)}`;
+    
+    // Check cache first
+    if (this.cache.has(cacheKey)) {
+      const cached = this.cache.get(cacheKey);
+      if (Date.now() - cached.timestamp < this.cacheTimeout) {
+        return cached.data;
+      }
+    }
+
+    if (!this.canMakeRequest()) {
+      console.warn('TomTom API limit reached. Falling back to Geoapify for place details.');
+      return await geoapifyService.getPlaceDetails(lat, lng, options);
+    }
+
+    try {
+      // First try reverse geocoding to get address
+      const reverseResult = await this.reverseGeocode(lat, lng, options);
+      
+      // Then search for nearby POIs using Search API with coordinates
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        lat: String(lat),
+        lon: String(lng),
+        radius: String(options.radius || 50),
+        limit: '1',
+        ...(options.categorySet && { categorySet: options.categorySet }),
+        idxSet: 'POI'
+      });
+
+      // Use Search API with empty query but coordinates to find nearby POIs
+      const poiResponse = await fetch(`${this.baseUrl}/search/2/search/.json?${params}`);
+      
+      // Handle 403/429 errors for POI search
+      if (!poiResponse.ok && (poiResponse.status === 403 || poiResponse.status === 429)) {
+        console.warn(`TomTom API ${poiResponse.status === 403 ? 'forbidden' : 'rate limit'} reached. Falling back to Geoapify for place details.`);
+        return await geoapifyService.getPlaceDetails(lat, lng, options);
+      }
+      
+      let poiData = null;
+      if (poiResponse.ok) {
+        poiData = await poiResponse.json();
+        this.trackRequest();
+      }
+
+      // Combine reverse geocoding and POI data
+      const placeDetails = {
+        address: reverseResult.addresses?.[0] || null,
+        poi: poiData?.results?.[0] || null,
+        coordinates: { lat, lng }
+      };
+
+      // Cache the result
+      this.cache.set(cacheKey, {
+        data: placeDetails,
+        timestamp: Date.now()
+      });
+
+      return placeDetails;
+    } catch (error) {
+      console.warn('TomTom place details error:', error);
+      // Fallback to Geoapify on any error
+      console.warn('Falling back to Geoapify for place details.');
+      return await geoapifyService.getPlaceDetails(lat, lng, options);
+    }
+  }
+
+  /**
+   * Search for POIs by category
+   */
+  async searchPOIByCategory(category, lat, lng, options = {}) {
+    const cacheKey = `poi_${category}_${lat}_${lng}_${JSON.stringify(options)}`;
+    
+    // Check cache first
+    if (this.cache.has(cacheKey)) {
+      const cached = this.cache.get(cacheKey);
+      if (Date.now() - cached.timestamp < this.cacheTimeout) {
+        return cached.data;
+      }
+    }
+
+    if (!this.canMakeRequest()) {
+      return { results: [] };
+    }
+
+    try {
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        lat: String(lat),
+        lon: String(lng),
+        radius: String(options.radius || 1000),
+        limit: String(options.limit || 10),
+        categorySet: category
+      });
+
+      const response = await fetch(`${this.baseUrl}/search/2/categorySearch/${category}.json?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`TomTom POI search failed: ${response.status}`);
+      }
+
+      this.trackRequest();
+      const data = await response.json();
+      
+      // Cache the result
+      this.cache.set(cacheKey, {
+        data: data,
+        timestamp: Date.now()
+      });
+
+      return data;
+    } catch (error) {
+      console.warn('TomTom POI search error:', error);
+      return { results: [] };
     }
   }
 

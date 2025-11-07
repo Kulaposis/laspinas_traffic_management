@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy import text
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from ..db import get_db
@@ -178,9 +179,9 @@ def debug_firebase_sync(db: Session = Depends(get_db)):
     Debug endpoint to test Firebase sync functionality
     """
     try:
-        # Test database connection
-        db.execute("SELECT 1")
-        db_status = "connected"
+        # Test database connection (SQLAlchemy 2.0)
+        db_check = db.scalar(text("SELECT 1"))
+        db_status = "connected" if db_check == 1 else f"unexpected_result:{db_check}"
     except Exception as e:
         db_status = f"error: {str(e)}"
     
@@ -204,6 +205,7 @@ def debug_firebase_sync(db: Session = Depends(get_db)):
     
     return {
         "database": db_status,
+        "db_check": 1 if db_status == "connected" else None,
         "firebase_admin": firebase_status,
         "user_schema": schema_status,
         "user_columns": user_columns,

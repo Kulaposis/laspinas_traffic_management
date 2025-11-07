@@ -1,9 +1,11 @@
 /**
  * Enhanced Geocoding Service
  * Uses backend API as proxy to avoid CORS and API key issues
+ * Falls back to Geoapify for better autocomplete and places search
  */
 
 import api from './api';
+import geoapifyService from './geoapifyService';
 
 class EnhancedGeocodingService {
   constructor() {
@@ -36,57 +38,225 @@ class EnhancedGeocodingService {
       const normalizedQuery = query.toLowerCase().trim();
       const limit = options.limit || 20; // Increased default limit
       
-      // Generate search variations for better results
-      const searchVariations = this.generateSearchVariations(query);
+      // For very short queries (1-3 chars), ONLY use Geoapify autocomplete
+      // Backend API and searchPlaces don't handle short queries well
+      const isVeryShortQuery = query.length <= 3;
       
-      // Combine results from multiple searches
-      const allResults = [];
-      const seenIds = new Set();
+      // Always use Geoapify autocomplete as primary method for better results
+      // Geoapify provides excellent autocomplete with strong Las Piñas prioritization
+      let allResults = [];
+      let seenIds = new Set();
       
-      // Search with each variation
-      for (const variation of searchVariations) {
-        try {
-          const params = new URLSearchParams({
-            query: variation,
-            limit: limit,
-            country: options.countrySet || 'PH'
+      // Use Geoapify autocomplete for all queries (better autocomplete experience)
+      try {
+        // Las Piñas City center coordinates
+        const lasPinasCenter = options.center || { lat: 14.4504, lng: 121.0170 };
+        
+        // Use Geoapify autocomplete with enhanced Las Piñas focus
+        const autocompleteResult = await geoapifyService.autocompletePlaces(query, {
+          limit: limit * 2, // Get more results to filter and prioritize
+          countrySet: 'PH', // Always filter to Philippines
+          lat: lasPinasCenter.lat,
+          lng: lasPinasCenter.lng,
+          radius: options.radius || 20000 // 20km radius to include Las Piñas and nearby areas
+        });
+        
+        // Transform and prioritize Geoapify autocomplete results
+        if (autocompleteResult.results && autocompleteResult.results.length > 0) {
+          autocompleteResult.results.forEach(result => {
+            const name = result.poi?.name || result.address?.freeformAddress || 'Unknown Location';
+            const resultId = result.metadata?.placeId || `${result.position?.lat || result.position?.latitude}_${result.position?.lon || result.position?.longitude}`;
+            
+            if (!seenIds.has(resultId)) {
+              seenIds.add(resultId);
+              
+              // Check if result is in Las Piñas City
+              const municipality = (result.address?.municipality || '').toLowerCase();
+              const countrySubdivision = (result.address?.countrySubdivision || '').toLowerCase();
+              const addressFull = (result.address?.freeformAddress || name).toLowerCase();
+              const isLasPinas = municipality.includes('las piñas') || 
+                                municipality.includes('las pinas') ||
+                                countrySubdivision.includes('las piñas') ||
+                                countrySubdivision.includes('las pinas') ||
+                                addressFull.includes('las piñas') ||
+                                addressFull.includes('las pinas');
+              
+              // Calculate distance from Las Piñas center for proximity scoring
+              const resultLat = result.position?.lat || result.position?.latitude;
+              const resultLng = result.position?.lon || result.position?.longitude;
+              const distance = this.calculateDistance(
+                lasPinasCenter.lat, lasPinasCenter.lng,
+                resultLat, resultLng
+              );
+              
+              // Boost score for Las Piñas results
+              let enhancedScore = result.score || 0.8;
+              if (isLasPinas) {
+                enhancedScore += 0.3; // Strong boost for Las Piñas
+              }
+              if (distance < 5000) { // Within 5km of Las Piñas center
+                enhancedScore += 0.2;
+              } else if (distance < 10000) { // Within 10km
+                enhancedScore += 0.1;
+              }
+              
+              allResults.push({
+                id: resultId,
+                name: name,
+                lat: resultLat,
+                lng: resultLng,
+                address: {
+                  full: result.address?.freeformAddress || name,
+                  freeformAddress: result.address?.freeformAddress || name,
+                  streetName: result.address?.streetName || '',
+                  streetNumber: result.address?.streetNumber || '',
+                  municipality: result.address?.municipality || '',
+                  countrySubdivision: result.address?.countrySubdivision || '',
+                  postalCode: result.address?.postalCode || '',
+                  country: result.address?.country || 'Philippines'
+                },
+                type: result.type || (result.poi ? 'POI' : 'address'),
+                score: enhancedScore,
+                provider: 'Geoapify',
+                poi: result.poi,
+                isLasPinas: isLasPinas,
+                distance: distance,
+                matchScore: this.calculateMatchScore(normalizedQuery, { 
+                  name: name, 
+                  address: { 
+                    full: result.address?.freeformAddress || name,
+                    municipality: result.address?.municipality || ''
+                  } 
+                })
+              });
+            }
           });
-
-          const response = await api.get(`${this.baseEndpoint}/geocode?${params}`);
+        }
+      } catch (geoapifyError) {
+        console.warn('Geoapify autocomplete failed, trying backend API:', geoapifyError);
+      }
+      
+      // Try backend API as fallback ONLY if:
+      // 1. Geoapify returned no results
+      // 2. Query is longer than 3 characters (backend API doesn't handle short queries well)
+      // 3. Not a very short query (skip entirely for 1-3 char queries)
+      if (allResults.length === 0 && !isVeryShortQuery) {
+        // Generate search variations for better results (only for longer queries)
+        const searchVariations = this.generateSearchVariations(query);
+        
+        // Limit to first 3 variations to avoid too many timeout errors
+        const limitedVariations = searchVariations.slice(0, 3);
+        
+        // Search with each variation (with timeout protection)
+        for (const variation of limitedVariations) {
+          // Skip variations that are too short (will cause backend API issues)
+          if (variation.length <= 2) continue;
           
-          if (response.data && Array.isArray(response.data)) {
-            // Transform and add results
-            response.data.forEach(result => {
-              const resultId = result.id || `${result.lat}_${result.lng}`;
+          try {
+            const params = new URLSearchParams({
+              query: variation,
+              limit: limit,
+              country: options.countrySet || 'PH'
+            });
+
+            // Add timeout to prevent long waits
+            const response = await Promise.race([
+              api.get(`${this.baseEndpoint}/geocode?${params}`),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Backend API timeout')), 5000)
+              )
+            ]);
+            
+            if (response.data && Array.isArray(response.data)) {
+              // Transform and add results
+              response.data.forEach(result => {
+                const resultId = result.id || `${result.lat}_${result.lng}`;
+                if (!seenIds.has(resultId)) {
+                  seenIds.add(resultId);
+                  allResults.push({
+                    id: resultId,
+                    name: result.name || 'Unknown',
+                    lat: result.lat,
+                    lng: result.lng,
+                    address: {
+                      full: result.address?.full || result.name,
+                      freeformAddress: result.address?.full || result.name,
+                      streetName: result.address?.street || '',
+                      streetNumber: '',
+                      municipality: result.address?.city || result.address?.municipality || '',
+                      countrySubdivision: result.address?.state || result.address?.countrySubdivision || '',
+                      postalCode: result.address?.postalCode || '',
+                      country: result.address?.country || 'Philippines'
+                    },
+                    type: result.type || 'general',
+                    score: result.confidence || 0.8,
+                    provider: result.provider || 'OpenStreetMap',
+                    searchMatch: variation, // Track which variation matched
+                    matchScore: this.calculateMatchScore(normalizedQuery, result)
+                  });
+                }
+              });
+              
+              // If we got results, break early to avoid unnecessary calls
+              if (allResults.length >= limit) break;
+            }
+          } catch (err) {
+            // Silently continue with next variation if one fails (don't log timeout errors)
+            if (err.message !== 'Backend API timeout') {
+              console.warn(`Search variation "${variation}" failed:`, err);
+            }
+          }
+        }
+      }
+      
+      // If backend API failed and we have no results, try Geoapify searchPlaces as fallback
+      // But only for queries longer than 3 chars (short queries should use autocomplete only)
+      if (allResults.length === 0 && query.length > 3) {
+        try {
+          const lasPinasCenter = options.center || { lat: 14.4504, lng: 121.0170 };
+          // Use autocomplete instead of searchPlaces to avoid 400 errors
+          const geoapifyResults = await geoapifyService.autocompletePlaces(query, {
+            limit: limit,
+            countrySet: 'PH', // Always filter to Philippines
+            lat: lasPinasCenter.lat,
+            lng: lasPinasCenter.lng,
+            radius: options.radius || 20000
+          });
+          
+          // Transform Geoapify search results
+          if (geoapifyResults.results && geoapifyResults.results.length > 0) {
+            geoapifyResults.results.forEach(result => {
+              const name = result.poi?.name || result.address?.freeformAddress || 'Unknown Location';
+              const resultId = result.metadata?.placeId || `${result.position?.lat || result.position?.latitude}_${result.position?.lon || result.position?.longitude}`;
+              
               if (!seenIds.has(resultId)) {
                 seenIds.add(resultId);
                 allResults.push({
                   id: resultId,
-                  name: result.name || 'Unknown',
-                  lat: result.lat,
-                  lng: result.lng,
+                  name: name,
+                  lat: result.position?.lat || result.position?.latitude,
+                  lng: result.position?.lon || result.position?.longitude,
                   address: {
-                    full: result.address?.full || result.name,
-                    freeformAddress: result.address?.full || result.name,
-                    streetName: result.address?.street || '',
-                    streetNumber: '',
-                    municipality: result.address?.city || result.address?.municipality || '',
-                    countrySubdivision: result.address?.state || result.address?.countrySubdivision || '',
+                    full: result.address?.freeformAddress || name,
+                    freeformAddress: result.address?.freeformAddress || name,
+                    streetName: result.address?.streetName || '',
+                    streetNumber: result.address?.streetNumber || '',
+                    municipality: result.address?.municipality || '',
+                    countrySubdivision: result.address?.countrySubdivision || '',
                     postalCode: result.address?.postalCode || '',
                     country: result.address?.country || 'Philippines'
                   },
-                  type: result.type || 'general',
-                  score: result.confidence || 0.8,
-                  provider: result.provider || 'OpenStreetMap',
-                  searchMatch: variation, // Track which variation matched
-                  matchScore: this.calculateMatchScore(normalizedQuery, result)
+                  type: result.type || (result.poi ? 'POI' : 'address'),
+                  score: result.score || 0.8,
+                  provider: 'Geoapify',
+                  poi: result.poi,
+                  matchScore: this.calculateMatchScore(normalizedQuery, { name: name, address: { full: result.address?.freeformAddress || name } })
                 });
               }
             });
           }
-        } catch (err) {
-          // Continue with next variation if one fails
-          console.warn(`Search variation "${variation}" failed:`, err);
+        } catch (geoapifyError) {
+          console.warn('Geoapify searchPlaces fallback failed:', geoapifyError);
         }
       }
       
@@ -120,19 +290,37 @@ class EnhancedGeocodingService {
         });
       }
       
-      // Sort by match score and relevance
+      // Sort by match score and relevance with strong Las Piñas prioritization
       const sortedResults = allResults
         .sort((a, b) => {
-          // Prioritize local results
+          // Prioritize local Las Piñas database results
           if (a.isLocal && !b.isLocal) return -1;
           if (!a.isLocal && b.isLocal) return 1;
+          
+          // Prioritize Geoapify results that are in Las Piñas
+          if (a.isLasPinas && !b.isLasPinas) return -1;
+          if (!a.isLasPinas && b.isLasPinas) return 1;
+          
+          // Prioritize Geoapify provider (better quality)
+          if (a.provider === 'Geoapify' && b.provider !== 'Geoapify') return -1;
+          if (a.provider !== 'Geoapify' && b.provider === 'Geoapify') return 1;
+          
+          // Sort by enhanced score (includes Las Piñas boost)
+          if (Math.abs((b.score || 0) - (a.score || 0)) > 0.1) {
+            return (b.score || 0) - (a.score || 0);
+          }
           
           // Sort by match score
           if (b.matchScore !== a.matchScore) {
             return b.matchScore - a.matchScore;
           }
           
-          // Then by provider confidence
+          // Then by distance (closer to Las Piñas center is better)
+          if (a.distance !== undefined && b.distance !== undefined) {
+            return a.distance - b.distance;
+          }
+          
+          // Finally by provider confidence
           return (b.score || 0) - (a.score || 0);
         })
         .slice(0, limit);
@@ -146,17 +334,106 @@ class EnhancedGeocodingService {
       return sortedResults;
     } catch (error) {
       console.error('Search error:', error);
-      // Return mock results for common locations as fallback
+      
+      // Try Geoapify as final fallback before mock results
+      try {
+        const lasPinasCenter = options.center || { lat: 14.4504, lng: 121.0170 };
+        
+        // Always use autocomplete for better results
+        const geoapifyResult = await geoapifyService.autocompletePlaces(query, {
+          limit: options.limit || 20,
+          countrySet: 'PH', // Always filter to Philippines
+          lat: lasPinasCenter.lat,
+          lng: lasPinasCenter.lng,
+          radius: options.radius || 20000 // 20km radius
+        });
+        
+        if (geoapifyResult.results && geoapifyResult.results.length > 0) {
+          const transformedResults = geoapifyResult.results.map(result => {
+            const name = result.poi?.name || result.address?.freeformAddress || 'Unknown Location';
+            const municipality = (result.address?.municipality || '').toLowerCase();
+            const addressFull = (result.address?.freeformAddress || name).toLowerCase();
+            const isLasPinas = municipality.includes('las piñas') || 
+                              municipality.includes('las pinas') ||
+                              addressFull.includes('las piñas') ||
+                              addressFull.includes('las pinas');
+            
+            const resultLat = result.position?.lat || result.position?.latitude;
+            const resultLng = result.position?.lon || result.position?.longitude;
+            const distance = this.calculateDistance(
+              lasPinasCenter.lat, lasPinasCenter.lng,
+              resultLat, resultLng
+            );
+            
+            // Boost score for Las Piñas
+            let enhancedScore = result.score || 0.8;
+            if (isLasPinas) enhancedScore += 0.3;
+            if (distance < 5000) enhancedScore += 0.2;
+            else if (distance < 10000) enhancedScore += 0.1;
+            
+            return {
+              id: result.metadata?.placeId || `${resultLat}_${resultLng}`,
+              name: name,
+              lat: resultLat,
+              lng: resultLng,
+              address: {
+                full: result.address?.freeformAddress || name,
+                freeformAddress: result.address?.freeformAddress || name,
+                streetName: result.address?.streetName || '',
+                streetNumber: result.address?.streetNumber || '',
+                municipality: result.address?.municipality || '',
+                countrySubdivision: result.address?.countrySubdivision || '',
+                postalCode: result.address?.postalCode || '',
+                country: result.address?.country || 'Philippines'
+              },
+              type: result.type || (result.poi ? 'POI' : 'address'),
+              score: enhancedScore,
+              provider: 'Geoapify',
+              poi: result.poi,
+              isLasPinas: isLasPinas,
+              distance: distance,
+              matchScore: this.calculateMatchScore(query.toLowerCase().trim(), { 
+                name: name, 
+                address: { 
+                  full: result.address?.freeformAddress || name,
+                  municipality: result.address?.municipality || ''
+                } 
+              })
+            };
+          });
+          
+          // Sort with Las Piñas prioritization
+          return transformedResults
+            .sort((a, b) => {
+              if (a.isLasPinas && !b.isLasPinas) return -1;
+              if (!a.isLasPinas && b.isLasPinas) return 1;
+              if (a.distance !== undefined && b.distance !== undefined) {
+                return a.distance - b.distance;
+              }
+              return (b.score || 0) - (a.score || 0);
+            });
+        }
+      } catch (geoapifyFallbackError) {
+        console.warn('Geoapify fallback also failed:', geoapifyFallbackError);
+      }
+      
+      // Return mock results for common locations as final fallback
       return this.getMockResults(query);
     }
   }
 
   /**
    * Generate search variations for better coverage
+   * Only creates variations for queries longer than 3 characters to avoid invalid queries
    */
   generateSearchVariations(query) {
     const variations = [query]; // Original query first
     const normalized = query.toLowerCase().trim();
+    
+    // Skip variations for very short queries (they cause API errors)
+    if (query.length <= 3) {
+      return variations;
+    }
     
     // Common variations for Las Piñas
     if (normalized.includes('las pinas') || normalized.includes('las piñas')) {
@@ -167,15 +444,15 @@ class EnhancedGeocodingService {
       variations.push('Las Piñas, Philippines');
     }
     
-    // Add city/country suffixes
-    if (!normalized.includes('city') && !normalized.includes('philippines')) {
+    // Add city/country suffixes only if query is meaningful (longer than 3 chars)
+    if (query.length > 3 && !normalized.includes('city') && !normalized.includes('philippines')) {
       variations.push(`${query} City`);
       variations.push(`${query}, Metro Manila`);
       variations.push(`${query}, Philippines`);
     }
     
-    // Remove duplicates
-    return [...new Set(variations)];
+    // Remove duplicates and filter out invalid short variations
+    return [...new Set(variations)].filter(v => v.length > 2);
   }
 
   /**
@@ -351,7 +628,43 @@ class EnhancedGeocodingService {
         return [transformedResult];
       }
       
-      // Fallback if no data - return as array
+      // Fallback to Geoapify if no data from backend
+      try {
+        const geoapifyResult = await geoapifyService.getPlaceDetails(lat, lng, options);
+        if (geoapifyResult) {
+          const transformedResult = {
+            id: geoapifyResult.id || `${lat}_${lng}`,
+            name: geoapifyResult.name || `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+            lat: geoapifyResult.lat || lat,
+            lng: geoapifyResult.lng || lng,
+            address: {
+              full: geoapifyResult.address?.full || geoapifyResult.name,
+              freeformAddress: geoapifyResult.address?.full || geoapifyResult.name,
+              streetName: geoapifyResult.address?.street || '',
+              streetNumber: '',
+              municipality: geoapifyResult.address?.city || geoapifyResult.address?.municipality || 'Las Piñas',
+              countrySubdivision: geoapifyResult.address?.state || '',
+              postalCode: geoapifyResult.address?.postalCode || '',
+              country: geoapifyResult.address?.country || 'Philippines'
+            },
+            type: geoapifyResult.type || 'general',
+            provider: 'Geoapify',
+            confidence: 0.8
+          };
+          
+          // Cache the result
+          this.cache.set(cacheKey, {
+            data: [transformedResult],
+            timestamp: Date.now()
+          });
+          
+          return [transformedResult];
+        }
+      } catch (geoapifyError) {
+        console.warn('Geoapify reverse geocode fallback failed:', geoapifyError);
+      }
+      
+      // Final fallback if no data - return as array
       const fallbackResult = {
         id: `${lat}_${lng}`,
         name: `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
@@ -369,6 +682,36 @@ class EnhancedGeocodingService {
       };
       return [fallbackResult];
     } catch (error) {
+      // Try Geoapify as fallback on error
+      try {
+        const geoapifyResult = await geoapifyService.getPlaceDetails(lat, lng, options);
+        if (geoapifyResult) {
+          const transformedResult = {
+            id: geoapifyResult.id || `${lat}_${lng}`,
+            name: geoapifyResult.name || `Location at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+            lat: geoapifyResult.lat || lat,
+            lng: geoapifyResult.lng || lng,
+            address: {
+              full: geoapifyResult.address?.full || geoapifyResult.name,
+              freeformAddress: geoapifyResult.address?.full || geoapifyResult.name,
+              streetName: geoapifyResult.address?.street || '',
+              streetNumber: '',
+              municipality: geoapifyResult.address?.city || geoapifyResult.address?.municipality || 'Las Piñas',
+              countrySubdivision: geoapifyResult.address?.state || '',
+              postalCode: geoapifyResult.address?.postalCode || '',
+              country: geoapifyResult.address?.country || 'Philippines'
+            },
+            type: geoapifyResult.type || 'general',
+            provider: 'Geoapify',
+            confidence: 0.8
+          };
+          
+          return [transformedResult];
+        }
+      } catch (geoapifyError) {
+        console.warn('Geoapify reverse geocode error fallback failed:', geoapifyError);
+      }
+      
       // Return a basic result on error - return as array
       const errorResult = {
         id: `${lat}_${lng}`,
@@ -541,13 +884,95 @@ class EnhancedGeocodingService {
   }
 
   /**
+   * Calculate distance between two coordinates using Haversine formula
+   * Returns distance in meters
+   */
+  calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  /**
+   * Convert degrees to radians
+   */
+  toRad(degrees) {
+    return degrees * (Math.PI / 180);
+  }
+
+  /**
    * Get location suggestions for autocomplete
+   * Uses Geoapify autocomplete for better results with Las Piñas prioritization
    */
   async getSuggestions(query, options = {}) {
-    if (!query || query.length < 2) {
+    if (!query || query.length < 1) {
       return [];
     }
 
+    // Always use Geoapify autocomplete for better results with Las Piñas focus
+    try {
+      const lasPinasCenter = options.center || { lat: 14.4504, lng: 121.0170 };
+      const autocompleteResult = await geoapifyService.autocompletePlaces(query, {
+        limit: 10, // Get more results to prioritize
+        countrySet: 'PH', // Always filter to Philippines
+        lat: lasPinasCenter.lat,
+        lng: lasPinasCenter.lng,
+        radius: options.radius || 20000 // 20km radius
+      });
+      
+      if (autocompleteResult.results && autocompleteResult.results.length > 0) {
+        // Transform and prioritize results
+        const transformedResults = autocompleteResult.results.map(result => {
+          const name = result.poi?.name || result.address?.freeformAddress || 'Unknown Location';
+          const municipality = (result.address?.municipality || '').toLowerCase();
+          const addressFull = (result.address?.freeformAddress || name).toLowerCase();
+          const isLasPinas = municipality.includes('las piñas') || 
+                            municipality.includes('las pinas') ||
+                            addressFull.includes('las piñas') ||
+                            addressFull.includes('las pinas');
+          
+          const resultLat = result.position?.lat || result.position?.latitude;
+          const resultLng = result.position?.lon || result.position?.longitude;
+          const distance = this.calculateDistance(
+            lasPinasCenter.lat, lasPinasCenter.lng,
+            resultLat, resultLng
+          );
+          
+          return {
+            id: result.metadata?.placeId || `${resultLat}_${resultLng}`,
+            name: name,
+            lat: resultLat,
+            lng: resultLng,
+            type: result.type || (result.poi ? 'POI' : 'address'),
+            provider: 'Geoapify',
+            isLasPinas: isLasPinas,
+            distance: distance,
+            score: result.score || 0.8
+          };
+        });
+        
+        // Sort: Las Piñas first, then by distance, then by score
+        return transformedResults
+          .sort((a, b) => {
+            if (a.isLasPinas && !b.isLasPinas) return -1;
+            if (!a.isLasPinas && b.isLasPinas) return 1;
+            if (a.distance !== undefined && b.distance !== undefined) {
+              return a.distance - b.distance;
+            }
+            return (b.score || 0) - (a.score || 0);
+          })
+          .slice(0, 7); // Return top 7
+      }
+    } catch (error) {
+      console.warn('Geoapify autocomplete failed in getSuggestions, using searchWithDebounce:', error);
+    }
+
+    // Fallback to standard search with debounce
     const results = await this.searchWithDebounce(query, {
       ...options,
       limit: 7

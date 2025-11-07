@@ -184,8 +184,15 @@ const logsService = {
   },
 
   async getClientIP() {
+    // By default we avoid calling third-party IP services to prevent
+    // tracking-prevention warnings in some browsers. Set
+    // VITE_ENABLE_IPIFY=true in the frontend env to enable this call.
+    const enableIpify = (import.meta?.env?.VITE_ENABLE_IPIFY || 'false').toLowerCase() === 'true';
+    if (!enableIpify) {
+      return null;
+    }
     try {
-      const response = await fetch('https://api.ipify.org?format=json');
+      const response = await fetch('https://api.ipify.org?format=json', { mode: 'cors' });
       const data = await response.json();
       return data.ip;
     } catch (error) {

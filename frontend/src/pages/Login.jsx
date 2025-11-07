@@ -37,6 +37,18 @@ const Login = ({ onLoginSuccess = () => {} }) => {
       return;
     }
 
+    // Decide whether to skip Firebase and go straight to backend
+    // Configure preferred backend-only domains via VITE_BACKEND_EMAIL_DOMAINS (comma-separated)
+    const emailLower = (formData.email || '').toLowerCase();
+    const configuredDomains = (import.meta?.env?.VITE_BACKEND_EMAIL_DOMAINS || '')
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+    // Built-in heuristic: government domains often are backend-managed
+    const heuristicDomains = ['gov.ph'];
+    const prefersBackend = [...configuredDomains, ...heuristicDomains]
+      .some((d) => emailLower.endsWith(`@${d}`));
+
     setLoading(true);
 
     // Suppress console errors for Firebase credential failures (we'll try backend next)
@@ -44,7 +56,7 @@ const Login = ({ onLoginSuccess = () => {} }) => {
     let consoleErrorSuppressed = false;
     
     try {
-      // Try Firebase first (for regular users), then automatically fallback to backend (for admin/backend users)
+      // Try Firebase first (for regular users), or skip Firebase entirely for backend-only domains
       let result;
       let firebaseSuccess = false;
       
@@ -62,25 +74,30 @@ const Login = ({ onLoginSuccess = () => {} }) => {
         originalError.apply(console, args);
       };
       
-      // Try Firebase authentication first - fail silently if it doesn't recognize the account
-      try {
-        result = await firebaseLogin(formData.email, formData.password);
-        
-        if (result && result.success) {
-          // Restore console.error before success
+      if (!prefersBackend) {
+        // Try Firebase authentication first - fail silently if it doesn't recognize the account
+        try {
+          result = await firebaseLogin(formData.email, formData.password);
+          
+          if (result && result.success) {
+            // Restore console.error before success
+            console.error = originalError;
+            firebaseSuccess = true;
+            toast.success(`Welcome back, ${result.user.displayName || result.user.email}!`);
+            onLoginSuccess(result.user);
+            return;
+          }
+          // If result exists but success is false, Firebase didn't recognize the account
+          // Silently fall through to backend authentication
+        } catch (firebaseError) {
+          // Firebase threw an error - silently fall through to backend authentication
+          // This is expected for backend-only accounts (like admin)
+        } finally {
+          // Always restore console.error
           console.error = originalError;
-          firebaseSuccess = true;
-          toast.success(`Welcome back, ${result.user.displayName || result.user.email}!`);
-          onLoginSuccess(result.user);
-          return;
         }
-        // If result exists but success is false, Firebase didn't recognize the account
-        // Silently fall through to backend authentication
-      } catch (firebaseError) {
-        // Firebase threw an error - silently fall through to backend authentication
-        // This is expected for backend-only accounts (like admin)
-      } finally {
-        // Always restore console.error
+      } else {
+        // If we prefer backend for this email, restore console immediately
         console.error = originalError;
       }
       

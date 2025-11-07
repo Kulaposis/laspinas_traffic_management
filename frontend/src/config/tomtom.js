@@ -34,12 +34,20 @@ export const tomtomConfig = {
       name: 'TomTom Satellite',
       description: 'Satellite imagery',
       preview: '🛰️'
+    },
+    light_driving: {
+      name: 'Light Driving',
+      description: 'Light theme optimized for driving navigation',
+      preview: '🚗'
     }
   },
   
   // Cache settings (increased to match time-based rate limiting)
   cacheTimeout: 2.5 * 60 * 60 * 1000, // 2.5 hours (matches rate limiting)
-  trafficCacheTimeout: 2 * 60 * 60 * 1000, // 2 hours for traffic data
+  trafficCacheTimeout: 24 * 60 * 60 * 1000, // 24 hours for traffic data (to reduce API calls)
+  
+  // Traffic flow settings - DISABLED to save API calls
+  trafficFlowEnabled: false, // Set to false to disable automatic traffic flow fetching
   
   // Fallback settings
   fallbackToOSM: true,

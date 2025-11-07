@@ -860,9 +860,13 @@ async def geocode_location(
     limit: int = Query(10, le=20, description="Maximum number of results"),
     country: str = Query("PH", description="Country code")
 ):
-    """Geocode location search - proxy for Nominatim to avoid CORS issues."""
+    """Geocode location search - uses Nominatim with Geoapify fallback."""
     import httpx
     
+    # Geoapify API key
+    GEOAPIFY_API_KEY = "c5044b7c329c41298245fc3c41dadc80"
+    
+    # Try Nominatim first
     try:
         params = {
             'q': query,
@@ -874,7 +878,7 @@ async def geocode_location(
             'namedetails': '1'
         }
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(
                 'https://nominatim.openstreetmap.org/search',
                 params=params,
@@ -902,22 +906,58 @@ async def geocode_location(
                         'confidence': 0.8
                     })
                 return results
-            else:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Nominatim API error: {response.status_code}"
-                )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Geocoding service timeout"
-        )
+    except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
+        logger.warn(f"Nominatim geocoding failed, trying Geoapify fallback: {str(e)}")
+    
+    # Fallback to Geoapify
+    try:
+        geoapify_params = {
+            'text': query,
+            'limit': limit,
+            'apiKey': GEOAPIFY_API_KEY
+        }
+        
+        # Add country filter
+        if country:
+            geoapify_params['filter'] = f'countrycode:{country.lower()}'
+        
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                'https://api.geoapify.com/v1/geocode/search',
+                params=geoapify_params,
+                headers={'Accept': 'application/json'}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = []
+                if data.get('features'):
+                    for feature in data['features']:
+                        props = feature.get('properties', {})
+                        coords = feature.get('geometry', {}).get('coordinates', [])
+                        if len(coords) >= 2:
+                            results.append({
+                                'id': f"{coords[1]}_{coords[0]}",
+                                'name': props.get('formatted', props.get('name', '')),
+                                'lat': float(coords[1]),
+                                'lng': float(coords[0]),
+                                'address': {
+                                    'street': props.get('street', ''),
+                                    'city': props.get('city', props.get('municipality', '')),
+                                    'country': props.get('country', 'Philippines'),
+                                    'full': props.get('formatted', '')
+                                },
+                                'type': 'general',
+                                'provider': 'Geoapify',
+                                'confidence': 0.9
+                            })
+                return results
     except Exception as e:
-        logger.error(f"Geocoding search error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Geocoding search failed: {str(e)}"
-        )
+        logger.error(f"Geoapify geocoding also failed: {str(e)}")
+    
+    # If both fail, return empty results instead of error
+    logger.warn(f"All geocoding services failed for query: {query}")
+    return []
 
 @router.get("/reverse-geocode")
 async def reverse_geocode_location(

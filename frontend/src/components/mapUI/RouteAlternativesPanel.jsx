@@ -10,9 +10,12 @@ const RouteAlternativesPanel = ({
   routeAlternatives = [],
   selectedRoute,
   onSelectRoute,
-  onClose
+  onClose,
+  showRouteAlternatives = true,
+  isNavigationActive = false,
+  showSmartRoutePanel = false
 }) => {
-  if (!routeAlternatives || routeAlternatives.length === 0) return null;
+  if (!routeAlternatives || routeAlternatives.length === 0 || !showRouteAlternatives || isNavigationActive || showSmartRoutePanel) return null;
 
   return (
     <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">

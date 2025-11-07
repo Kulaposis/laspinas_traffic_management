@@ -40,6 +40,29 @@ const AdminUserManagement = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userActivity, setUserActivity] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    full_name: '',
+    email: '',
+    username: '',
+    phone_number: '',
+    role: 'citizen',
+    password: ''
+  });
+  const [showCreateSuccess, setShowCreateSuccess] = useState(false);
+  const [createdUser, setCreatedUser] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    id: null,
+    full_name: '',
+    email: '',
+    username: '',
+    phone_number: '',
+    role: 'citizen',
+    is_active: true
+  });
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -182,7 +205,7 @@ const AdminUserManagement = () => {
             <Download className="w-4 h-4 mr-2" />
             Export Users
           </button>
-          <button className="btn btn-primary">
+          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             <UserPlus className="w-4 h-4 mr-2" />
             Add User
           </button>
@@ -412,6 +435,18 @@ const AdminUserManagement = () => {
                       <button
                         className="text-green-600 hover:text-green-900"
                         title="Edit User"
+                        onClick={() => {
+                          setEditForm({
+                            id: user.id,
+                            full_name: user.full_name,
+                            email: user.email,
+                            username: user.username,
+                            phone_number: user.phone_number || '',
+                            role: user.role,
+                            is_active: user.is_active
+                          });
+                          setShowEditModal(true);
+                        }}
                       >
                         <Edit className="w-4 h-4" />
                       </button>
@@ -527,6 +562,195 @@ const AdminUserManagement = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-xl w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Add New User</h3>
+                <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">×</button>
+              </div>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setCreateLoading(true);
+                  try {
+                    // Basic validation
+                    if (!createForm.full_name || !createForm.email || !createForm.username || !createForm.password) {
+                      alert('Please fill in full name, email, username, and password');
+                      return;
+                    }
+                    const newUser = await userService.createUser({
+                      full_name: createForm.full_name,
+                      email: createForm.email,
+                      username: createForm.username,
+                      phone_number: createForm.phone_number || null,
+                      role: createForm.role,
+                      password: createForm.password
+                    });
+                    await fetchData();
+                    setCreatedUser(newUser);
+                    setShowCreateModal(false);
+                    setShowCreateSuccess(true);
+                    setCreateForm({ full_name: '', email: '', username: '', phone_number: '', role: 'citizen', password: '' });
+                  } catch (err) {
+                    alert(err?.response?.data?.detail || err?.message || 'Failed to create user');
+                  } finally {
+                    setCreateLoading(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                    <input className="mt-1 w-full border rounded p-2" value={createForm.full_name} onChange={(e)=>setCreateForm({...createForm, full_name:e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Username</label>
+                    <input className="mt-1 w-full border rounded p-2" value={createForm.username} onChange={(e)=>setCreateForm({...createForm, username:e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" className="mt-1 w-full border rounded p-2" value={createForm.email} onChange={(e)=>setCreateForm({...createForm, email:e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <input className="mt-1 w-full border rounded p-2" value={createForm.phone_number} onChange={(e)=>setCreateForm({...createForm, phone_number:e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Role</label>
+                    <select className="mt-1 w-full border rounded p-2" value={createForm.role} onChange={(e)=>setCreateForm({...createForm, role:e.target.value})}>
+                      <option value="admin">Admin</option>
+                      <option value="lgu_staff">LGU Staff</option>
+                      <option value="traffic_enforcer">Traffic Enforcer</option>
+                      <option value="citizen">Citizen</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" className="mt-1 w-full border rounded p-2" value={createForm.password} onChange={(e)=>setCreateForm({...createForm, password:e.target.value})} required />
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button type="button" onClick={()=>setShowCreateModal(false)} className="btn btn-secondary">Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={createLoading}>{createLoading ? 'Creating...' : 'Create User'}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Success Modal */}
+      {showCreateSuccess && createdUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">User Created</h3>
+                <button onClick={() => setShowCreateSuccess(false)} className="text-gray-400 hover:text-gray-600">×</button>
+              </div>
+              <p className="text-gray-700 mb-4">The user has been created successfully.</p>
+              <div className="border rounded p-3 bg-gray-50 text-sm mb-6">
+                <div className="font-medium text-gray-900">{createdUser.full_name}</div>
+                <div className="text-gray-700">{createdUser.email} · @{createdUser.username}</div>
+                <div className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize bg-blue-100 text-blue-800">
+                  {createdUser.role}
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => { setShowCreateSuccess(false); setShowCreateModal(true); }}
+                >
+                  Add Another
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => { setShowCreateSuccess(false); setCreatedUser(null); }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-xl w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Edit User</h3>
+                <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">×</button>
+              </div>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setEditLoading(true);
+                  try {
+                    await userService.updateUser(editForm.id, {
+                      full_name: editForm.full_name,
+                      email: editForm.email,
+                      phone_number: editForm.phone_number || null,
+                      role: editForm.role,
+                      is_active: editForm.is_active
+                    });
+                    await fetchData();
+                    setShowEditModal(false);
+                  } catch (err) {
+                    alert(err?.response?.data?.detail || err?.message || 'Failed to update user');
+                  } finally {
+                    setEditLoading(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                    <input className="mt-1 w-full border rounded p-2" value={editForm.full_name} onChange={(e)=>setEditForm({...editForm, full_name:e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Username</label>
+                    <input className="mt-1 w-full border rounded p-2 bg-gray-100" value={editForm.username} disabled />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" className="mt-1 w-full border rounded p-2" value={editForm.email} onChange={(e)=>setEditForm({...editForm, email:e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <input className="mt-1 w-full border rounded p-2" value={editForm.phone_number} onChange={(e)=>setEditForm({...editForm, phone_number:e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Role</label>
+                    <select className="mt-1 w-full border rounded p-2" value={editForm.role} onChange={(e)=>setEditForm({...editForm, role:e.target.value})}>
+                      <option value="admin">Admin</option>
+                      <option value="lgu_staff">LGU Staff</option>
+                      <option value="traffic_enforcer">Traffic Enforcer</option>
+                      <option value="citizen">Citizen</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center space-x-2 mt-6">
+                    <input id="isActive" type="checkbox" className="h-4 w-4" checked={editForm.is_active} onChange={(e)=>setEditForm({...editForm, is_active:e.target.checked})} />
+                    <label htmlFor="isActive" className="text-sm text-gray-700">Active</label>
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button type="button" onClick={()=>setShowEditModal(false)} className="btn btn-secondary">Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={editLoading}>{editLoading ? 'Saving...' : 'Save Changes'}</button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

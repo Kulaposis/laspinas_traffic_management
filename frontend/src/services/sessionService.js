@@ -14,6 +14,7 @@ class SessionService {
     this.activityTimer = null;
     this.checkTimer = null;
     this.onLogoutCallback = null;
+    this.isLoggingOut = false; // Flag to prevent circular calls
   }
 
   /**
@@ -212,36 +213,52 @@ class SessionService {
 
   /**
    * Logout and clear session
+   * @param {string} reason - Reason for logout
+   * @param {boolean} skipCallback - If true, skip calling the logout callback to prevent circular calls
    */
-  logout(reason = 'User logout') {
+  logout(reason = 'User logout', skipCallback = false) {
+    // Prevent circular calls
+    if (this.isLoggingOut) {
+      console.warn('🚪 Logout already in progress, skipping duplicate call');
+      return;
+    }
+
+    this.isLoggingOut = true;
     console.log(`🚪 Logging out: ${reason}`);
 
-    // Clear localStorage
     try {
-      localStorage.removeItem(this.SESSION_KEY);
-      localStorage.removeItem(this.ACTIVITY_KEY);
-    } catch (error) {
-      console.warn('Error clearing localStorage:', error);
-    }
+      // Clear localStorage
+      try {
+        localStorage.removeItem(this.SESSION_KEY);
+        localStorage.removeItem(this.ACTIVITY_KEY);
+      } catch (error) {
+        console.warn('Error clearing localStorage:', error);
+      }
 
-    // Clear cookies
-    Cookies.remove('auth_token');
-    Cookies.remove('user_info');
-    Cookies.remove(this.ACTIVITY_KEY);
+      // Clear cookies
+      Cookies.remove('auth_token');
+      Cookies.remove('user_info');
+      Cookies.remove(this.ACTIVITY_KEY);
 
-    // Clear timers
-    if (this.activityTimer) {
-      clearTimeout(this.activityTimer);
-      this.activityTimer = null;
-    }
-    if (this.checkTimer) {
-      clearInterval(this.checkTimer);
-      this.checkTimer = null;
-    }
+      // Clear timers
+      if (this.activityTimer) {
+        clearTimeout(this.activityTimer);
+        this.activityTimer = null;
+      }
+      if (this.checkTimer) {
+        clearInterval(this.checkTimer);
+        this.checkTimer = null;
+      }
 
-    // Call logout callback
-    if (this.onLogoutCallback) {
-      this.onLogoutCallback(reason);
+      // Call logout callback only if not skipped (skip when called from AuthContext)
+      if (!skipCallback && this.onLogoutCallback) {
+        this.onLogoutCallback(reason);
+      }
+    } finally {
+      // Reset flag after a short delay to allow cleanup
+      setTimeout(() => {
+        this.isLoggingOut = false;
+      }, 100);
     }
   }
 

@@ -39,7 +39,8 @@ const SmartRoutePanel = ({
   isOpen = false,
   className = '',
   initialOrigin = null,
-  initialDestination = null
+  initialDestination = null,
+  hideLocationInputs = true
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [routes, setRoutes] = useState([]);
@@ -61,20 +62,56 @@ const SmartRoutePanel = ({
   const [showOriginSuggestions, setShowOriginSuggestions] = useState(false);
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
 
-  // Sync with external origin/destination when provided
+  // Sync with external origin/destination when provided, or clear when null
   useEffect(() => {
     if (initialOrigin) {
       setSelectedOrigin(initialOrigin);
       setOriginQuery(initialOrigin.name || initialOrigin.display_name || '');
+    } else {
+      // Clear origin when initialOrigin is null
+      setSelectedOrigin(null);
+      setOriginQuery('');
     }
+    
     if (initialDestination) {
       setSelectedDestination(initialDestination);
       setDestinationQuery(initialDestination.name || initialDestination.display_name || '');
+    } else {
+      // Clear destination when initialDestination is null
+      setSelectedDestination(null);
+      setDestinationQuery('');
     }
   }, [initialOrigin, initialDestination]);
+
+  // Reset panel state when closed
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset internal state when panel is closed
+      setRoutes([]);
+      setSelectedRoute(null);
+      setError('');
+      setRouteComparison(null);
+      setShowAllRoutes(false);
+      setOriginSuggestions([]);
+      setDestinationSuggestions([]);
+      setShowOriginSuggestions(false);
+      setShowDestinationSuggestions(false);
+    }
+  }, [isOpen]);
+
+  // Auto-fetch routes when panel opens with both ends available
+  useEffect(() => {
+    if (!isOpen) return;
+    // Only fetch if both are selected and we don't have routes yet
+    if (selectedOrigin && selectedDestination && routes.length === 0 && !loading) {
+      handleGetRoutes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, selectedOrigin, selectedDestination]);
   
   // Mobile detection and drag handling
   const [isMobile, setIsMobile] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const [dragStart, setDragStart] = useState(null);
   const [panelOffset, setPanelOffset] = useState(0);
   const panelRef = useRef(null);
@@ -83,6 +120,7 @@ const SmartRoutePanel = ({
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
+      setIsDesktop(window.innerWidth >= 1024);
       if (window.innerWidth >= 768) {
         setIsExpanded(true);
       }
@@ -308,17 +346,18 @@ const SmartRoutePanel = ({
   return (
     <div 
       ref={panelRef}
-      className={`fixed inset-x-0 bottom-0 z-[1100] transition-all duration-300 ease-out ${className}`}
-      style={{
-        transform: `translateY(${isExpanded ? -panelOffset : 'calc(100% - 60px)'}px)`,
-        maxHeight: isExpanded ? '55vh' : '60px' // Reduced from 90vh to 55vh to show more map
-      }}
+      className={`${isDesktop ? 'fixed right-4 bottom-4 w-[420px]' : 'fixed inset-x-0 bottom-0'} z-[1100] transition-all duration-300 ease-out ${className}`}
+      style={
+        isDesktop
+          ? { maxHeight: '60vh' }
+          : { transform: `translateY(${isExpanded ? -panelOffset : 'calc(100% - 60px)'}px)`, maxHeight: isExpanded ? '45vh' : '60px' }
+      }
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {/* Backdrop */}
-      {isExpanded && (
+      {!isDesktop && isExpanded && (
         <div 
           className="absolute inset-0 bg-black/20 backdrop-blur-sm -z-10"
           onClick={() => {
@@ -332,8 +371,8 @@ const SmartRoutePanel = ({
       <div className="bg-white/95 backdrop-blur-md rounded-t-3xl shadow-2xl border-t border-gray-200 overflow-hidden">
         {/* Drag Handle & Header - More Compact */}
         <div 
-          className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-3 cursor-pointer"
-          onClick={() => setIsExpanded(!isExpanded)}
+          className={`bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-3 ${isDesktop ? '' : 'cursor-pointer'}`}
+          onClick={() => { if (!isDesktop) setIsExpanded(!isExpanded); }}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -343,7 +382,11 @@ const SmartRoutePanel = ({
               <div>
                 <h3 className="font-bold text-white text-base">Smart Route</h3>
                 <p className="text-blue-100 text-[10px]">
-                  {selectedRoute ? `${formatDuration(selectedRoute.estimated_duration_minutes)} • ${formatDistance(selectedRoute.distance_km)}` : 'AI-powered navigation'}
+                  {routes.length > 0
+                    ? 'Route found'
+                    : selectedRoute
+                      ? `${formatDuration(selectedRoute.estimated_duration_minutes)} • ${formatDistance(selectedRoute.distance_km)}`
+                      : 'AI-powered navigation'}
                 </p>
               </div>
             </div>
@@ -383,10 +426,19 @@ const SmartRoutePanel = ({
         </div>
 
         {/* Expanded Content */}
-        {isExpanded && (
-          <div className="overflow-y-auto" style={{ maxHeight: 'calc(55vh - 80px)' }}>
+        {(isDesktop || isExpanded) && (
+          <div className="overflow-y-auto" style={{ maxHeight: isDesktop ? 'calc(60vh - 80px)' : 'calc(45vh - 80px)' }}>
             <div className="p-3 space-y-3">
-              {/* Search Inputs - More Compact */}
+              {/* Selected summary or search inputs */}
+              {hideLocationInputs && selectedOrigin && selectedDestination ? (
+                <div className="flex items-center justify-between bg-white/80 border border-gray-200 rounded-xl p-2.5">
+                  <div className="flex items-center space-x-2 text-xs text-gray-700">
+                    <span className="inline-flex items-center px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg"><MapPin className="w-3 h-3 mr-1"/>From: {selectedOrigin.name || selectedOrigin.display_name}</span>
+                    <ArrowRight className="w-3 h-3 text-gray-400"/>
+                    <span className="inline-flex items-center px-2 py-1 bg-red-50 text-red-700 rounded-lg"><MapPin className="w-3 h-3 mr-1"/>To: {selectedDestination.name || selectedDestination.display_name}</span>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-2">
                 {/* Origin */}
                 <div className="relative">
@@ -487,25 +539,15 @@ const SmartRoutePanel = ({
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Get Routes Button - More Compact */}
-              <button
-                onClick={handleGetRoutes}
-                disabled={loading || !selectedOrigin || !selectedDestination}
-                className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold shadow-md hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2 text-sm"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Finding Routes...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-5 h-5" />
-                    <span>Get Smart Routes</span>
-                  </>
-                )}
-              </button>
+              {/* Loading State Display */}
+              {loading && (
+                <div className="w-full py-3 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-lg border border-blue-200 flex items-center justify-center space-x-2 text-sm">
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span>Finding Routes...</span>
+                </div>
+              )}
 
               {/* Error Display */}
               {error && (

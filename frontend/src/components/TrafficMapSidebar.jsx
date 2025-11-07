@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, History, Layers, Map as MapIcon, Cloud, Droplets, UserCircle, LogOut } from 'lucide-react';
+import { X, History, Layers, Map as MapIcon, Cloud, Droplets, UserCircle, LogOut, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const noop = () => {};
@@ -63,6 +63,8 @@ const TrafficMapSidebar = ({
   onBackToDashboard,
   travelHistory = [],
   onOpenHistory = noop,
+  onOpenEmergencyReports = noop,
+  myEmergencyReports = [],
   heatmapEnabled = false,
   setHeatmapEnabled = noop,
   trafficLayerEnabled = true,
@@ -84,6 +86,8 @@ const TrafficMapSidebar = ({
   setReportsEnabled = noop,
   incidentProneEnabled = false,
   setIncidentProneEnabled = noop,
+  tomtomIncidentsEnabled = false,
+  setTomtomIncidentsEnabled = noop,
   floodZonesEnabled = false,
   setFloodZonesEnabled = noop,
   isGuest = false,
@@ -170,10 +174,45 @@ const TrafficMapSidebar = ({
           </button>
         </div>
 
+        {/* Emergency Reports */}
+        <div>
+          {isGuest ? (
+            <div className="w-full p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-100 shadow-sm">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <span className="text-base font-bold text-gray-900">Emergency Reports</span>
+                  <p className="text-xs text-red-600 mt-0.5 font-medium">You must login to view this</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenEmergencyReports}
+              className="w-full flex items-center space-x-4 p-4 bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 rounded-2xl transition-all duration-200 text-left group border border-red-100 hover:border-red-200 shadow-sm hover:shadow-md"
+            >
+              <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <span className="text-base font-bold text-gray-900">Emergency Reports</span>
+                <p className="text-xs text-gray-600 mt-0.5">Your reported incidents</p>
+              </div>
+              {myEmergencyReports.length > 0 && (
+                <span className="bg-gradient-to-br from-red-500 to-orange-500 text-white text-xs rounded-full w-7 h-7 flex items-center justify-center font-bold shadow-md">
+                  {myEmergencyReports.length}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
         {/* Map Layers */}
         <Section title="Map Layers" subtitle="Toggle map overlays" icon={<Layers className="w-5 h-5 text-gray-600" />}>
           <Toggle label="Traffic Heatmap" checked={heatmapEnabled} onChange={(e) => setHeatmapEnabled(e.target.checked)} />
-          <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} helper="Updates every 10 min" />
+          <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} helper="⚠️ Uses API calls - disabled by default" />
         </Section>
 
         {/* Map Style */}
@@ -215,8 +254,9 @@ const TrafficMapSidebar = ({
           <Toggle label="Traffic Monitoring (New)" checked={trafficMonitorNewEnabled} onChange={(e) => setTrafficMonitorNewEnabled(e.target.checked)} />
           <Toggle label="User Reports" checked={reportsEnabled} onChange={(e) => setReportsEnabled(e.target.checked)} />
           <Toggle label="Incident Prone Areas" checked={incidentProneEnabled} onChange={(e) => setIncidentProneEnabled(e.target.checked)} />
+          <Toggle label="TomTom Traffic Incidents" checked={tomtomIncidentsEnabled} onChange={(e) => setTomtomIncidentsEnabled(e.target.checked)} />
           <div className="text-xs text-gray-500 pt-1">
-            These layers will fetch from your API when enabled.
+            These layers will fetch from your API when enabled. TomTom incidents show recent accidents/incidents from the last 3 days.
           </div>
         </Section>
 
