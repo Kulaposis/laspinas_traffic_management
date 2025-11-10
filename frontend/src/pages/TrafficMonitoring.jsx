@@ -7,7 +7,6 @@ import TrafficInsights from '../components/TrafficInsights';
 import SmartRouting from '../components/SmartRouting';
 import RouteLayer from '../components/RouteLayer';
 import NavigationMode from '../components/NavigationMode';
-import EnhancedNavigationMode from '../components/EnhancedNavigationMode';
 import TomTomTileLayer from '../components/TomTomTileLayer';
 import SimpleMapTileLayer from '../components/SimpleMapTileLayer';
 import MapStyleSwitcher from '../components/MapStyleSwitcher';
@@ -1438,7 +1437,7 @@ const TrafficMonitoring = () => {
                       destination={routeDestination}
                     />
                   ) : (
-                    <EnhancedNavigationMode
+                    <NavigationMode
                       route={selectedRoute}
                       origin={routeOrigin}
                       destination={routeDestination}
@@ -3163,7 +3162,7 @@ const TrafficMonitoring = () => {
                     destination={routeDestination}
                   />
                 ) : (
-                  <EnhancedNavigationMode
+                  <NavigationMode
                     route={selectedRoute}
                     origin={routeOrigin}
                     destination={routeDestination}
