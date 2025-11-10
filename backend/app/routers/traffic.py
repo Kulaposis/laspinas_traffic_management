@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Background
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ..db import get_db
 from ..models.traffic import TrafficMonitoring, RouteAlternative, RoadIncident, TrafficStatus, RoadType
 from ..models.user import User
@@ -81,6 +81,183 @@ def get_traffic_api_status():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get traffic API status: {str(e)}"
+        )
+
+async def _fetch_traffic_for_point(road_info: dict, real_traffic_service) -> Optional[dict]:
+    """Helper function to fetch traffic data for a single monitoring point"""
+    try:
+        # Fetch from TomTom API with a timeout per request (5 seconds max per point)
+        # This prevents individual requests from hanging and blocking the entire batch
+        try:
+            api_data = await asyncio.wait_for(
+                real_traffic_service.fetch_traffic_data_from_tomtom(
+                    road_info["lat"], road_info["lng"]
+                ),
+                timeout=5.0  # 5 seconds per monitoring point
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout fetching traffic data for {road_info.get('name', 'unknown')} - using fallback")
+            api_data = None
+        
+        if api_data and "flowSegmentData" in api_data:
+            # Parse TomTom response
+            parsed_data = real_traffic_service.parse_tomtom_response(api_data, road_info)
+            
+            # Get traffic status value
+            traffic_status = parsed_data["traffic_status"]
+            if hasattr(traffic_status, 'value'):
+                status_value = traffic_status.value
+            elif isinstance(traffic_status, str):
+                status_value = traffic_status
+            else:
+                status_value = str(traffic_status)
+            
+            # Format for frontend
+            traffic_item = {
+                "id": f"tomtom_{road_info['lat']:.6f}_{road_info['lng']:.6f}",
+                "latitude": road_info["lat"],
+                "longitude": road_info["lng"],
+                "lat": road_info["lat"],
+                "lng": road_info["lng"],
+                "road_name": road_info["name"],
+                "barangay": road_info.get("barangay", ""),
+                "traffic_status": status_value,
+                "status": status_value,
+                "congestion_percentage": parsed_data["congestion_percentage"],
+                "average_speed": parsed_data["average_speed_kmh"],
+                "average_speed_kmh": parsed_data["average_speed_kmh"],
+                "vehicle_count": parsed_data.get("vehicle_count", 0),
+                "intensity": parsed_data["congestion_percentage"] / 100,
+                "data_source": parsed_data.get("data_source", "tomtom_api"),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "confidence_score": parsed_data.get("confidence_score", 0)
+            }
+            return traffic_item
+        else:
+            # Use fallback data if API fails
+            fallback_data = real_traffic_service.get_fallback_data(road_info)
+            
+            # Get traffic status value
+            traffic_status = fallback_data["traffic_status"]
+            if hasattr(traffic_status, 'value'):
+                status_value = traffic_status.value
+            elif isinstance(traffic_status, str):
+                status_value = traffic_status
+            else:
+                status_value = str(traffic_status)
+            
+            traffic_item = {
+                "id": f"fallback_{road_info['lat']:.6f}_{road_info['lng']:.6f}",
+                "latitude": road_info["lat"],
+                "longitude": road_info["lng"],
+                "lat": road_info["lat"],
+                "lng": road_info["lng"],
+                "road_name": road_info["name"],
+                "barangay": road_info.get("barangay", ""),
+                "traffic_status": status_value,
+                "status": status_value,
+                "congestion_percentage": fallback_data["congestion_percentage"],
+                "average_speed": fallback_data["average_speed_kmh"],
+                "average_speed_kmh": fallback_data["average_speed_kmh"],
+                "vehicle_count": fallback_data.get("vehicle_count", 0),
+                "intensity": fallback_data["congestion_percentage"] / 100,
+                "data_source": fallback_data.get("data_source", "fallback_generator"),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "confidence_score": fallback_data.get("confidence_score", 0)
+            }
+            return traffic_item
+            
+    except Exception as e:
+        logger.error(f"Error fetching traffic data for {road_info.get('name', 'unknown')}: {str(e)}")
+        return None
+
+@router.get("/realtime/direct")
+async def get_realtime_traffic_direct(
+    lat_min: Optional[float] = Query(None, description="Minimum latitude"),
+    lat_max: Optional[float] = Query(None, description="Maximum latitude"),
+    lng_min: Optional[float] = Query(None, description="Minimum longitude"),
+    lng_max: Optional[float] = Query(None, description="Maximum longitude")
+):
+    """
+    Fetch traffic data directly from TomTom API (bypasses database)
+    Returns real-time traffic data for monitoring points within the specified bounds
+    This endpoint is public and doesn't require authentication
+    """
+    try:
+        logger.info(f"Fetching real-time traffic data from TomTom API. Bounds: lat_min={lat_min}, lat_max={lat_max}, lng_min={lng_min}, lng_max={lng_max}")
+        
+        # Get monitoring points within bounds if provided, otherwise use all points
+        monitoring_points = real_traffic_service.monitoring_points
+        
+        if lat_min is not None and lat_max is not None and lng_min is not None and lng_max is not None:
+            # Filter monitoring points within bounds
+            monitoring_points = [
+                point for point in monitoring_points
+                if (lat_min <= point["lat"] <= lat_max and 
+                    lng_min <= point["lng"] <= lng_max)
+            ]
+            logger.info(f"Filtered to {len(monitoring_points)} monitoring points within bounds")
+        else:
+            logger.info(f"Using all {len(monitoring_points)} monitoring points (no bounds specified)")
+        
+        if not monitoring_points:
+            logger.warning("No monitoring points found within the specified bounds")
+            return []
+        
+        # Fetch traffic data directly from TomTom API for each monitoring point
+        traffic_data = []
+        successful_fetches = 0
+        failed_fetches = 0
+        
+        # Process monitoring points concurrently for better performance
+        # Add timeout to prevent hanging on slow API calls
+        tasks = []
+        
+        for road_info in monitoring_points:
+            tasks.append(_fetch_traffic_for_point(road_info, real_traffic_service))
+        
+        # Execute all fetches concurrently with a timeout
+        # Set timeout to 25 seconds to allow time for all monitoring points
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=25.0  # 25 seconds timeout for all concurrent requests
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout while fetching traffic data for {len(monitoring_points)} monitoring points")
+            # Try to get partial results if any completed before timeout
+            # Since we used gather with return_exceptions=True, we can't easily get partial results
+            # Just return empty and let the fallback handle it
+            results = [Exception("Request timeout")] * len(tasks)
+        
+        for result in results:
+            if isinstance(result, Exception):
+                failed_fetches += 1
+                # Only log non-timeout errors to reduce noise
+                if "timeout" not in str(result).lower():
+                    logger.error(f"Error fetching traffic data: {str(result)}")
+                continue
+            if result:
+                traffic_data.append(result)
+                successful_fetches += 1
+        
+        logger.info(f"Successfully fetched {successful_fetches} traffic data points, {failed_fetches} failed")
+        
+        if not traffic_data:
+            logger.warning("No traffic data returned from TomTom API. This could mean:")
+            logger.warning("1. TomTom API is unavailable")
+            logger.warning("2. No monitoring points match the bounds")
+            logger.warning("3. All API calls failed")
+        
+        return traffic_data
+        
+    except Exception as e:
+        logger.error(f"Error in get_realtime_traffic_direct: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch real-time traffic data: {str(e)}"
         )
 
 async def broadcast_heatmap_update(db: Session, bounds: dict = None):

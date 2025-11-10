@@ -3,6 +3,7 @@ import { Marker, Popup, Circle, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { createCustomIcon, createNavigationIcon } from '../../utils/mapIcons';
 import incidentReportingService from '../../services/incidentReportingService';
+import NavigationMarker from '../NavigationMarker';
 
 /**
  * Map Markers Component
@@ -22,7 +23,8 @@ const MapMarkers = ({
   user,
   simulationProgress,
   simulationSpeed,
-  gyroscopeEnabled
+  gyroscopeEnabled,
+  isNavigating = false
 }) => {
   // Create incident icon
   const createIncidentIcon = (type) => {
@@ -103,50 +105,43 @@ const MapMarkers = ({
         </Marker>
       )}
 
-      {/* User Location Marker */}
+      {/* User Location Marker - Use NavigationMarker when navigating */}
       {userLocation && !isSimulating && (
-        <Marker
-          position={[userLocation.lat, userLocation.lng]}
-          icon={createNavigationIcon(navigationIcon, userHeading)}
-          rotationAngle={userHeading}
-          rotationOrigin="center"
-        >
-          <Popup>
-            <div className="p-2">
-              <h3 className="font-semibold text-sm">Your Location</h3>
-              <p className="text-xs text-gray-600">
-                Accuracy: ±{Math.round(userLocation.accuracy)}m
-              </p>
-              <p className="text-xs text-gray-500">
-                {new Date(userLocation.timestamp).toLocaleTimeString()}
-              </p>
-            </div>
-          </Popup>
-        </Marker>
+        isNavigating ? (
+          <NavigationMarker
+            position={[userLocation.lat, userLocation.lng]}
+            heading={userHeading}
+            isNavigating={isNavigating}
+          />
+        ) : (
+          <Marker
+            position={[userLocation.lat, userLocation.lng]}
+            icon={createNavigationIcon(navigationIcon, userHeading)}
+            rotationAngle={userHeading}
+            rotationOrigin="center"
+          >
+            <Popup>
+              <div className="p-2">
+                <h3 className="font-semibold text-sm">Your Location</h3>
+                <p className="text-xs text-gray-600">
+                  Accuracy: ±{Math.round(userLocation.accuracy)}m
+                </p>
+                <p className="text-xs text-gray-500">
+                  {new Date(userLocation.timestamp).toLocaleTimeString()}
+                </p>
+              </div>
+            </Popup>
+          </Marker>
+        )
       )}
 
-      {/* Simulated Location Marker */}
+      {/* Simulated Location Marker - Use NavigationMarker when simulating */}
       {simulatedLocation && isSimulating && (
-        <Marker
+        <NavigationMarker
           position={[simulatedLocation.lat, simulatedLocation.lng]}
-          icon={createNavigationIcon(navigationIcon, userHeading)}
-          rotationAngle={userHeading}
-          rotationOrigin="center"
-        >
-          <Popup>
-            <div className="p-2">
-              <h3 className="font-semibold text-sm">🚗 Simulated Position</h3>
-              <p className="text-xs text-gray-600">
-                Progress: {Math.round(simulationProgress || 0)}%
-              </p>
-              {simulationSpeed && (
-                <p className="text-xs text-gray-500">
-                  Speed: {simulationSpeed}x
-                </p>
-              )}
-            </div>
-          </Popup>
-        </Marker>
+          heading={userHeading}
+          isNavigating={true}
+        />
       )}
 
       {/* Incident Markers */}

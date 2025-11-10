@@ -136,40 +136,272 @@ class GeoapifyService {
 
   /**
    * Transform Geoapify routing result to TomTom-like format
+   * Enhanced to extract detailed instructions, tolls, ferries, and route information
+   * Geoapify returns GeoJSON FeatureCollection with features containing properties.legs[]
    */
-  transformRoutingResult(geoapifyResult) {
+  transformRoutingResult(geoapifyResult, options = {}) {
     if (!geoapifyResult || !geoapifyResult.features || geoapifyResult.features.length === 0) {
       return { routes: [] };
     }
 
-    return {
-      routes: geoapifyResult.features.map(feature => {
-        const props = feature.properties;
-        const coords = feature.geometry.coordinates; // Array of [lon, lat]
-        
-        // Convert LineString coordinates to TomTom format
-        const points = coords.map(coord => ({
-          latitude: coord[1],
-          longitude: coord[0]
-        }));
+    const routes = geoapifyResult.features.map((feature, index) => {
+      const props = feature.properties;
+      
+      // Geoapify geometry: MultiLineString - array of LineStrings (one per leg)
+      // Each LineString is an array of [lon, lat] coordinates
+      let allCoordinates = [];
+      if (feature.geometry && feature.geometry.coordinates) {
+        if (Array.isArray(feature.geometry.coordinates[0][0])) {
+          // MultiLineString - multiple legs
+          feature.geometry.coordinates.forEach(legCoords => {
+            legCoords.forEach(coord => {
+              allCoordinates.push([coord[1], coord[0]]); // Convert [lon, lat] to [lat, lng]
+            });
+          });
+        } else {
+          // Single LineString
+          feature.geometry.coordinates.forEach(coord => {
+            allCoordinates.push([coord[1], coord[0]]); // Convert [lon, lat] to [lat, lng]
+          });
+        }
+      }
+      
+      // Extract route metrics from properties
+      const distanceMeters = props.distance || 0;
+      const timeSeconds = props.time || 0;
+      const distanceKm = distanceMeters / 1000;
+      const durationMinutes = timeSeconds / 60;
 
-        return {
-          summary: {
-            lengthInMeters: props.distance || 0,
-            travelTimeInSeconds: props.time || 0
-          },
-          legs: [{
-            points: points,
-            summary: {
-              lengthInMeters: props.distance || 0,
-              travelTimeInSeconds: props.time || 0
-            }
-          }],
-          geometry: {
-            coordinates: coords
+      // Extract turn-by-turn instructions from legs
+      const steps = [];
+      if (props.legs && Array.isArray(props.legs)) {
+        props.legs.forEach((leg, legIndex) => {
+          if (leg.steps && Array.isArray(leg.steps)) {
+            leg.steps.forEach((step, stepIndex) => {
+              // Get step coordinates from geometry using from_index and to_index
+              let stepLocation = null;
+              if (step.from_index !== undefined && feature.geometry.coordinates) {
+                const legGeometry = Array.isArray(feature.geometry.coordinates[0][0]) 
+                  ? feature.geometry.coordinates[legIndex] 
+                  : feature.geometry.coordinates;
+                if (legGeometry && legGeometry[step.from_index]) {
+                  const coord = legGeometry[step.from_index];
+                  stepLocation = [coord[1], coord[0]]; // Convert [lon, lat] to [lat, lng]
+                }
+              }
+
+              const stepData = {
+                index: steps.length,
+                instruction: step.instruction?.text || step.instruction || 'Continue',
+                maneuver_type: this.mapGeoapifyManeuverType(step.instruction?.type || 'Straight'),
+                distance_meters: step.distance || 0,
+                travel_time_seconds: step.time || 0,
+                street_name: step.name || step.instruction?.streets?.[0] || '',
+                location: stepLocation
+              };
+              steps.push(stepData);
+            });
           }
-        };
-      })
+        });
+      }
+
+      // If no steps extracted, create a basic step
+      if (steps.length === 0 && allCoordinates.length >= 2) {
+        steps.push({
+          index: 0,
+          instruction: 'Follow the route to your destination',
+          maneuver_type: 'straight',
+          distance_meters: distanceMeters,
+          travel_time_seconds: timeSeconds,
+          street_name: '',
+          location: allCoordinates[0]
+        });
+      }
+
+      // Check for tolls, ferries, highways from route properties and leg steps
+      const hasTolls = props.toll === true || 
+                       (props.legs && props.legs.some(leg => 
+                         leg.steps && leg.steps.some(step => step.toll === true)
+                       ));
+      const hasFerries = props.ferry === true ||
+                         (props.legs && props.legs.some(leg => 
+                           leg.steps && leg.steps.some(step => step.ferry === true)
+                         ));
+      const hasHighways = props.legs && props.legs.some(leg => 
+                         leg.steps && leg.steps.some(step => 
+                           step.road_class && (step.road_class === 'motorway' || step.road_class === 'trunk')
+                         ));
+
+      // Apply avoidance filters if specified
+      if (options.avoid === 'tolls' && hasTolls) {
+        return null; // Filter out toll routes
+      }
+      if (options.avoid === 'ferries' && hasFerries) {
+        return null; // Filter out ferry routes
+      }
+      if (options.avoid === 'highways' && hasHighways) {
+        return null; // Filter out highway routes
+      }
+
+      // Convert coordinates to TomTom format (for compatibility)
+      const points = allCoordinates.map(coord => ({
+        latitude: coord[0],
+        longitude: coord[1]
+      }));
+
+      // Create route in TomTom-compatible format
+      const route = {
+        summary: {
+          lengthInMeters: distanceMeters,
+          travelTimeInSeconds: timeSeconds,
+          hasTolls: hasTolls,
+          hasFerry: hasFerries,
+          hasHighway: hasHighways
+        },
+        legs: [{
+          points: points,
+          summary: {
+            lengthInMeters: distanceMeters,
+            travelTimeInSeconds: timeSeconds
+          },
+          instructions: steps.map(step => ({
+            message: step.instruction,
+            instructionType: this.reverseMapManeuverType(step.maneuver_type),
+            routeOffsetInMeters: step.distance_meters,
+            travelTimeInSeconds: step.travel_time_seconds,
+            street: step.street_name,
+            point: step.location ? {
+              latitude: step.location[0],
+              longitude: step.location[1]
+            } : null
+          }))
+        }],
+        geometry: {
+          coordinates: allCoordinates.map(coord => [coord[1], coord[0]]) // Back to [lon, lat] for geometry
+        },
+        // Additional route information for our system
+        route_id: `geoapify_${Date.now()}_${index}`,
+        route_name: props.route_name || (index === 0 ? 'Recommended Route' : `Alternative ${index}`),
+        route_type: props.route_type || (index === 0 ? 'fastest' : 'alternative'),
+        route_quality: index === 0 ? 'primary' : 'alternative',
+        distance_km: distanceKm,
+        estimated_duration_minutes: durationMinutes,
+        route_coordinates: allCoordinates,
+        steps: steps,
+        traffic_conditions: props.traffic ? 'heavy' : 'light',
+        has_tolls: hasTolls,
+        has_highways: hasHighways,
+        has_ferries: hasFerries,
+        confidence_level: 'high',
+        data_source: 'geoapify',
+        real_time_traffic: props.traffic === 'enabled' || props.traffic === 'approximated',
+        bounds: this.calculateRouteBounds(allCoordinates)
+      };
+
+      return route;
+    }).filter(route => route !== null); // Remove filtered routes
+
+    if (routes.length === 0) {
+      return { routes: [] };
+    }
+
+    // Sort routes by distance (shortest first)
+    routes.sort((a, b) => {
+      const distanceA = a.distance_km || a.summary?.lengthInMeters / 1000 || Infinity;
+      const distanceB = b.distance_km || b.summary?.lengthInMeters / 1000 || Infinity;
+      return distanceA - distanceB;
+    });
+
+    // Return in format compatible with both TomTom and our enhanced routing service
+    return {
+      routes: routes,
+      recommended_route: routes[0],
+      origin: routes[0].route_coordinates && routes[0].route_coordinates.length > 0 ? {
+        lat: routes[0].route_coordinates[0][0],
+        lon: routes[0].route_coordinates[0][1]
+      } : null,
+      destination: routes[0].route_coordinates && routes[0].route_coordinates.length > 0 ? {
+        lat: routes[0].route_coordinates[routes[0].route_coordinates.length - 1][0],
+        lon: routes[0].route_coordinates[routes[0].route_coordinates.length - 1][1]
+      } : null
+    };
+  }
+
+  /**
+   * Map Geoapify maneuver types to our system
+   */
+  mapGeoapifyManeuverType(geoapifyType) {
+    const typeMap = {
+      'turn-left': 'turn-left',
+      'turn-right': 'turn-right',
+      'turn-sharp-left': 'sharp-left',
+      'turn-sharp-right': 'sharp-right',
+      'turn-slight-left': 'bear-left',
+      'turn-slight-right': 'bear-right',
+      'continue': 'straight',
+      'straight': 'straight',
+      'uturn': 'uturn',
+      'depart': 'depart',
+      'arrive': 'arrive',
+      'merge': 'merge',
+      'fork': 'fork',
+      'roundabout': 'roundabout-enter',
+      'roundabout-exit': 'roundabout-exit',
+      'exit': 'exit',
+      'enter-roundabout': 'roundabout-enter',
+      'exit-roundabout': 'roundabout-exit',
+      'enter-motorway': 'merge',
+      'exit-motorway': 'exit',
+      'new-name': 'straight',
+      'end-of-road': 'arrive'
+    };
+
+    return typeMap[geoapifyType?.toLowerCase()] || 'straight';
+  }
+
+  /**
+   * Reverse map maneuver type back to TomTom format (for compatibility)
+   */
+  reverseMapManeuverType(maneuverType) {
+    const reverseMap = {
+      'turn-left': 'TURN_LEFT',
+      'turn-right': 'TURN_RIGHT',
+      'sharp-left': 'SHARP_LEFT',
+      'sharp-right': 'SHARP_RIGHT',
+      'bear-left': 'BEAR_LEFT',
+      'bear-right': 'BEAR_RIGHT',
+      'straight': 'STRAIGHT',
+      'uturn': 'MAKE_UTURN',
+      'depart': 'DEPART',
+      'arrive': 'ARRIVE',
+      'merge': 'ENTER_HIGHWAY',
+      'exit': 'EXIT_HIGHWAY',
+      'roundabout-enter': 'ENTER_ROUNDABOUT',
+      'roundabout-exit': 'EXIT_ROUNDABOUT'
+    };
+
+    return reverseMap[maneuverType] || 'STRAIGHT';
+  }
+
+  /**
+   * Calculate route bounds for map display
+   */
+  calculateRouteBounds(coordinates) {
+    if (!coordinates || coordinates.length === 0) return null;
+
+    let minLat = Infinity, maxLat = -Infinity;
+    let minLng = Infinity, maxLng = -Infinity;
+
+    coordinates.forEach(([lat, lng]) => {
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+    });
+
+    return {
+      southwest: [minLat, minLng],
+      northeast: [maxLat, maxLng]
     };
   }
 
@@ -713,6 +945,7 @@ class GeoapifyService {
 
   /**
    * Calculate route using Geoapify Routing API
+   * Enhanced with support for alternatives, better instructions, and more routing options
    * Compatible with TomTom calculateRoute interface
    */
   async calculateRoute(origin, destination, options = {}) {
@@ -731,8 +964,9 @@ class GeoapifyService {
     }
 
     try {
-      // Build waypoints string: Geoapify uses lon,lat format (longitude first!)
-      const waypoints = `${origin.lng},${origin.lat}|${destination.lng},${destination.lat}`;
+      // Build waypoints string: Geoapify uses lat,lon format (latitude first!)
+      // According to docs: waypoints=50.679023,4.569876|50.66170,4.578667
+      const waypoints = `${origin.lat},${origin.lng}|${destination.lat},${destination.lng}`;
 
       // Map TomTom travel modes to Geoapify modes
       const modeMap = {
@@ -752,16 +986,48 @@ class GeoapifyService {
         apiKey: this.apiKey
       });
 
-      // Add traffic option (only for drive mode)
+      // Add traffic option (only for drive mode) - use 'approximated' or 'enabled' for better traffic data
       if (mode === 'drive' && options.traffic !== false) {
-        params.append('traffic', 'approximated');
+        params.append('traffic', 'approximated'); // Use 'approximated' for better performance, 'enabled' for real-time
       }
 
-      // Add details - Geoapify uses comma-separated values
-      // Note: Each value must be 5-100 characters (removed 'time' as it's only 4 chars)
-      // The API will still return time information in the response
-      const details = ['instruction', 'geometry', 'distance'];
+      // Enhanced details - request comprehensive route information
+      // Geoapify details parameter accepts: instruction_details, route_details, elevation
+      // instruction_details: Adds detailed turn-by-turn instructions
+      // route_details: Adds road class, surface, speed limits, etc.
+      const details = ['instruction_details', 'route_details'];
       params.append('details', details.join(','));
+
+      // Request route alternatives if specified
+      const maxAlternatives = options.maxAlternatives || 1;
+      if (maxAlternatives > 1) {
+        // Geoapify doesn't have a direct alternatives parameter, but we can request different route types
+        // We'll make multiple requests with different optimization types
+        return await this.getGeoapifyRoutesWithAlternatives(origin, destination, options, mode, maxAlternatives);
+      }
+
+      // Add route optimization type (not "optimize" - it's "type")
+      // Geoapify supports: balanced (default), short, less_maneuvers
+      if (options.routeType === 'shortest') {
+        params.append('type', 'short');
+      } else if (options.routeType === 'fastest' || options.avoidTraffic === true) {
+        // For fastest, use balanced (default) or less_maneuvers for smoother routes
+        params.append('type', 'less_maneuvers');
+      }
+      // Default is 'balanced' - no need to set it explicitly
+
+      // Add avoidance options
+      const avoid = [];
+      if (options.avoid === 'tolls' || options.avoidTolls === true) {
+        // Note: Geoapify doesn't have direct toll avoidance, but we can filter routes
+        // We'll handle this in the transformation
+      }
+      if (options.avoid === 'ferries' || options.avoidFerries === true) {
+        // Similar to tolls, we'll check ferry flag in response
+      }
+      if (options.avoid === 'highways' || options.avoidHighways === true) {
+        // We can filter by road_class in the response
+      }
 
       const response = await fetch(
         `${this.baseUrl}/routing?${params}`,
@@ -791,13 +1057,41 @@ class GeoapifyService {
 
       const data = await response.json();
       
+      // Log the raw response for debugging
+      console.log('Geoapify API raw response:', data);
+      
       // Check if we have valid route data
-      if (!data || !data.features || data.features.length === 0) {
-        console.warn('Geoapify routing returned no routes');
+      if (!data) {
+        console.warn('Geoapify routing returned null/undefined response');
+        return { routes: [] };
+      }
+      
+      // Geoapify returns GeoJSON FeatureCollection by default
+      if (!data.features || data.features.length === 0) {
+        console.warn('Geoapify routing returned no features in response:', data);
+        // Check if it's a JSON format response (has results array instead of features)
+        if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+          console.log('Geoapify returned JSON format with results array');
+          // Convert JSON format to FeatureCollection format for transformation
+          const featureCollection = {
+            type: 'FeatureCollection',
+            features: data.results.map((result, index) => ({
+              type: 'Feature',
+              geometry: result.geometry || { type: 'LineString', coordinates: [] },
+              properties: result
+            }))
+          };
+          const transformed = this.transformRoutingResult(featureCollection, options);
+          this.setCache(cacheKey, transformed);
+          return transformed;
+        }
         return { routes: [] };
       }
 
-      const transformed = this.transformRoutingResult(data);
+      const transformed = this.transformRoutingResult(data, options);
+      
+      // Log transformed result for debugging
+      console.log('Geoapify transformed result:', transformed);
       
       // Cache the result
       this.setCache(cacheKey, transformed);
@@ -808,6 +1102,121 @@ class GeoapifyService {
       // Return empty routes instead of throwing to allow fallback
       return { routes: [] };
     }
+  }
+
+  /**
+   * Get multiple route alternatives from Geoapify by requesting different optimization types
+   */
+  async getGeoapifyRoutesWithAlternatives(origin, destination, options, mode, maxAlternatives) {
+    // Geoapify supports: balanced (default), short, less_maneuvers
+    const optimizationTypes = ['balanced', 'short', 'less_maneuvers'];
+    const routes = [];
+    // Geoapify uses lat,lon format (latitude first!)
+    const waypoints = `${origin.lat},${origin.lng}|${destination.lat},${destination.lng}`;
+
+    // Request routes with different optimization types
+    for (let i = 0; i < Math.min(maxAlternatives, optimizationTypes.length); i++) {
+      try {
+        const params = new URLSearchParams({
+          waypoints: waypoints,
+          mode: mode,
+          type: optimizationTypes[i], // Use 'type' parameter, not 'optimize'
+          apiKey: this.apiKey
+        });
+
+        // Add traffic for drive mode
+        if (mode === 'drive' && options.traffic !== false) {
+          params.append('traffic', 'approximated');
+        }
+
+        // Enhanced details - use correct parameter names
+        const details = ['instruction_details', 'route_details'];
+        params.append('details', details.join(','));
+
+        const response = await fetch(
+          `${this.baseUrl}/routing?${params}`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json'
+            }
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.features && data.features.length > 0) {
+            // Transform each route
+            const transformed = this.transformRoutingResult(data, options);
+            if (transformed && transformed.routes && transformed.routes.length > 0) {
+              // Mark route type
+              transformed.routes[0].route_name = 
+                optimizationTypes[i] === 'balanced' ? 'Balanced Route' :
+                optimizationTypes[i] === 'short' ? 'Shortest Route' :
+                'Smooth Route';
+              transformed.routes[0].route_type = 
+                optimizationTypes[i] === 'balanced' ? 'balanced' :
+                optimizationTypes[i] === 'short' ? 'shortest' :
+                'less_maneuvers';
+              
+              routes.push(transformed.routes[0]);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to get ${optimizationModes[i]} route:`, error);
+        // Continue to next optimization mode
+      }
+    }
+
+    // If we got routes, combine them
+    if (routes.length > 0) {
+      // Remove duplicates (routes that are too similar)
+      const uniqueRoutes = this.deduplicateRoutes(routes);
+      
+      // Sort by distance (shortest first)
+      uniqueRoutes.sort((a, b) => (a.distance_km || Infinity) - (b.distance_km || Infinity));
+
+      return {
+        routes: uniqueRoutes,
+        recommended_route: uniqueRoutes[0],
+        origin: {
+          lat: origin.lat,
+          lon: origin.lng
+        },
+        destination: {
+          lat: destination.lat,
+          lon: destination.lng
+        }
+      };
+    }
+
+    // Fallback: return empty routes if no alternatives found
+    console.warn('No route alternatives found from Geoapify');
+    return { routes: [] };
+  }
+
+  /**
+   * Remove duplicate routes (routes that are too similar)
+   */
+  deduplicateRoutes(routes) {
+    const uniqueRoutes = [];
+    
+    for (const route of routes) {
+      const isDuplicate = uniqueRoutes.some(existing => {
+        const distanceDiff = Math.abs((existing.distance_km || 0) - (route.distance_km || 0));
+        const durationDiff = Math.abs((existing.estimated_duration_minutes || 0) - (route.estimated_duration_minutes || 0));
+        // Consider duplicate if distance and duration differ by less than 5%
+        return distanceDiff < (existing.distance_km || 0) * 0.05 && 
+               durationDiff < (existing.estimated_duration_minutes || 0) * 0.05;
+      });
+      
+      if (!isDuplicate) {
+        uniqueRoutes.push(route);
+      }
+    }
+    
+    return uniqueRoutes;
   }
 
   /**

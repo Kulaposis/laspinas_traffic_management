@@ -1,9 +1,11 @@
 /**
- * Enhanced Routing Service with TomTom API Integration
+ * Enhanced Routing Service with Multiple API Integration
  * Provides Google Maps/Waze-like turn-by-turn navigation
+ * Routing Priority: Geoapify -> OSRM -> TomTom
  */
 
 import tomtomService from './tomtomService';
+import geoapifyService from './geoapifyService';
 import api from './api';
 
 class EnhancedRoutingService {
@@ -13,13 +15,42 @@ class EnhancedRoutingService {
   }
 
   /**
-   * Get detailed route with turn-by-turn instructions using TomTom API (with OSRM fallback)
+   * Get detailed route with turn-by-turn instructions
+   * Priority: Geoapify -> OSRM -> TomTom
    */
   async getDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     const maxAlternatives = options.maxAlternatives || 3;
     
     try {
-      // Try TomTom API first for better routing with traffic data
+      // Try Geoapify first (with traffic data support)
+      try {
+        const geoapifyRoute = await this.getGeoapifyDetailedRoute(
+          originLat, originLng, destinationLat, destinationLng, options
+        );
+
+        if (geoapifyRoute && geoapifyRoute.routes && geoapifyRoute.routes.length > 0) {
+          console.log('✅ Using Geoapify for routing');
+          return geoapifyRoute;
+        }
+      } catch (geoapifyError) {
+        console.warn('Geoapify routing failed, falling back to OSRM:', geoapifyError.message);
+      }
+
+      // Fallback to OSRM for reliable routing (OSRM typically provides better alternatives)
+      try {
+        const osrmRoute = await this.getOSRMDetailedRoute(
+          originLat, originLng, destinationLat, destinationLng, options
+        );
+
+        if (osrmRoute && osrmRoute.routes && osrmRoute.routes.length > 0) {
+          console.log('✅ Using OSRM for routing');
+          return osrmRoute;
+        }
+      } catch (osrmError) {
+        console.warn('OSRM routing failed, falling back to TomTom:', osrmError.message);
+      }
+
+      // Final fallback to TomTom API (with traffic data)
       try {
         const tomtomRoute = await this.getTomTomDetailedRoute(
           originLat, originLng, destinationLat, destinationLng, options
@@ -45,30 +76,16 @@ class EnhancedRoutingService {
                 console.log(`✅ Generated ${alternativeRoutes.length} alternative routes using different route types`);
                 return transformedRoute;
               }
-              
-              // If TomTom alternatives failed, fall through to OSRM
-              console.log('TomTom alternatives failed, falling back to OSRM for alternatives');
-            } else {
-              console.log('✅ Using TomTom API for routing');
-              return transformedRoute;
             }
+            console.log('✅ Using TomTom API for routing');
+            return transformedRoute;
           }
         }
       } catch (tomtomError) {
-        console.warn('TomTom routing failed, falling back to OSRM:', tomtomError.message);
+        console.warn('TomTom routing failed:', tomtomError.message);
       }
 
-      // Fallback to OSRM for reliable routing (OSRM typically provides better alternatives)
-      const osrmRoute = await this.getOSRMDetailedRoute(
-        originLat, originLng, destinationLat, destinationLng, options
-      );
-
-      if (osrmRoute && osrmRoute.routes && osrmRoute.routes.length > 0) {
-        console.log('✅ Using OSRM for routing');
-        return osrmRoute;
-      }
-
-      throw new Error('No valid route found');
+      throw new Error('No valid route found from any routing provider');
     } catch (error) {
       console.error('Route calculation error:', error);
       throw error;
@@ -183,6 +200,64 @@ class EnhancedRoutingService {
       return this.transformOSRMRoute(data);
     } catch (error) {
 
+      throw error;
+    }
+  }
+
+  /**
+   * Get route from Geoapify API with full details
+   */
+  async getGeoapifyDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
+    const origin = { lat: originLat, lng: originLng };
+    const destination = { lat: destinationLat, lng: destinationLng };
+
+    // Geoapify API parameters - optimized for better routing results
+    const routeOptions = {
+      traffic: options.traffic !== false, // Enable traffic for accurate ETAs
+      travelMode: options.travelMode || 'car',
+      maxAlternatives: options.maxAlternatives || 3, // Get multiple route alternatives
+      routeType: options.routeType, // fastest, shortest, balanced
+      avoidTraffic: options.avoidTraffic
+    };
+
+    try {
+      const result = await geoapifyService.calculateRoute(origin, destination, routeOptions);
+      
+      // Log the result for debugging
+      console.log('Geoapify calculateRoute result:', result);
+      
+      // Validate Geoapify response
+      if (!result) {
+        throw new Error('Geoapify API returned null/undefined response');
+      }
+      
+      if (!result.routes || result.routes.length === 0) {
+        console.warn('Geoapify API returned empty routes array. Full result:', result);
+        throw new Error('Geoapify API returned no routes');
+      }
+      
+      // Log how many routes were returned for debugging
+      const maxAlternatives = options.maxAlternatives || 3;
+      console.log(`Geoapify API returned ${result.routes.length} route(s) (requested ${maxAlternatives} alternatives)`);
+      
+      // Transform Geoapify response to our format
+      // Geoapify routes are already in TomTom-compatible format with additional route_coordinates
+      // Check if routes already have route_coordinates (Geoapify format)
+      if (result.routes && result.routes.length > 0 && result.routes[0].route_coordinates) {
+        // Geoapify routes already have the correct format, use them directly
+        return result;
+      }
+      
+      // Otherwise, transform using TomTom format
+      const transformedRoute = this.transformTomTomRoute(result);
+      
+      if (transformedRoute && transformedRoute.routes && transformedRoute.routes.length > 0) {
+        return transformedRoute;
+      }
+      
+      throw new Error('Failed to transform Geoapify routes');
+    } catch (error) {
+      console.error('Geoapify routing error:', error);
       throw error;
     }
   }

@@ -1,6 +1,10 @@
 ﻿import api from './api';
 
 class AuthService {
+  /**
+   * Backend/Database login (for admin and database users)
+   * This is the direct login to Supabase database
+   */
   async login(username, password) {
     try {
       // Use URLSearchParams for proper form-urlencoded format required by OAuth2PasswordRequestForm
@@ -32,12 +36,65 @@ class AuthService {
       localStorage.setItem('user', JSON.stringify(mappedUser));
       
       return {
+        success: true,
         token: access_token,
         user: mappedUser,
+        authMethod: 'backend'
       };
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Login failed');
     }
+  }
+
+  /**
+   * Hybrid login - tries Firebase first, then falls back to backend/database
+   * This allows both Firebase users and database users (like admin) to login
+   */
+  async hybridLogin(email, password, firebaseLoginFn) {
+    console.log('🔐 Starting hybrid authentication for:', email);
+    
+    // Step 1: Try Firebase authentication first
+    try {
+      console.log('🔥 Attempting Firebase authentication...');
+      const firebaseResult = await firebaseLoginFn(email, password);
+      
+      if (firebaseResult && firebaseResult.success) {
+        console.log('✅ Firebase authentication successful');
+        return {
+          success: true,
+          user: firebaseResult.user,
+          authMethod: 'firebase',
+          message: 'Logged in with Firebase'
+        };
+      }
+    } catch (firebaseError) {
+      console.log('⚠️ Firebase authentication failed:', firebaseError.message);
+      // Continue to backend fallback
+    }
+
+    // Step 2: If Firebase fails, try backend/database authentication
+    try {
+      console.log('🗄️ Attempting backend/database authentication...');
+      const backendResult = await this.login(email, password);
+      
+      if (backendResult && backendResult.success) {
+        console.log('✅ Backend authentication successful');
+        return {
+          success: true,
+          user: backendResult.user,
+          token: backendResult.token,
+          authMethod: 'backend',
+          message: 'Logged in with database credentials'
+        };
+      }
+    } catch (backendError) {
+      console.log('❌ Backend authentication failed:', backendError.message);
+      // Both methods failed
+      throw new Error('Invalid email or password. Please check your credentials and try again.');
+    }
+
+    // If we reach here, both methods failed
+    throw new Error('Authentication failed. Please check your credentials.');
   }
 
   async register(userData) {

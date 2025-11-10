@@ -31,7 +31,8 @@ class IncidentProneService {
         ...filters
       };
       const response = await api.get('/incident-prone-areas/nearby/search', { params });
-      return response.data;
+      // Backend returns {nearby_areas: [...], total: ...}, extract the array
+      return response.data?.nearby_areas || response.data?.areas || response.data || [];
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to fetch nearby incident prone areas');
     }

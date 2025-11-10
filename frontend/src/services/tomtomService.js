@@ -29,6 +29,10 @@ class TomTomService {
     // Cache for API responses
     this.cache = new Map();
     this.cacheTimeout = tomtomConfig.cacheTimeout;
+    
+    // Cache for failed requests (403/429) to skip TomTom and go directly to fallback
+    this.failedRequestsCache = new Map();
+    this.failedCacheTimeout = 24 * 60 * 60 * 1000; // 24 hours - if TomTom fails, skip it for a day
 
     // Fallback configuration
     this.fallbackToOSM = tomtomConfig.fallbackToOSM;
@@ -111,6 +115,13 @@ class TomTomService {
       return `${this.mapBaseUrl}/tile/basic/main/{z}/{x}/{y}.png?key=${this.apiKey}`;
     }
 
+    // Minimal style - uses basic style with fewer labels (if available)
+    // Falls back to main style if minimal is not available
+    if (normalizedStyle === 'minimal' || normalizedStyle === 'minimal-labels') {
+      // Try using basic style which typically has fewer labels than main
+      return `${this.mapBaseUrl}/tile/basic/basic/{z}/{x}/{y}.png?key=${this.apiKey}`;
+    }
+
     // Default to basic tiles with the requested style (main/night/...)
     return `${this.mapBaseUrl}/tile/basic/${normalizedStyle}/{z}/{x}/{y}.png?key=${this.apiKey}`;
   }
@@ -135,6 +146,18 @@ class TomTomService {
         return cached.data;
       }
     }
+    
+    // Check if this query previously failed with 403/429 - skip TomTom and use fallback directly
+    if (this.failedRequestsCache.has(cacheKey)) {
+      const failedCache = this.failedRequestsCache.get(cacheKey);
+      if (Date.now() - failedCache.timestamp < this.failedCacheTimeout) {
+        // Skip TomTom API and go directly to fallback to avoid showing 403 error
+        return this.fallbackGeocode(query, options);
+      } else {
+        // Cache expired, remove it and try TomTom again
+        this.failedRequestsCache.delete(cacheKey);
+      }
+    }
 
     if (!this.canMakeRequest()) {
       return this.fallbackGeocode(query, options);
@@ -149,10 +172,30 @@ class TomTomService {
         ...options
       });
 
-      const response = await fetch(`${this.baseUrl}/search/2/geocode/${encodeURIComponent(query)}.json?${params}`);
+      // Use fetch with error handling that doesn't throw for 403/429
+      let response;
+      try {
+        response = await fetch(`${this.baseUrl}/search/2/geocode/${encodeURIComponent(query)}.json?${params}`);
+      } catch (networkError) {
+        // Network error - use fallback silently
+        return this.fallbackGeocode(query, options);
+      }
       
+      // Check status before trying to parse response
       if (!response.ok) {
-        throw new Error(`TomTom geocoding failed: ${response.status}`);
+        // For 403/429 errors, cache the failure and use fallback
+        // This prevents showing the error on subsequent requests
+        if (response.status === 403 || response.status === 429) {
+          // Cache this failure so we skip TomTom on next request
+          this.failedRequestsCache.set(cacheKey, {
+            timestamp: Date.now(),
+            status: response.status
+          });
+          // Silently use fallback - this is expected behavior
+          return this.fallbackGeocode(query, options);
+        }
+        // For other errors, still use fallback
+        return this.fallbackGeocode(query, options);
       }
 
       this.trackRequest();
@@ -166,7 +209,11 @@ class TomTomService {
 
       return data;
     } catch (error) {
-
+      // Only log unexpected errors (not 403/429 which are handled above)
+      // Network errors are also handled silently
+      if (!error.message?.includes('403') && !error.message?.includes('429') && !error.message?.includes('fetch')) {
+        console.debug('TomTom geocoding error (using fallback):', error.message);
+      }
       return this.fallbackGeocode(query, options);
     }
   }
@@ -296,8 +343,11 @@ class TomTomService {
     }
 
     if (!this.canMakeRequest()) {
-      console.warn('TomTom API limit reached. Falling back to Geoapify for routing.');
-      return await geoapifyService.calculateRoute(origin, destination, options);
+      console.warn('TomTom API limit reached for routing.');
+      // Signal caller to use fallback provider
+      const err = new Error('TOMTOM_RATE_LIMIT');
+      err.code = 429;
+      throw err;
     }
 
     try {
@@ -318,12 +368,15 @@ class TomTomService {
       const response = await fetch(`${this.baseUrl}/routing/1/calculateRoute/${origin.lat},${origin.lng}:${destination.lat},${destination.lng}/json?${params}`);
 
       if (!response.ok) {
-        // Handle rate limiting (429) and forbidden (403) - fallback to Geoapify
+        // Handle rate limiting (429) and forbidden (403) - let caller fallback
         if (response.status === 429 || response.status === 403) {
-          console.warn(`TomTom API ${response.status === 403 ? 'forbidden' : 'rate limit'} reached. Falling back to Geoapify for routing.`);
-          return await geoapifyService.calculateRoute(origin, destination, options);
+          const err = new Error(response.status === 403 ? 'TOMTOM_FORBIDDEN' : 'TOMTOM_RATE_LIMIT');
+          err.code = response.status;
+          throw err;
         }
-        throw new Error(`TomTom routing failed: ${response.status}`);
+        const err = new Error(`TomTom routing failed: ${response.status}`);
+        err.code = response.status;
+        throw err;
       }
 
       this.trackRequest();
@@ -337,10 +390,9 @@ class TomTomService {
 
       return data;
     } catch (error) {
-      console.warn('TomTom routing error:', error);
-      // Fallback to Geoapify on any error
-      console.warn('Falling back to Geoapify for routing.');
-      return await geoapifyService.calculateRoute(origin, destination, options);
+      console.warn('TomTom routing error:', error?.message || error);
+      // Do not perform fallback here; allow upstream to decide the provider
+      throw error;
     }
   }
 
@@ -439,17 +491,56 @@ class TomTomService {
    */
   async getTrafficIncidents(bounds, startTime = null, endTime = null, options = {}) {
     try {
-      // Default to last 3 days if not specified
+      // Validate bounds
+      if (!bounds || typeof bounds.minLat !== 'number' || typeof bounds.minLng !== 'number' || 
+          typeof bounds.maxLat !== 'number' || typeof bounds.maxLng !== 'number') {
+        console.warn('Invalid bounds provided to getTrafficIncidents');
+        return { incidents: [] };
+      }
+
+      // Validate bounding box coordinates (min must be less than max)
+      if (bounds.minLat >= bounds.maxLat || bounds.minLng >= bounds.maxLng) {
+        console.warn('Invalid bounding box: min values must be less than max values');
+        return { incidents: [] };
+      }
+
+      // Validate bounding box size (TomTom API has limits - typically max 5 degrees)
+      const latDiff = Math.abs(bounds.maxLat - bounds.minLat);
+      const lngDiff = Math.abs(bounds.maxLng - bounds.minLng);
+      if (latDiff > 5 || lngDiff > 5) {
+        console.warn('Bounding box too large for TomTom API (max 5 degrees)');
+        return { incidents: [] };
+      }
+
+      // Default to today only if not specified (not past dates)
       if (!endTime) {
         endTime = new Date();
       }
       if (!startTime) {
+        // Start from beginning of today, not 3 days ago
         startTime = new Date();
-        startTime.setDate(startTime.getDate() - 3);
+        startTime.setHours(0, 0, 0, 0); // Start of today
+      }
+
+      // Validate date range (endTime must be after startTime)
+      if (endTime <= startTime) {
+        console.warn('Invalid date range: endTime must be after startTime');
+        return { incidents: [] };
+      }
+
+      // Ensure dates are not in the future (TomTom API doesn't accept future dates)
+      const now = new Date();
+      if (startTime > now || endTime > now) {
+        console.warn('TomTom API does not accept future dates, adjusting to current time');
+        endTime = new Date(Math.min(endTime.getTime(), now.getTime()));
+        if (startTime > now) {
+          startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+        }
       }
 
       // Format bounding box as required by TomTom API: minLat,minLng,maxLat,maxLng
-      const bbox = `${bounds.minLat},${bounds.minLng},${bounds.maxLat},${bounds.maxLng}`;
+      // Ensure coordinates are in valid range and properly formatted
+      const bbox = `${bounds.minLat.toFixed(6)},${bounds.minLng.toFixed(6)},${bounds.maxLat.toFixed(6)},${bounds.maxLng.toFixed(6)}`;
       
       // Format times as ISO 8601 strings
       const startTimeISO = startTime.toISOString();
@@ -485,12 +576,44 @@ class TomTomService {
         method: 'GET',
         headers: {
           'Accept': 'application/json'
-        },
-        timeout: this.timeout
+        }
       });
 
       if (!response.ok) {
-        throw new Error(`TomTom incidents API error: ${response.status}`);
+        // Try to get error details from response
+        let errorMessage = `TomTom incidents API error: ${response.status}`;
+        try {
+          // Read response as text first to handle both JSON and XML
+          const responseText = await response.clone().text();
+          if (responseText) {
+            // Try to parse as JSON first
+            try {
+              const errorJson = JSON.parse(responseText);
+              errorMessage = errorJson.detailedError?.message || errorJson.message || errorMessage;
+            } catch {
+              // Try to parse as XML (TomTom sometimes returns XML errors)
+              if (responseText.includes('<errorResponse>')) {
+                const match = responseText.match(/<message>([^<]+)<\/message>/);
+                if (match) {
+                  errorMessage = match[1];
+                }
+              } else {
+                errorMessage = responseText.substring(0, 200); // Limit length
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore error parsing error response
+          console.warn('Could not parse error response:', e);
+        }
+        
+        // Log the error with context (only in development or for debugging)
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('TomTom API error:', errorMessage);
+        }
+        
+        // Return empty incidents instead of throwing to prevent breaking the app
+        return { incidents: [] };
       }
 
       this.trackRequest();

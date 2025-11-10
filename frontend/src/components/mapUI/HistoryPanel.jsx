@@ -46,15 +46,21 @@ const HistoryPanel = ({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300 animate-fade-in backdrop-blur-sm"
-        style={{ zIndex: 45 }}
+        style={{ zIndex: 10004 }}
         onClick={onClose}
       />
 
       {/* Panel - Using exact same structure as TrafficMapSidebar */}
       <div
         data-history-panel
-        className="fixed top-0 left-0 h-full w-full sm:w-80 md:w-96 bg-white shadow-2xl transform transition-all duration-300 ease-out sm:rounded-r-3xl border-r border-gray-100 overflow-hidden flex flex-col animate-slide-in-left"
-        style={{ zIndex: 50 }}
+        className="fixed top-0 left-0 h-full w-full sm:w-80 md:w-96 shadow-2xl transform transition-all duration-300 ease-out sm:rounded-r-3xl border-r border-gray-100 overflow-hidden flex flex-col animate-slide-in-left"
+        style={{ 
+          zIndex: 10005, 
+          pointerEvents: 'auto', 
+          visibility: 'visible', 
+          opacity: 1,
+          backgroundColor: '#ffffff'
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-100 bg-white">

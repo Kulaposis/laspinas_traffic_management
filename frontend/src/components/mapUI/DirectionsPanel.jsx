@@ -117,7 +117,6 @@ const DirectionsPanel = ({
           setIsSearchingDestination(false);
         }
       } catch (error) {
-        console.error('Search error:', error);
         if (type === 'origin') {
           setOriginSuggestions([]);
           setIsSearchingOrigin(false);

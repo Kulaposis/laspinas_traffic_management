@@ -70,9 +70,29 @@ class AuthService:
 
     def login_user(self, username: str, password: str) -> dict:
         """Authenticate user and return access token."""
-        user = authenticate_user(self.db, username, password)
+        logger = logging.getLogger(__name__)
+        
+        # Log login attempt (without password)
+        logger.info(f"Login attempt for username/email: {username}")
+        
+        # Check if user exists first
+        user = self.db.query(User).filter(
+            (User.username == username) | (User.email == username)
+        ).first()
         
         if not user:
+            logger.warning(f"User not found: {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        logger.info(f"User found: {user.email} (ID: {user.id}, Active: {user.is_active}, Role: {user.role})")
+        
+        # Verify password
+        if not authenticate_user(self.db, username, password):
+            logger.warning(f"Password verification failed for user: {username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -80,10 +100,13 @@ class AuthService:
             )
         
         if not user.is_active:
+            logger.warning(f"Inactive user attempted login: {username}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inactive user"
             )
+        
+        logger.info(f"Login successful for user: {user.email}")
         
         access_token_expires = timedelta(minutes=30)
         access_token = create_access_token(

@@ -32,7 +32,6 @@ const EmergencyReportsPanel = ({ isOpen, onClose, mapRef, onEmergencyClick }) =>
       setEmergencies(emergenciesList);
     } catch (err) {
       setError(err.message || 'Failed to load emergency reports');
-      console.error('Error fetching emergency reports:', err);
     } finally {
       setLoading(false);
     }
@@ -99,10 +98,25 @@ const EmergencyReportsPanel = ({ isOpen, onClose, mapRef, onEmergencyClick }) =>
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed top-0 left-0 bottom-0 w-80 sm:w-96 bg-white shadow-2xl transform transition-all duration-300 ease-out rounded-r-3xl border-r border-gray-100 flex flex-col animate-slide-in-left overflow-hidden"
-      style={{ zIndex: 50 }}
-    >
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300 animate-fade-in backdrop-blur-sm"
+        style={{ zIndex: 10004 }}
+        onClick={onClose}
+      />
+      
+      <div
+        className="emergency-reports-panel fixed top-0 left-0 bottom-0 w-80 sm:w-96 bg-white shadow-2xl transform transition-all duration-300 ease-out rounded-r-3xl border-r border-gray-100 flex flex-col animate-slide-in-left overflow-hidden"
+        style={{ 
+          zIndex: 10005, 
+          pointerEvents: 'auto', 
+          visibility: 'visible', 
+          opacity: 1,
+          backgroundColor: '#ffffff'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
       {/* Header */}
       <div className="p-6 border-b border-gray-100 bg-white flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -289,7 +303,8 @@ const EmergencyReportsPanel = ({ isOpen, onClose, mapRef, onEmergencyClick }) =>
           </button>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

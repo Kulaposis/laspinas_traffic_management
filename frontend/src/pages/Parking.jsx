@@ -419,7 +419,7 @@ const Parking = () => {
 
                           {/* Action Button */}
                           <button className="w-full mt-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white py-3 px-4 rounded-xl font-medium transition-all duration-200 hover:scale-105">
-                            Get Directions
+                            Get Smart Route
                           </button>
                         </div>
                       </div>
@@ -521,7 +521,7 @@ const Parking = () => {
                                 Report Violation
                               </button>
                               <button className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white py-3 px-4 rounded-xl font-medium transition-all duration-200 hover:scale-105">
-                                Get Directions
+                                Get Smart Route
                               </button>
                             </div>
                           </div>

@@ -1,0 +1,202 @@
+/* Google Maps Style Navigation - Custom Styles */
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe area inset for iOS notch */
+.h-safe-area-inset-bottom {
+  height: env(safe-area-inset-bottom, 0px);
+}
+
+/* Smooth backdrop blur effect */
+.backdrop-blur-xl {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Custom toggle switch animation */
+input[type="checkbox"]:checked + div {
+  background-color: #2563eb;
+}
+
+/* Floating card shadow */
+.shadow-float {
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Route duration badge pulse animation */
+@keyframes pulse-badge {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+.animate-pulse-badge {
+  animation: pulse-badge 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Bottom sheet drag handle */
+.drag-handle {
+  touch-action: none;
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Map tilt effect (for future 3D implementation) */
+.map-tilt {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.map-tilt-active {
+  transform: rotateX(45deg);
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth route line animation */
+@keyframes draw-route {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.route-line {
+  stroke-dasharray: 1000;
+  animation: draw-route 2s ease-out forwards;
+}
+
+/* Floating label animation */
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.float-label {
+  animation: float-in 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  /* Ensure bottom sheet doesn't go below viewport */
+  .bottom-sheet {
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* Larger touch targets on mobile */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Prevent text selection on drag */
+  .drag-handle {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Desktop-specific styles */
+@media (min-width: 1024px) {
+  /* Center bottom sheet on desktop */
+  .bottom-sheet {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* Hover effects for desktop */
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+}
+
+/* Framer Motion override for smooth animations */
+[data-framer-motion] {
+  will-change: transform, opacity;
+}
+
+/* Custom gradient backgrounds */
+.gradient-map {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-route {
+  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+}
+
+/* Traffic indicator colors */
+.traffic-light {
+  background-color: #10b981;
+}
+
+.traffic-moderate {
+  background-color: #f59e0b;
+}
+
+.traffic-heavy {
+  background-color: #ef4444;
+}
+
+/* Accessibility - Focus visible */
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Loading skeleton for route cards */
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Disable transitions during page load */
+.preload * {
+  transition: none !important;
+}
+

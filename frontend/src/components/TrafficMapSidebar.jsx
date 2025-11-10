@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, History, Layers, Map as MapIcon, Cloud, Droplets, UserCircle, LogOut, AlertTriangle } from 'lucide-react';
+import { X, History, Layers, Map as MapIcon, UserCircle, LogOut, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const noop = () => {};
@@ -76,9 +76,9 @@ const TrafficMapSidebar = ({
   setParkingEnabled = noop,
   weatherEnabled = false,
   setWeatherEnabled = noop,
-  emergencyEnabled = false,
-  setEmergencyEnabled = noop,
-  // Traffic Monitoring (New)
+  // emergencyEnabled = false,
+  // setEmergencyEnabled = noop,
+  // Traffic Monitoring
   trafficMonitorNewEnabled = false,
   setTrafficMonitorNewEnabled = noop,
   // New comprehensive toggles
@@ -86,20 +86,35 @@ const TrafficMapSidebar = ({
   setReportsEnabled = noop,
   incidentProneEnabled = false,
   setIncidentProneEnabled = noop,
-  tomtomIncidentsEnabled = false,
-  setTomtomIncidentsEnabled = noop,
+  // tomtomIncidentsEnabled = false,
+  // setTomtomIncidentsEnabled = noop,
   floodZonesEnabled = false,
   setFloodZonesEnabled = noop,
+  showPredictionsPanel = false,
+  setShowPredictionsPanel = noop,
   isGuest = false,
+  sidebarOpen = false,
 }) => {
   const { user, logout } = useAuth();
   const isCitizen = !!user && (user.role?.toLowerCase?.() === 'citizen');
+
   return (
-    <div
-      className="fixed top-0 left-0 h-full w-80 sm:w-96 bg-white shadow-2xl transform transition-all duration-300 ease-out rounded-r-3xl border-r border-gray-100 overflow-hidden flex flex-col"
-      style={{ zIndex: 50 }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <>
+      {/* Mobile overlay - only show on mobile when sidebar is open */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-40 transition-opacity duration-300 md:hidden"
+          style={{ zIndex: 119 }}
+          onClick={onClose}
+        />
+      )}
+      <div
+        className={`fixed top-0 left-0 h-full w-80 sm:w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-out rounded-r-3xl border-r border-gray-100 overflow-hidden flex flex-col ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${sidebarOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        style={{ zIndex: 120 }}
+        onClick={(e) => e.stopPropagation()}
+      >
       <div className="p-6 border-b border-gray-100 bg-white">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
@@ -174,21 +189,9 @@ const TrafficMapSidebar = ({
           </button>
         </div>
 
-        {/* Emergency Reports */}
-        <div>
-          {isGuest ? (
-            <div className="w-full p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-100 shadow-sm">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md">
-                  <AlertTriangle className="w-6 h-6 text-white" />
-                </div>
-                <div className="flex-1">
-                  <span className="text-base font-bold text-gray-900">Emergency Reports</span>
-                  <p className="text-xs text-red-600 mt-0.5 font-medium">You must login to view this</p>
-                </div>
-              </div>
-            </div>
-          ) : (
+        {/* Emergency Reports - Only show if logged in */}
+        {!isGuest && (
+          <div>
             <button
               onClick={onOpenEmergencyReports}
               className="w-full flex items-center space-x-4 p-4 bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 rounded-2xl transition-all duration-200 text-left group border border-red-100 hover:border-red-200 shadow-sm hover:shadow-md"
@@ -198,7 +201,7 @@ const TrafficMapSidebar = ({
               </div>
               <div className="flex-1">
                 <span className="text-base font-bold text-gray-900">Emergency Reports</span>
-                <p className="text-xs text-gray-600 mt-0.5">Your reported incidents</p>
+                <p className="text-xs text-gray-600 mt-0.5">View and report emergencies</p>
               </div>
               {myEmergencyReports.length > 0 && (
                 <span className="bg-gradient-to-br from-red-500 to-orange-500 text-white text-xs rounded-full w-7 h-7 flex items-center justify-center font-bold shadow-md">
@@ -206,13 +209,13 @@ const TrafficMapSidebar = ({
                 </span>
               )}
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Map Layers */}
         <Section title="Map Layers" subtitle="Toggle map overlays" icon={<Layers className="w-5 h-5 text-gray-600" />}>
           <Toggle label="Traffic Heatmap" checked={heatmapEnabled} onChange={(e) => setHeatmapEnabled(e.target.checked)} />
-          <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} helper="⚠️ Uses API calls - disabled by default" />
+          <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} />
         </Section>
 
         {/* Map Style */}
@@ -242,22 +245,15 @@ const TrafficMapSidebar = ({
               setFloodZonesEnabled(isChecked);
             }} 
             helper="Weather alerts, flood zones, and active floods"
-            icon={
-              <div className="flex items-center space-x-1">
-                <Cloud className="w-4 h-4" />
-                <Droplets className="w-4 h-4" />
-              </div>
-            }
-            iconColor="bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-600"
           />
-          <Toggle label="Emergency Reports" checked={emergencyEnabled} onChange={(e) => setEmergencyEnabled(e.target.checked)} />
-          <Toggle label="Traffic Monitoring (New)" checked={trafficMonitorNewEnabled} onChange={(e) => setTrafficMonitorNewEnabled(e.target.checked)} />
-          <Toggle label="User Reports" checked={reportsEnabled} onChange={(e) => setReportsEnabled(e.target.checked)} />
+          {/* <Toggle label="Emergency Reports" checked={emergencyEnabled} onChange={(e) => setEmergencyEnabled(e.target.checked)} /> */}
+          <Toggle label="Traffic Monitoring" checked={trafficMonitorNewEnabled} onChange={(e) => setTrafficMonitorNewEnabled(e.target.checked)} />
+          <Toggle label="Traffic Predictions" checked={showPredictionsPanel} onChange={(e) => setShowPredictionsPanel(e.target.checked)} helper="View traffic predictions and future congestion forecasts" />
           <Toggle label="Incident Prone Areas" checked={incidentProneEnabled} onChange={(e) => setIncidentProneEnabled(e.target.checked)} />
-          <Toggle label="TomTom Traffic Incidents" checked={tomtomIncidentsEnabled} onChange={(e) => setTomtomIncidentsEnabled(e.target.checked)} />
-          <div className="text-xs text-gray-500 pt-1">
+          {/* <Toggle label="TomTom Traffic Incidents" checked={tomtomIncidentsEnabled} onChange={(e) => setTomtomIncidentsEnabled(e.target.checked)} /> */}
+          {/* <div className="text-xs text-gray-500 pt-1">
             These layers will fetch from your API when enabled. TomTom incidents show recent accidents/incidents from the last 3 days.
-          </div>
+          </div> */}
         </Section>
 
         {/* Helpful hint */}
@@ -276,7 +272,8 @@ const TrafficMapSidebar = ({
           </button>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

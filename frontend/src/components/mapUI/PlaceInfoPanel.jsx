@@ -112,7 +112,6 @@ const PlaceInfoPanel = ({
           setDetailsLoading(false);
         })
         .catch((error) => {
-          console.warn('Failed to load place details from Geoapify:', error);
           // Fallback to basic place info
           setPlaceDetails({
             name: place.name || 'Unknown Location',
@@ -194,13 +193,6 @@ const PlaceInfoPanel = ({
 
   const panelContent = (
     <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
-        onClick={onClose}
-        style={{ zIndex: 10000 }}
-      />
-
       {/* Mobile: Bottom Sheet Design */}
       {isMobile ? (
         <div 
@@ -481,12 +473,12 @@ const PlaceInfoPanel = ({
                   {isLoadingDirections ? (
                     <>
                       <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                      <span className="text-sm sm:text-base">Getting directions…</span>
+                      <span className="text-sm sm:text-base">Getting smart route…</span>
                     </>
                   ) : (
                     <>
                       <Navigation className="w-5 h-5" />
-                      <span className="text-sm sm:text-base">Get Directions</span>
+                      <span className="text-sm sm:text-base">Get Smart Route</span>
                     </>
                   )}
                 </button>
@@ -519,88 +511,92 @@ const PlaceInfoPanel = ({
         ) : (
           <div 
             data-place-info-panel
-            className="fixed inset-0 flex items-center justify-center pointer-events-none"
-            style={{ zIndex: 10001 }}
+            className="fixed bottom-20 left-4 pointer-events-none"
+            style={{ zIndex: 10001, maxWidth: 'calc(100vw - 2rem)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div 
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden pointer-events-auto transform transition-all duration-300 scale-100"
+              className="bg-white rounded-lg shadow-2xl w-full max-w-xs max-h-[60vh] flex flex-col overflow-hidden pointer-events-auto transform transition-all duration-300 scale-100 border border-gray-200"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div className="relative">
                 {/* Header Background */}
-                <div className="h-48 bg-gradient-to-br from-teal-500 via-cyan-500 to-teal-600" />
+                <div className="h-24 bg-gradient-to-br from-teal-500 via-cyan-500 to-teal-600" />
 
                 {/* Header Content Overlay */}
-                <div className="absolute inset-0 flex flex-col justify-end p-6">
+                <div className="absolute inset-0 flex flex-col justify-end p-4">
                   {/* Top Actions */}
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h1 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">
+                    <div className="flex-1 min-w-0">
+                      <h1 className="text-lg font-bold text-white mb-1 drop-shadow-lg truncate">
                         {validPlace.name}
                       </h1>
                       {displayDetails.rating && (
-                        <div className="flex items-center space-x-2 text-white drop-shadow-md">
+                        <div className="flex items-center space-x-1.5 text-white drop-shadow-md text-xs">
                           <div className="flex items-center space-x-1">
-                            <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                            <span className="text-lg font-semibold">{displayDetails.rating}</span>
+                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                            <span className="text-sm font-semibold">{displayDetails.rating}</span>
                             {displayDetails.reviewCount && (
-                              <span className="text-sm opacity-90">
+                              <span className="text-xs opacity-90">
                                 ({displayDetails.reviewCount > 1000 
                                   ? `${(displayDetails.reviewCount / 1000).toFixed(1)}K` 
                                   : displayDetails.reviewCount})
                               </span>
                             )}
                           </div>
-                          <span className="text-white/70">•</span>
-                          <span className="text-sm opacity-90">{displayDetails.category}</span>
+                          {displayDetails.category && (
+                            <>
+                              <span className="text-white/70">•</span>
+                              <span className="text-xs opacity-90 truncate">{displayDetails.category}</span>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1.5 flex-shrink-0">
                       <button
                         onClick={handleSave}
-                        className={`p-2.5 rounded-full backdrop-blur-md transition-all ${
+                        className={`p-1.5 rounded-full backdrop-blur-md transition-all ${
                           isSaved 
                             ? 'bg-red-500/90 text-white hover:bg-red-600/90' 
                             : 'bg-white/20 text-white hover:bg-white/30'
                         }`}
                         title="Save"
                       >
-                        <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                        <Heart className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
                       </button>
                       <button
                         onClick={onShare}
-                        className="p-2.5 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-md transition-all"
+                        className="p-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-md transition-all"
                         title="Share"
                       >
-                        <Share2 className="w-5 h-5" />
+                        <Share2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={onClose}
-                        className="p-2.5 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-md transition-all"
+                        className="p-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 backdrop-blur-md transition-all"
                         title="Close"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
 
                   {/* Quick Info Bar */}
-                  <div className="flex items-center space-x-4 text-white drop-shadow-md">
+                  <div className="flex items-center space-x-2 text-white drop-shadow-md mt-1">
                     {estimatedTravelTime && (
-                      <div className="flex items-center space-x-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-full">
-                        <Car className="w-4 h-4" />
-                        <span className="text-sm font-medium">{formatTravelTime(estimatedTravelTime)}</span>
+                      <div className="flex items-center space-x-1 bg-white/20 backdrop-blur-md px-2 py-1 rounded-full">
+                        <Car className="w-3 h-3" />
+                        <span className="text-xs font-medium">{formatTravelTime(estimatedTravelTime)}</span>
                       </div>
                     )}
                     {displayDetails.isOpen !== null && (
-                      <div className={`flex items-center space-x-1.5 backdrop-blur-md px-3 py-1.5 rounded-full ${
+                      <div className={`flex items-center space-x-1 backdrop-blur-md px-2 py-1 rounded-full ${
                         displayDetails.isOpen ? 'bg-green-500/80' : 'bg-red-500/80'
                       }`}>
-                        <div className={`w-2 h-2 rounded-full ${displayDetails.isOpen ? 'bg-green-200' : 'bg-red-200'}`} />
-                        <span className="text-sm font-medium">
+                        <div className={`w-1.5 h-1.5 rounded-full ${displayDetails.isOpen ? 'bg-green-200' : 'bg-red-200'}`} />
+                        <span className="text-xs font-medium">
                           {displayDetails.isOpen ? 'Open' : 'Closed'}
                         </span>
                       </div>
@@ -613,12 +609,12 @@ const PlaceInfoPanel = ({
               <div className="flex-1 overflow-y-auto">
                 {/* Tabs Navigation */}
                 <div className="sticky top-0 bg-white border-b border-gray-200 z-10">
-                  <div className="flex items-center px-6 overflow-x-auto scrollbar-hide">
+                  <div className="flex items-center px-4 overflow-x-auto scrollbar-hide">
                     {['Overview', 'Reviews', 'Photos', 'Updates'].map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setSelectedTab(tab.toLowerCase())}
-                        className={`px-6 py-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+                        className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
                           selectedTab === tab.toLowerCase()
                             ? 'border-teal-500 text-teal-600'
                             : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
@@ -631,19 +627,19 @@ const PlaceInfoPanel = ({
                 </div>
 
                 {/* Tab Content */}
-                <div className="p-6">
+                <div className="p-4">
                   {/* Overview Tab */}
                   {selectedTab === 'overview' && (
-                    <div className="space-y-6">
+                    <div className="space-y-3">
                       {/* Address Section */}
-                      <div className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl">
-                        <MapPin className="w-6 h-6 text-teal-600 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900 mb-1">Address</p>
+                      <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <MapPin className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 mb-1">Address</p>
                           {detailsLoading ? (
-                            <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                            <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4"></div>
                           ) : (
-                            <p className="text-sm text-gray-700 leading-relaxed">{displayDetails.address}</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{displayDetails.address}</p>
                           )}
                         </div>
                       </div>
@@ -651,21 +647,21 @@ const PlaceInfoPanel = ({
                       {/* Description */}
                       {displayDetails.description && (
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-2">About</h3>
-                          <p className="text-sm text-gray-700 leading-relaxed">{displayDetails.description}</p>
+                          <h3 className="text-sm font-semibold text-gray-900 mb-1.5">About</h3>
+                          <p className="text-xs text-gray-700 leading-relaxed">{displayDetails.description}</p>
                         </div>
                       )}
 
                       {/* Contact & Hours */}
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-2">
                         {displayDetails.phone && (
-                          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
-                            <Phone className="w-5 h-5 text-teal-600" />
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 mb-1">Phone</p>
+                          <div className="flex items-center space-x-2 p-2.5 bg-gray-50 rounded-lg">
+                            <Phone className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-medium text-gray-500 mb-0.5">Phone</p>
                               <a 
                                 href={`tel:${displayDetails.phone}`}
-                                className="text-sm text-gray-900 hover:text-teal-600 transition-colors"
+                                className="text-xs text-gray-900 hover:text-teal-600 transition-colors truncate block"
                               >
                                 {displayDetails.phone}
                               </a>
@@ -673,29 +669,29 @@ const PlaceInfoPanel = ({
                           </div>
                         )}
                         {displayDetails.opensAt && displayDetails.closesAt && (
-                          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
-                            <Clock className="w-5 h-5 text-teal-600" />
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 mb-1">Hours</p>
-                              <p className="text-sm text-gray-900">
+                          <div className="flex items-center space-x-2 p-2.5 bg-gray-50 rounded-lg">
+                            <Clock className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-medium text-gray-500 mb-0.5">Hours</p>
+                              <p className="text-xs text-gray-900">
                                 {displayDetails.opensAt} - {displayDetails.closesAt}
                               </p>
                             </div>
                           </div>
                         )}
                         {displayDetails.website && (
-                          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
-                            <Globe className="w-5 h-5 text-teal-600" />
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 mb-1">Website</p>
+                          <div className="flex items-center space-x-2 p-2.5 bg-gray-50 rounded-lg">
+                            <Globe className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-medium text-gray-500 mb-0.5">Website</p>
                               <a 
                                 href={displayDetails.website}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-sm text-teal-600 hover:text-teal-700 transition-colors flex items-center space-x-1"
+                                className="text-xs text-teal-600 hover:text-teal-700 transition-colors flex items-center space-x-1"
                               >
-                                <span>Visit website</span>
-                                <ExternalLink className="w-3 h-3" />
+                                <span className="truncate">Visit website</span>
+                                <ExternalLink className="w-3 h-3 flex-shrink-0" />
                               </a>
                             </div>
                           </div>
@@ -708,26 +704,26 @@ const PlaceInfoPanel = ({
                   {selectedTab === 'reviews' && (
                     <div>
                       {detailsLoading ? (
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                           {[1, 2, 3].map((i) => (
-                            <div key={i} className="p-4 border border-gray-200 rounded-xl">
-                              <div className="h-4 bg-gray-200 rounded animate-pulse w-1/4 mb-2"></div>
-                              <div className="h-3 bg-gray-200 rounded animate-pulse w-full mb-1"></div>
-                              <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                            <div key={i} className="p-3 border border-gray-200 rounded-lg">
+                              <div className="h-3 bg-gray-200 rounded animate-pulse w-1/4 mb-2"></div>
+                              <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full mb-1"></div>
+                              <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/4"></div>
                             </div>
                           ))}
                         </div>
                       ) : Array.isArray(displayDetails.reviews) && displayDetails.reviews.length > 0 ? (
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                           {displayDetails.reviews.map((review, index) => (
-                            <div key={index} className="p-4 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
-                              <div className="flex items-center space-x-3 mb-3">
+                            <div key={index} className="p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                              <div className="flex items-center space-x-2 mb-2">
                                 {review.rating && (
                                   <div className="flex items-center">
                                     {[...Array(5)].map((_, i) => (
                                       <Star
                                         key={i}
-                                        className={`w-4 h-4 ${
+                                        className={`w-3 h-3 ${
                                           i < Math.floor(review.rating)
                                             ? 'text-yellow-500 fill-yellow-500'
                                             : 'text-gray-300'
@@ -737,22 +733,22 @@ const PlaceInfoPanel = ({
                                   </div>
                                 )}
                                 {review.author && (
-                                  <span className="text-sm font-semibold text-gray-900">{review.author}</span>
+                                  <span className="text-xs font-semibold text-gray-900">{review.author}</span>
                                 )}
                                 {review.date && (
-                                  <span className="text-xs text-gray-500">{review.date}</span>
+                                  <span className="text-[10px] text-gray-500">{review.date}</span>
                                 )}
                               </div>
                               {review.text && (
-                                <p className="text-sm text-gray-700 leading-relaxed">{review.text}</p>
+                                <p className="text-xs text-gray-700 leading-relaxed">{review.text}</p>
                               )}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-12">
-                          <Star className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                          <p className="text-sm text-gray-500">No reviews available for this place</p>
+                        <div className="text-center py-8">
+                          <Star className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-xs text-gray-500">No reviews available for this place</p>
                         </div>
                       )}
                     </div>
@@ -760,22 +756,22 @@ const PlaceInfoPanel = ({
 
                   {/* Updates Tab */}
                   {selectedTab === 'updates' && (
-                    <div className="text-center py-12">
-                      <Clock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-sm text-gray-500">No updates available</p>
+                    <div className="text-center py-8">
+                      <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-xs text-gray-500">No updates available</p>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Action Buttons - Fixed Footer */}
-              <div className="border-t border-gray-200 bg-white p-6">
-                <div className="flex items-center space-x-3">
+              <div className="border-t border-gray-200 bg-white p-3">
+                <div className="flex items-center space-x-2">
                   {/* Primary Action */}
                   <button
                     onClick={isLoadingDirections ? undefined : onDirections}
                     disabled={isLoadingDirections}
-                    className={`flex-1 rounded-xl py-4 px-6 font-semibold flex items-center justify-center space-x-2 transition-all transform ${
+                    className={`flex-1 rounded-lg py-2.5 px-4 text-sm font-semibold flex items-center justify-center space-x-2 transition-all transform ${
                       isLoadingDirections
                         ? 'bg-teal-400 cursor-not-allowed text-white'
                         : 'bg-teal-500 hover:bg-teal-600 text-white hover:shadow-lg active:scale-[0.98]'
@@ -783,13 +779,13 @@ const PlaceInfoPanel = ({
                   >
                     {isLoadingDirections ? (
                       <>
-                        <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                        <span>Getting directions…</span>
+                        <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                        <span className="text-xs">Getting smart route…</span>
                       </>
                     ) : (
                       <>
-                        <Navigation className="w-5 h-5" />
-                        <span>Get Directions</span>
+                        <Navigation className="w-4 h-4" />
+                        <span className="text-xs">Get Smart Route</span>
                       </>
                     )}
                   </button>
@@ -797,20 +793,20 @@ const PlaceInfoPanel = ({
                   {/* Secondary Actions */}
                   <button
                     onClick={onStart}
-                    className="px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                    className="px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center space-x-1.5 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
                   >
-                    <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
-                      <Play className="w-4 h-4 fill-white" />
+                    <div className="w-4 h-4 bg-white/20 rounded-full flex items-center justify-center">
+                      <Play className="w-3 h-3 fill-white" />
                     </div>
-                    <span>Start</span>
+                    <span className="text-xs">Start</span>
                   </button>
                   {displayDetails.phone && (
                     <button
                       onClick={onCall}
-                      className="px-6 py-4 bg-white border-2 border-gray-300 hover:border-gray-400 text-gray-700 rounded-xl font-medium flex items-center justify-center space-x-2 transition-all hover:bg-gray-50 active:scale-[0.98]"
+                      className="px-4 py-2.5 bg-white border-2 border-gray-300 hover:border-gray-400 text-gray-700 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition-all hover:bg-gray-50 active:scale-[0.98]"
                     >
-                      <Phone className="w-5 h-5" />
-                      <span>Call</span>
+                      <Phone className="w-4 h-4" />
+                      <span className="text-xs">Call</span>
                     </button>
                   )}
                 </div>

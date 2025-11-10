@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const Login = ({ onLoginSuccess = () => {} }) => {
-  const { firebaseLogin, firebaseRegister } = useAuth();
+  const { hybridLogin, firebaseRegister } = useAuth(); // Use hybridLogin instead of firebaseLogin
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,16 +40,22 @@ const Login = ({ onLoginSuccess = () => {} }) => {
     setLoading(true);
 
     try {
-      const result = await firebaseLogin(formData.email, formData.password);
+      // Use hybrid login - tries Firebase first, then falls back to backend/database
+      const result = await hybridLogin(formData.email, formData.password);
 
       if (result.success) {
-        toast.success(`Welcome back, ${result.user.displayName || result.user.email}!`);
+        const userName = result.user.displayName || result.user.full_name || result.user.email;
+        const authMethodText = result.authMethod === 'firebase' ? 'Firebase' : 'Database';
+        
+        toast.success(`Welcome back, ${userName}! (${authMethodText})`);
+        console.log(`✅ Login successful via ${result.authMethod}`);
         onLoginSuccess(result.user);
       } else {
         toast.error(result.error || 'Failed to sign in');
       }
     } catch (error) {
-      toast.error(error.message || 'Failed to sign in');
+      console.error('Login error:', error);
+      toast.error(error.message || 'Failed to sign in. Please check your credentials.');
     } finally {
       setLoading(false);
     }

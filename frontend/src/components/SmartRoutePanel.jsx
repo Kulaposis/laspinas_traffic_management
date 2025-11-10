@@ -153,7 +153,7 @@ const SmartRoutePanel = ({
         setOriginSuggestions(suggestions);
         setShowOriginSuggestions(true);
       } catch (error) {
-        console.error('Origin search error:', error);
+        // Error handled silently
       }
     }, 200); // Reduced debounce for faster response
   }, []);
@@ -180,7 +180,7 @@ const SmartRoutePanel = ({
         setDestinationSuggestions(suggestions);
         setShowDestinationSuggestions(true);
       } catch (error) {
-        console.error('Destination search error:', error);
+        // Error handled silently
       }
     }, 200); // Reduced debounce for faster response
   }, []);
@@ -207,7 +207,6 @@ const SmartRoutePanel = ({
 
     // Prevent route calculation if already loading to avoid duplicate API calls
     if (loading) {
-      console.log('Route calculation skipped: already in progress');
       return;
     }
 

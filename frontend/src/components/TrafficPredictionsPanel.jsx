@@ -29,6 +29,17 @@ const TrafficPredictionsPanel = ({
   const [selectedRoad, setSelectedRoad] = useState(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('predictions'); // 'predictions', 'best-time', 'history'
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  // Detect desktop viewport
+  useEffect(() => {
+    const checkDesktop = () => {
+      setIsDesktop(window.innerWidth >= 768);
+    };
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
 
   // Fetch traffic patterns when panel opens
   useEffect(() => {
@@ -48,7 +59,6 @@ const TrafficPredictionsPanel = ({
       }
     } catch (err) {
       setError(err.message || 'Failed to load traffic patterns');
-      console.error('Error loading traffic patterns:', err);
     } finally {
       setLoading(false);
     }
@@ -172,55 +182,41 @@ const TrafficPredictionsPanel = ({
     return roadData;
   }, [patterns, selectedRoad]);
 
-  // Debug logging
-  useEffect(() => {
-    if (isOpen) {
-      console.log('TrafficPredictionsPanel: isOpen = true, rendering panel');
-    } else {
-      console.log('TrafficPredictionsPanel: isOpen = false, not rendering');
-    }
-  }, [isOpen]);
-
   if (!isOpen) {
-    console.log('TrafficPredictionsPanel: Early return - isOpen is false');
     return null;
   }
-
-  console.log('TrafficPredictionsPanel: Rendering panel with z-index 1002');
 
   const panelContent = (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
+        className="fixed inset-0 bg-black/20 transition-opacity duration-300"
         style={{ zIndex: 10001, position: 'fixed' }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log('Backdrop clicked, closing panel');
           onClose();
         }}
       />
       
-      {/* Panel */}
+      {/* Panel - Glassmorphism (matching Weather & Flood) */}
       <div 
-        className="fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl transform transition-transform duration-300 ease-out"
+        className="fixed inset-x-0 bottom-0 md:inset-x-auto md:bottom-auto md:right-4 md:top-20 bg-white/98 backdrop-blur-xl rounded-t-3xl md:rounded-2xl shadow-2xl border-t border-x border-gray-200/30 md:border md:max-w-md md:w-96 transform transition-transform duration-300 ease-out"
         style={{ 
-          maxHeight: isExpanded ? '90vh' : '200px',
+          maxHeight: isExpanded ? (isDesktop ? '75vh' : '90vh') : '200px',
           zIndex: 10002,
           position: 'fixed'
         }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log('Panel clicked');
         }}
       >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-        <div className="flex items-center space-x-3">
-          <BarChart3 className="w-6 h-6" />
-          <h2 className="text-xl font-bold">Traffic Predictions</h2>
+      {/* Header - Glassmorphism */}
+      <div className="flex items-center justify-between p-3 md:p-3 border-b border-white/20 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+        <div className="flex items-center space-x-2 md:space-x-2">
+          <BarChart3 className="w-5 h-5 md:w-5 md:h-5" />
+          <h2 className="text-lg md:text-base font-bold">Traffic Predictions</h2>
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -248,16 +244,16 @@ const TrafficPredictionsPanel = ({
 
       {/* Content */}
       {isExpanded && (
-        <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+        <div className="overflow-y-auto" style={{ maxHeight: isDesktop ? 'calc(75vh - 60px)' : 'calc(90vh - 80px)' }}>
           {loading && (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading traffic patterns...</p>
+            <div className="p-6 md:p-4 text-center">
+              <div className="animate-spin rounded-full h-10 w-10 md:h-8 md:w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-3 md:mt-2 text-sm md:text-xs text-gray-600">Loading traffic patterns...</p>
             </div>
           )}
 
           {error && (
-            <div className="p-4 m-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="p-4 m-4 bg-red-50/70 backdrop-blur-md border border-red-200/50 rounded-lg shadow-lg">
               <div className="flex items-center space-x-2">
                 <AlertCircle className="w-5 h-5 text-red-600" />
                 <p className="text-red-800">{error}</p>
@@ -272,35 +268,35 @@ const TrafficPredictionsPanel = ({
           )}
 
           {!loading && !error && patterns && (
-            <div className="p-4">
-              {/* Tabs */}
-              <div className="flex space-x-2 mb-4 border-b border-gray-200">
+            <div className="p-4 md:p-3">
+              {/* Tabs - Glassmorphism */}
+              <div className="flex space-x-1 md:space-x-1 mb-3 md:mb-2 border-b border-gray-200/50">
                 <button
                   onClick={() => setActiveTab('predictions')}
-                  className={`px-4 py-2 font-medium transition-colors ${
+                  className={`px-3 py-1.5 md:px-2 md:py-1.5 text-sm md:text-xs font-medium transition-all rounded-t-lg ${
                     activeTab === 'predictions'
-                      ? 'border-b-2 border-blue-600 text-blue-600'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm'
                   }`}
                 >
                   Time Predictions
                 </button>
                 <button
                   onClick={() => setActiveTab('best-time')}
-                  className={`px-4 py-2 font-medium transition-colors ${
+                  className={`px-3 py-1.5 md:px-2 md:py-1.5 text-sm md:text-xs font-medium transition-all rounded-t-lg ${
                     activeTab === 'best-time'
-                      ? 'border-b-2 border-blue-600 text-blue-600'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm'
                   }`}
                 >
                   Best Time
                 </button>
                 <button
                   onClick={() => setActiveTab('history')}
-                  className={`px-4 py-2 font-medium transition-colors ${
+                  className={`px-3 py-1.5 md:px-2 md:py-1.5 text-sm md:text-xs font-medium transition-all rounded-t-lg ${
                     activeTab === 'history'
-                      ? 'border-b-2 border-blue-600 text-blue-600'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm'
                   }`}
                 >
                   Historical Patterns
@@ -309,58 +305,58 @@ const TrafficPredictionsPanel = ({
 
               {/* Time-Based Predictions Tab */}
               {activeTab === 'predictions' && timeBasedPredictions && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Expected Traffic by Time Period</h3>
+                <div className="space-y-3 md:space-y-2">
+                  <h3 className="text-base md:text-sm font-semibold text-gray-900 mb-3 md:mb-2">Expected Traffic by Time Period</h3>
                   
                   {Object.entries(timeBasedPredictions).map(([key, prediction]) => (
-                    <div key={key} className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-4 h-4 rounded-full ${prediction.color}`}></div>
+                    <div key={key} className="bg-white/60 backdrop-blur-md rounded-xl md:rounded-lg p-3 md:p-2.5 border border-gray-200/50 shadow-lg hover:shadow-xl hover:bg-white/70 transition-all duration-300">
+                      <div className="flex items-center justify-between mb-2 md:mb-1.5">
+                        <div className="flex items-center space-x-2 md:space-x-1.5">
+                          <div className={`w-3 h-3 md:w-2.5 md:h-2.5 rounded-full ${prediction.color}`}></div>
                           <div>
-                            <h4 className="font-semibold text-gray-900">{prediction.label}</h4>
-                            <p className="text-xs text-gray-500 mt-0.5">{prediction.timeRange}</p>
+                            <h4 className="text-sm md:text-xs font-semibold text-gray-900">{prediction.label}</h4>
+                            <p className="text-[10px] md:text-[9px] text-gray-500 mt-0.5">{prediction.timeRange}</p>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1 md:space-x-1">
                           {prediction.congestionLevel === 'heavy' && (
-                            <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                              Heavy Traffic
+                            <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-red-100/70 backdrop-blur-sm text-red-800 rounded-full text-xs md:text-[10px] font-medium border border-red-200/50 shadow-sm">
+                              Heavy
                             </span>
                           )}
                           {prediction.congestionLevel === 'moderate' && (
-                            <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                            <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-yellow-100/70 backdrop-blur-sm text-yellow-800 rounded-full text-xs md:text-[10px] font-medium border border-yellow-200/50 shadow-sm">
                               Moderate
                             </span>
                           )}
                           {prediction.congestionLevel === 'low' && (
-                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                              Light Traffic
+                            <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-green-100/70 backdrop-blur-sm text-green-800 rounded-full text-xs md:text-[10px] font-medium border border-green-200/50 shadow-sm">
+                              Light
                             </span>
                           )}
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-3 gap-4 mt-4">
+                      <div className="grid grid-cols-3 gap-2 md:gap-1.5 mt-2 md:mt-1.5">
                         <div>
-                          <p className="text-xs text-gray-600 mb-1">Avg Speed</p>
-                          <p className="text-lg font-bold text-gray-900">{prediction.avgSpeed} km/h</p>
+                          <p className="text-[10px] md:text-[9px] text-gray-600 mb-0.5">Avg Speed</p>
+                          <p className="text-base md:text-sm font-bold text-gray-900">{prediction.avgSpeed} km/h</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-600 mb-1">Congestion</p>
-                          <p className="text-lg font-bold text-gray-900">{prediction.congestionPercentage}%</p>
+                          <p className="text-[10px] md:text-[9px] text-gray-600 mb-0.5">Congestion</p>
+                          <p className="text-base md:text-sm font-bold text-gray-900">{prediction.congestionPercentage}%</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-600 mb-1">Vehicles</p>
-                          <p className="text-lg font-bold text-gray-900">{prediction.vehicleCount.toLocaleString()}</p>
+                          <p className="text-[10px] md:text-[9px] text-gray-600 mb-0.5">Vehicles</p>
+                          <p className="text-base md:text-sm font-bold text-gray-900">{prediction.vehicleCount.toLocaleString()}</p>
                         </div>
                       </div>
 
                       {/* Congestion bar */}
-                      <div className="mt-3">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="mt-2 md:mt-1.5">
+                        <div className="w-full bg-gray-200 rounded-full h-1.5 md:h-1">
                           <div
-                            className={`h-2 rounded-full transition-all ${
+                            className={`h-1.5 md:h-1 rounded-full transition-all ${
                               prediction.congestionLevel === 'heavy' ? 'bg-red-500' :
                               prediction.congestionLevel === 'moderate' ? 'bg-yellow-500' : 'bg-green-500'
                             }`}
@@ -375,37 +371,37 @@ const TrafficPredictionsPanel = ({
 
               {/* Best Time to Leave Tab */}
               {activeTab === 'best-time' && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Best Time to Leave</h3>
+                <div className="space-y-3 md:space-y-2">
+                  <h3 className="text-base md:text-sm font-semibold text-gray-900 mb-3 md:mb-2">Best Time to Leave</h3>
                   
                   {bestTimeRecommendations && bestTimeRecommendations.bestTimes && bestTimeRecommendations.bestTimes.length > 0 ? (
                     <>
-                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border-2 border-green-200">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                          <h4 className="font-semibold text-gray-900">Recommended Departure Times</h4>
+                      <div className="bg-green-50/70 backdrop-blur-md rounded-xl md:rounded-lg p-3 md:p-2.5 border-2 border-green-200/50 shadow-lg">
+                        <div className="flex items-center space-x-2 mb-2 md:mb-1.5">
+                          <CheckCircle className="w-4 h-4 md:w-3.5 md:h-3.5 text-green-600" />
+                          <h4 className="text-sm md:text-xs font-semibold text-gray-900">Recommended Departure Times</h4>
                         </div>
-                        <p className="text-sm text-gray-600 mb-4">
+                        <p className="text-xs md:text-[10px] text-gray-600 mb-3 md:mb-2">
                           Based on historical traffic patterns, these times typically have lighter traffic
                         </p>
                         
-                        <div className="space-y-3">
+                        <div className="space-y-2 md:space-y-1.5">
                           {bestTimeRecommendations.bestTimes.map((time, index) => (
-                            <div key={index} className="bg-white rounded-lg p-3 border border-gray-200">
+                            <div key={index} className="bg-white/80 backdrop-blur-sm rounded-lg md:rounded p-2.5 md:p-2 border border-gray-200/50 shadow-sm hover:shadow-md hover:bg-white/90 transition-all">
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-3">
-                                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                                    <Clock className="w-5 h-5 text-green-600" />
+                                <div className="flex items-center space-x-2 md:space-x-1.5">
+                                  <div className="w-8 h-8 md:w-7 md:h-7 rounded-full bg-green-100/80 backdrop-blur-sm flex items-center justify-center border border-green-200/50">
+                                    <Clock className="w-4 h-4 md:w-3.5 md:h-3.5 text-green-600" />
                                   </div>
                                   <div>
-                                    <p className="font-semibold text-gray-900">{time.label}</p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-sm md:text-xs font-semibold text-gray-900">{time.label}</p>
+                                    <p className="text-xs md:text-[10px] text-gray-600">
                                       {time.avgSpeed} km/h avg • {time.congestionLevel === 'low' ? 'Light' : 'Moderate'} traffic
                                     </p>
                                   </div>
                                 </div>
                                 {index === 0 && (
-                                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                                  <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-green-100/70 backdrop-blur-sm text-green-800 rounded-full text-xs md:text-[10px] font-medium border border-green-200/50 shadow-sm">
                                     Best
                                   </span>
                                 )}
@@ -421,7 +417,7 @@ const TrafficPredictionsPanel = ({
                           <h4 className="font-semibold text-gray-900 mb-3">Period Comparison</h4>
                           <div className="space-y-2">
                             {bestTimeRecommendations.recommendations.map((rec, index) => (
-                              <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                              <div key={index} className="bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 shadow-sm hover:shadow-md hover:bg-white/70 transition-all">
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <p className="font-medium text-gray-900">{rec.label}</p>
@@ -429,10 +425,10 @@ const TrafficPredictionsPanel = ({
                                       {rec.avgSpeed} km/h • {rec.congestionPercentage}% congestion
                                     </p>
                                   </div>
-                                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                    rec.congestionLevel === 'heavy' ? 'bg-red-100 text-red-800' :
-                                    rec.congestionLevel === 'moderate' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-green-100 text-green-800'
+                                  <div className={`px-3 py-1 rounded-full text-sm font-medium border backdrop-blur-sm shadow-sm ${
+                                    rec.congestionLevel === 'heavy' ? 'bg-red-100/70 text-red-800 border-red-200/50' :
+                                    rec.congestionLevel === 'moderate' ? 'bg-yellow-100/70 text-yellow-800 border-yellow-200/50' :
+                                    'bg-green-100/70 text-green-800 border-green-200/50'
                                   }`}>
                                     {rec.congestionLevel}
                                   </div>
@@ -444,7 +440,7 @@ const TrafficPredictionsPanel = ({
                       )}
                     </>
                   ) : (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="bg-yellow-50/70 backdrop-blur-md border border-yellow-200/50 rounded-lg p-4 shadow-sm">
                       <div className="flex items-center space-x-2">
                         <AlertCircle className="w-5 h-5 text-yellow-600" />
                         <p className="text-yellow-800">
@@ -468,7 +464,7 @@ const TrafficPredictionsPanel = ({
                       <select
                         value={selectedRoad || ''}
                         onChange={(e) => setSelectedRoad(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="px-3 py-2 border border-gray-300/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm shadow-sm"
                       >
                         {patterns.roads.map(road => (
                           <option key={road} value={road}>{road}</option>
@@ -505,9 +501,9 @@ const TrafficPredictionsPanel = ({
                             const statusText = congestionLevel === 'heavy' ? 'Very Busy' :
                                               congestionLevel === 'moderate' ? 'Moderately Busy' : 'Light Traffic';
                             
-                            const statusColor = congestionLevel === 'heavy' ? 'bg-red-100 text-red-800 border-red-200' :
-                                               congestionLevel === 'moderate' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                                               'bg-green-100 text-green-800 border-green-200';
+                            const statusColor = congestionLevel === 'heavy' ? 'bg-red-100/70 backdrop-blur-md text-red-800 border-red-200/50' :
+                                               congestionLevel === 'moderate' ? 'bg-yellow-100/70 backdrop-blur-md text-yellow-800 border-yellow-200/50' :
+                                               'bg-green-100/70 backdrop-blur-md text-green-800 border-green-200/50';
 
                             return (
                               <div key={idx} className={`rounded-xl p-4 border-2 ${statusColor} transition-all hover:shadow-lg`}>
@@ -539,7 +535,7 @@ const TrafficPredictionsPanel = ({
                       </div>
 
                       {/* Simple Visual Timeline */}
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-200">
+                      <div className="bg-blue-50/70 backdrop-blur-md rounded-xl p-5 border border-blue-200/50 shadow-lg">
                         <h4 className="font-semibold text-gray-900 mb-4 flex items-center space-x-2">
                           <Clock className="w-5 h-5 text-blue-600" />
                           <span>Traffic Throughout the Day</span>
@@ -602,7 +598,7 @@ const TrafficPredictionsPanel = ({
                       </div>
 
                       {/* Quick Tips */}
-                      <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-4">
+                      <div className="bg-blue-50/70 backdrop-blur-md border-l-4 border-blue-500/80 rounded-lg p-4 shadow-sm">
                         <div className="flex items-start space-x-3">
                           <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                           <div>
@@ -617,7 +613,7 @@ const TrafficPredictionsPanel = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 text-center">
+                    <div className="bg-white/60 backdrop-blur-md rounded-lg p-6 border border-gray-200/50 text-center shadow-sm">
                       <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                       <p className="text-gray-600 font-medium">No traffic data available for this road yet</p>
                       <p className="text-sm text-gray-500 mt-1">Check back later for historical patterns</p>

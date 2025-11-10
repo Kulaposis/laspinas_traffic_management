@@ -14,8 +14,8 @@ import roadworksService from '../services/roadworksService';
 export const useMapData = (mapCenter, {
   parkingEnabled = false,
   weatherEnabled = false,
-  emergencyEnabled = false,
-  reportsEnabled = false,
+  // emergencyEnabled = false,
+  // reportsEnabled = false,
   incidentProneEnabled = false,
   floodZonesEnabled = false,
   trafficMonitorNewEnabled = false
@@ -116,24 +116,24 @@ export const useMapData = (mapCenter, {
   }, [trafficMonitorNewEnabled, mapCenter]);
 
   // Load User Reports
-  useEffect(() => {
-    let cancelled = false;
-    const loadReports = async () => {
-      if (!reportsEnabled || !mapCenter) {
-        setUserReports([]);
-        return;
-      }
-      try {
-        const reports = await reportService.getNearbyReports(mapCenter[0], mapCenter[1], 15).catch(() => []);
-        if (!cancelled) setUserReports(Array.isArray(reports) ? reports : []);
-      } catch (e) {
-        if (!cancelled) setUserReports([]);
-      }
-    };
-    loadReports();
-    const interval = setInterval(loadReports, 180000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [reportsEnabled, mapCenter]);
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   const loadReports = async () => {
+  //     if (!reportsEnabled || !mapCenter) {
+  //       setUserReports([]);
+  //       return;
+  //     }
+  //     try {
+  //       const reports = await reportService.getNearbyReports(mapCenter[0], mapCenter[1], 15).catch(() => []);
+  //       if (!cancelled) setUserReports(Array.isArray(reports) ? reports : []);
+  //     } catch (e) {
+  //       if (!cancelled) setUserReports([]);
+  //     }
+  //   };
+  //   loadReports();
+  //   const interval = setInterval(loadReports, 180000);
+  //   return () => { cancelled = true; clearInterval(interval); };
+  // }, [reportsEnabled, mapCenter]);
 
   // Load Incident Prone Areas
   useEffect(() => {
@@ -144,13 +144,23 @@ export const useMapData = (mapCenter, {
         return;
       }
       try {
-        const areas = await incidentProneService.getNearbyIncidentProneAreas(mapCenter[0], mapCenter[1], 15).catch(() => []);
-        if (!cancelled) setIncidentProneAreas(Array.isArray(areas) ? areas : []);
+        setIsLoadingData(true);
+        const areas = await incidentProneService.getNearbyIncidentProneAreas(mapCenter[0], mapCenter[1], 15);
+        if (!cancelled) {
+          // Ensure we have an array - handle both direct array and object with nearby_areas property
+          const areasArray = Array.isArray(areas) ? areas : (areas?.nearby_areas || areas?.areas || []);
+          setIncidentProneAreas(areasArray);
+          console.log(`Loaded ${areasArray.length} incident prone areas`);
+        }
       } catch (e) {
+        console.error('Error loading incident prone areas:', e);
         if (!cancelled) setIncidentProneAreas([]);
+      } finally {
+        if (!cancelled) setIsLoadingData(false);
       }
     };
     loadIncidentProne();
+    // Refresh every 5 minutes (300000ms)
     const interval = setInterval(loadIncidentProne, 300000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [incidentProneEnabled, mapCenter]);
@@ -190,24 +200,24 @@ export const useMapData = (mapCenter, {
   }, [floodZonesEnabled, mapCenter]);
 
   // Load Nearby Emergencies
-  useEffect(() => {
-    let cancelled = false;
-    const loadEmergencies = async () => {
-      if (!emergencyEnabled || !mapCenter) {
-        setNearbyEmergencies([]);
-        return;
-      }
-      try {
-        const emergencies = await emergencyService.getNearbyEmergencies({ lat: mapCenter[0], lng: mapCenter[1] }, 15).catch(() => []);
-        if (!cancelled) setNearbyEmergencies(Array.isArray(emergencies) ? emergencies : []);
-      } catch (e) {
-        if (!cancelled) setNearbyEmergencies([]);
-      }
-    };
-    loadEmergencies();
-    const interval = setInterval(loadEmergencies, 120000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [emergencyEnabled, mapCenter]);
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   const loadEmergencies = async () => {
+  //     if (!emergencyEnabled || !mapCenter) {
+  //       setNearbyEmergencies([]);
+  //       return;
+  //     }
+  //     try {
+  //       const emergencies = await emergencyService.getNearbyEmergencies({ lat: mapCenter[0], lng: mapCenter[1] }, 15).catch(() => []);
+  //       if (!cancelled) setNearbyEmergencies(Array.isArray(emergencies) ? emergencies : []);
+  //     } catch (e) {
+  //       if (!cancelled) setNearbyEmergencies([]);
+  //     }
+  //   };
+  //   loadEmergencies();
+  //   const interval = setInterval(loadEmergencies, 120000);
+  //   return () => { cancelled = true; clearInterval(interval); };
+  // }, [emergencyEnabled, mapCenter]);
 
   // Load heatmap data
   const loadTrafficData = useCallback(async () => {

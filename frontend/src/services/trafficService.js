@@ -5,8 +5,19 @@ class TrafficService {
   async getTrafficMonitoring(params = {}) {
     try {
       const response = await api.get('/traffic/monitoring', { params });
-      return response.data;
+      // Ensure we return an array
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && Array.isArray(data.data)) {
+        return data.data;
+      } else if (data && Array.isArray(data.results)) {
+        return data.results;
+      }
+      return data || [];
     } catch (error) {
+      console.error('Error fetching traffic monitoring data:', error);
+      console.error('Error response:', error.response?.data);
       throw new Error(error.response?.data?.detail || 'Failed to fetch traffic monitoring data');
     }
   }
@@ -17,6 +28,60 @@ class TrafficService {
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to fetch traffic heatmap data');
+    }
+  }
+
+  async triggerTrafficUpdate() {
+    try {
+      // Trigger backend to fetch fresh data from TomTom API
+      const response = await api.post('/traffic/realtime/update');
+      return response.data;
+    } catch (error) {
+      // Don't throw error - just log it, as this is a background update
+      console.warn('Failed to trigger traffic update:', error.response?.data?.detail || error.message);
+      return null;
+    }
+  }
+
+  async getRealtimeTrafficDirect(bounds = null) {
+    try {
+      // Fetch traffic data directly from TomTom API (bypasses database)
+      // This endpoint may take longer as it fetches from multiple monitoring points
+      const params = {};
+      
+      if (bounds) {
+        params.lat_min = bounds.lat_min || bounds.minLat;
+        params.lat_max = bounds.lat_max || bounds.maxLat;
+        params.lng_min = bounds.lng_min || bounds.minLng;
+        params.lng_max = bounds.lng_max || bounds.maxLng;
+      }
+      
+      // Use a longer timeout (30 seconds) for this endpoint since it fetches from multiple points
+      const response = await api.get('/traffic/realtime/direct', { 
+        params,
+        timeout: 30000 // 30 seconds timeout
+      });
+      
+      // Ensure we return an array
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      }
+      return data || [];
+    } catch (error) {
+      // Handle timeout errors specifically
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        console.warn('⚠️ Request timeout: TomTom API endpoint took too long. This may happen when fetching many monitoring points.');
+        throw new Error('Request timeout: The server is processing many monitoring points. Please try again.');
+      }
+      
+      // Only log detailed errors if it's not a 404 (endpoint not found)
+      // 404 means server needs restart, which is expected during development
+      if (error.response?.status !== 404) {
+        console.error('Error fetching real-time traffic data from TomTom API:', error);
+        console.error('Error response:', error.response?.data);
+      }
+      throw new Error(error.response?.data?.detail || 'Failed to fetch real-time traffic data from TomTom API');
     }
   }
 

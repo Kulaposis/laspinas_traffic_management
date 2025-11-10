@@ -8,6 +8,9 @@ import './TrafficMap.css';
 import TrafficMapSidebar from '../components/TrafficMapSidebar';
 import { MapSkeleton } from '../components/LoadingSkeleton';
 import ErrorBoundary from '../components/ErrorBoundary';
+import NavigationMarker from '../components/NavigationMarker';
+import NavigationHUD from '../components/NavigationHUD';
+import { useDeviceOrientation, useGeolocationHeading } from '../hooks/useDeviceOrientation';
 // Map Layer Components
 import {
   WeatherLayer,
@@ -24,21 +27,26 @@ import {
   NavigationPanel,
   RouteInfoPanel,
   SimulationPanel,
-  RouteAlternativesPanel,
+  // RouteAlternativesPanel, // REMOVED: Using Google Maps style instead
   EnhancedSearchPanel,
   EnhancedNavigationPanel,
   MapControls,
   MapMarkers,
   HistoryPanel,
-  PlaceInfoPanel,
-  DirectionsPanel
+  PlaceInfoPanel
 } from '../components/mapUI';
+import GoogleMapsStyleNavigation from '../components/GoogleMapsStyleNavigation';
 // Custom Hooks
 import { useMapData } from '../hooks/useMapData';
 import { useLocationTracking } from '../hooks/useLocationTracking';
 // Utils
 import { createCustomIcon, createNoParkingIcon, createNavigationIcon } from '../utils/mapIcons';
 import { formatCoords, getTripPlaceName } from '../utils/mapHelpers';
+// Tour helpers
+import { isNewUser, markTourCompleted, saveTourProgress, getTourProgress, clearTourProgress } from '../utils/tourHelper';
+import { getTrafficMapTourSteps, getSidebarToggleSteps } from '../utils/tourConfig';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
 import {
   Navigation,
   MapPin,
@@ -80,6 +88,8 @@ import TrafficFlowHeatmap from '../components/TrafficFlowHeatmap';
 import RouteLayer from '../components/RouteLayer';
 import TomTomTileLayer from '../components/TomTomTileLayer';
 import TrafficFlowLayer from '../components/TrafficFlowLayer';
+import SearchResultsLayer from '../components/SearchResultsLayer';
+import SearchResultsSidebar from '../components/SearchResultsSidebar';
 import enhancedRoutingService from '../services/enhancedRoutingService';
 import enhancedGeocodingService from '../services/enhancedGeocodingService';
 import travelHistoryService from '../services/travelHistoryService';
@@ -114,6 +124,7 @@ import WeatherAlertBanner from '../components/WeatherAlertBanner';
 import SmartRoutePanel from '../components/SmartRoutePanel';
 import WeatherFloodAdvisory from '../components/WeatherFloodAdvisory';
 import TrafficPredictionsPanel from '../components/TrafficPredictionsPanel';
+import TrafficMonitoringPanel from '../components/TrafficMonitoringPanel';
 
 // NEW state toggles for API-backed layers
 // NOTE: set initial defaults to off; wire to API in future step
@@ -129,6 +140,62 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+
+/**
+ * Filter traffic data to show recent data (last 24 hours)
+ * Prioritizes today's data but includes recent data if today's data is unavailable
+ */
+const filterRecentTrafficData = (data) => {
+  if (!Array.isArray(data)) return [];
+  
+  const now = new Date();
+  const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+  
+  // First, try to get today's data
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  const todayData = [];
+  const recentData = [];
+  
+  data.forEach(item => {
+    // Check various timestamp fields that might exist in the data
+    const timestamp = item.created_at || item.timestamp || item.updated_at || item.last_updated || item.date;
+    if (!timestamp) {
+      // If no timestamp, include it (might be real-time data)
+      recentData.push(item);
+      return;
+    }
+    
+    try {
+      const itemDate = new Date(timestamp);
+      
+      // Validate the date is valid
+      if (isNaN(itemDate.getTime())) {
+        // Invalid date, but include it anyway (might be real-time data)
+        recentData.push(item);
+        return;
+      }
+      
+      // Prioritize today's data
+      if (itemDate >= today && itemDate < tomorrow) {
+        todayData.push(item);
+      } else if (itemDate >= last24Hours) {
+        // Include data from last 24 hours as fallback
+        recentData.push(item);
+      }
+    } catch (error) {
+      console.warn('Invalid date in traffic data:', timestamp, error);
+      // Include item anyway if date parsing fails (might be real-time data)
+      recentData.push(item);
+    }
+  });
+  
+  // Return today's data if available, otherwise return recent data (last 24 hours)
+  return todayData.length > 0 ? todayData : recentData;
+};
 
 const TrafficMap = () => {
   const { user } = useAuth();
@@ -149,7 +216,7 @@ const TrafficMap = () => {
   // Data layer toggles
   const [parkingEnabled, setParkingEnabled] = useState(false);
   const [weatherEnabled, setWeatherEnabled] = useState(false);
-  const [emergencyEnabled, setEmergencyEnabled] = useState(false);
+  // const [emergencyEnabled, setEmergencyEnabled] = useState(false);
   const [reportsEnabled, setReportsEnabled] = useState(false);
   const [incidentProneEnabled, setIncidentProneEnabled] = useState(false);
   const [floodZonesEnabled, setFloodZonesEnabled] = useState(false);
@@ -162,6 +229,7 @@ const TrafficMap = () => {
   // Search and location states
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [selectedSearchResult, setSelectedSearchResult] = useState(null);
   const [selectedOrigin, setSelectedOrigin] = useState(null);
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -320,9 +388,12 @@ const TrafficMap = () => {
   const [isTrackingLocation, setIsTrackingLocation] = useState(false);
   const [userHeading, setUserHeading] = useState(0); // Device heading for map rotation
   const [mapRotation, setMapRotation] = useState(0); // Map rotation angle
-  const [gyroscopeEnabled, setGyroscopeEnabled] = useState(false); // Gyroscope toggle
+  const [gyroscopeEnabled, setGyroscopeEnabled] = useState(true); // Gyroscope enabled by default for navigation
   const [navigationIcon, setNavigationIcon] = useState('car'); // Selected navigation icon
   const [showIconSelector, setShowIconSelector] = useState(false); // Icon selector visibility
+  const [currentSpeed, setCurrentSpeed] = useState(0); // Current speed from GPS
+  const [distanceToNextTurn, setDistanceToNextTurn] = useState(null); // Distance to next turn
+  const [navigationHUDMinimized, setNavigationHUDMinimized] = useState(false); // HUD minimized state
 
   // Route alternatives
   const [showRouteAlternatives, setShowRouteAlternatives] = useState(false);
@@ -343,7 +414,7 @@ const TrafficMap = () => {
   const [mapStyle, setMapStyle] = useState('main');
   const [previousMapStyle, setPreviousMapStyle] = useState('main'); // Store previous style for restoration
   const [heatmapEnabled, setHeatmapEnabled] = useState(false); // Disabled by default to remove random lines
-  const [trafficLayerEnabled, setTrafficLayerEnabled] = useState(true); // Enabled - uses TomTom API for real traffic data
+  const [trafficLayerEnabled, setTrafficLayerEnabled] = useState(false); // Disabled by default - user can enable manually
   const [trafficMonitorNewEnabled, setTrafficMonitorNewEnabled] = useState(false);
   // Removed 3D map overlay feature
   
@@ -433,7 +504,7 @@ const TrafficMap = () => {
   } = useMapData(mapCenter, {
     parkingEnabled,
     weatherEnabled,
-    emergencyEnabled,
+    // emergencyEnabled,
     reportsEnabled,
     incidentProneEnabled,
     floodZonesEnabled,
@@ -483,6 +554,677 @@ const TrafficMap = () => {
   
   // Traffic Predictions Panel
   const [showPredictionsPanel, setShowPredictionsPanel] = useState(false);
+  const [showTrafficMonitoringPanel, setShowTrafficMonitoringPanel] = useState(false);
+
+  // Open/close traffic monitoring panel when toggle changes
+  useEffect(() => {
+    if (trafficMonitorNewEnabled) {
+      setShowTrafficMonitoringPanel(true);
+    } else {
+      setShowTrafficMonitoringPanel(false);
+    }
+  }, [trafficMonitorNewEnabled]);
+
+  // Auto-hide sidebar when Traffic Monitoring Panel is open
+  useEffect(() => {
+    if (showTrafficMonitoringPanel) {
+      setShowSidePanel(false);
+    }
+  }, [showTrafficMonitoringPanel]);
+
+  // Auto-hide sidebar when Traffic Predictions Panel is open
+  useEffect(() => {
+    if (showPredictionsPanel) {
+      setShowSidePanel(false);
+    }
+  }, [showPredictionsPanel]);
+
+  // Driver.js Tour - Initialize for new users (works for both logged-in and guest mode)
+  useEffect(() => {
+    // Wait a bit for the DOM to be fully rendered
+    const timer = setTimeout(() => {
+      // Check if user is new (hasn't completed tour)
+      if (isNewUser()) {
+        try {
+          // Get tour steps
+          const tourSteps = getTrafficMapTourSteps();
+          
+          // Convert string selectors to DOM elements and filter out invalid steps
+          const validSteps = tourSteps.map(step => {
+            if (typeof step.element === 'string') {
+              const element = document.querySelector(step.element);
+              if (element) {
+                return { ...step, element };
+              }
+              return null;
+            }
+            return step.element ? step : null;
+          }).filter(step => step !== null);
+
+          if (validSteps.length === 0) {
+            console.warn('No valid tour steps found');
+            return;
+          }
+
+          console.log('Tour steps initialized:', validSteps.length);
+
+          // Store driver instance reference and track current step
+          let driverInstanceRef = null;
+          let currentStepIndex = 0;
+          let stepsRef = validSteps; // Reference to current steps array
+          let isInsertingSteps = false; // Flag to prevent multiple step insertions
+          let hasInsertedToggles = false; // Flag to track if toggles have been inserted
+          
+          // Helper to update step index when step changes
+          const updateStepIndex = (element) => {
+            const index = stepsRef.findIndex(s => {
+              if (typeof s.element === 'string') {
+                const el = document.querySelector(s.element);
+                return el === element;
+              }
+              return s.element === element;
+            });
+            if (index >= 0) {
+              currentStepIndex = index;
+              console.log('Step index updated to:', currentStepIndex, 'of', stepsRef.length - 1);
+            } else {
+              console.warn('Could not find step index for element:', element);
+            }
+          };
+
+          // Initialize Driver.js tour
+          const driverObj = driver({
+            showProgress: true,
+            allowClose: true,
+            steps: validSteps,
+            // Mobile-friendly configuration
+            stagePadding: 10,
+            stageRadius: 8,
+            popoverOffset: 10,
+            onHighlighted: (element, step, options) => {
+              // Update our tracked index whenever a step is highlighted
+              // Driver.js always provides the driver instance in options.driver
+              const driverInstance = options?.driver;
+              if (!driverInstance) {
+                console.warn('No driver instance in onHighlighted');
+                return;
+              }
+              
+              const activeIndex = driverInstance.getActiveIndex?.();
+              if (activeIndex !== undefined && activeIndex !== null) {
+                currentStepIndex = activeIndex;
+                console.log('Step highlighted - updated index to:', currentStepIndex, 'of', stepsRef.length - 1);
+                
+                // Save progress so user can continue if they accidentally close
+                saveTourProgress(activeIndex, stepsRef.length);
+              }
+            },
+            onDestroyStarted: (element, step, options) => {
+              // Check if tour was completed or closed early
+              // Driver.js always provides the driver instance in options.driver
+              const driverInstance = options?.driver;
+              if (!driverInstance) {
+                console.warn('No driver instance in onDestroyStarted');
+                markTourCompleted();
+                setShowSidePanel(false);
+                return;
+              }
+              
+              const activeIndex = driverInstance.getActiveIndex?.() ?? currentStepIndex;
+              const totalSteps = stepsRef.length;
+              const isLastStep = activeIndex >= totalSteps - 1;
+              
+              console.log('Tour destroy started - step:', activeIndex, 'of', totalSteps - 1, 'isLastStep:', isLastStep);
+              
+              // Close sidebar immediately
+              setShowSidePanel(false);
+              
+              // Force cleanup of tour elements
+              const overlay = document.querySelector('.driver-overlay');
+              const popover = document.querySelector('.driver-popover');
+              const activeElement = document.querySelector('.driver-active-element');
+              
+              if (overlay) {
+                overlay.style.display = 'none';
+                overlay.remove();
+              }
+              if (popover) {
+                popover.style.display = 'none';
+                popover.remove();
+              }
+              if (activeElement) {
+                activeElement.classList.remove('driver-active-element');
+              }
+              
+              // Additional cleanup after a short delay
+              setTimeout(() => {
+                document.querySelectorAll('.driver-overlay, .driver-popover').forEach(el => {
+                  el.remove();
+                });
+              }, 50);
+              
+              // If tour was closed early (not on last step), ask if user wants to restart
+              if (!isLastStep) {
+                setTimeout(() => {
+                  // Create a custom notification
+                  const notification = document.createElement('div');
+                  notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                    padding: 20px;
+                    z-index: 99999;
+                    max-width: 350px;
+                    animation: slideIn 0.3s ease-out;
+                    pointer-events: auto;
+                  `;
+                  
+                  notification.innerHTML = `
+                    <style>
+                      @keyframes slideIn {
+                        from { transform: translateX(400px); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                      }
+                    </style>
+                    <div style="display: flex; align-items: start; gap: 12px;">
+                      <div style="font-size: 24px;">🗺️</div>
+                      <div style="flex: 1;">
+                        <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1f2937;">Tour Incomplete</h3>
+                        <p style="margin: 0 0 16px 0; font-size: 14px; color: #6b7280; line-height: 1.5;">
+                          You closed the tour at step ${activeIndex + 1} of ${totalSteps}. Would you like to continue where you left off?
+                        </p>
+                        <div style="display: flex; gap: 8px;">
+                          <button id="continue-tour-btn" type="button" style="
+                            flex: 1;
+                            padding: 8px 16px;
+                            background: linear-gradient(to right, #3b82f6, #2563eb);
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-size: 14px;
+                            pointer-events: auto;
+                            position: relative;
+                            z-index: 1;
+                          ">Continue Tour</button>
+                          <button id="dismiss-tour-btn" type="button" style="
+                            flex: 1;
+                            padding: 8px 16px;
+                            background: #f3f4f6;
+                            color: #6b7280;
+                            border: none;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-size: 14px;
+                            pointer-events: auto;
+                            position: relative;
+                            z-index: 1;
+                          ">No, Thanks</button>
+                        </div>
+                      </div>
+                      <button id="close-notification-btn" style="
+                        background: none;
+                        border: none;
+                        font-size: 20px;
+                        color: #9ca3af;
+                        cursor: pointer;
+                        padding: 0;
+                        line-height: 1;
+                      ">×</button>
+                    </div>
+                  `;
+                  
+                  document.body.appendChild(notification);
+                  
+                  // Use event delegation on the notification element for reliability
+                  const handleNotificationClick = (e) => {
+                    const target = e.target;
+                    const buttonId = target.id;
+                    
+                    console.log('Notification click detected:', buttonId);
+                    
+                    // Handle continue button
+                    if (buttonId === 'continue-tour-btn' || target.closest('#continue-tour-btn')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Continue Tour button clicked - reloading page');
+                      notification.remove();
+                      // Reload the page to restart the tour from saved progress
+                      window.location.reload();
+                      return;
+                    }
+                    
+                    // Handle dismiss button
+                    if (buttonId === 'dismiss-tour-btn' || target.closest('#dismiss-tour-btn')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Dismiss button clicked');
+                      notification.remove();
+                      clearTourProgress();
+                      markTourCompleted();
+                      return;
+                    }
+                    
+                    // Handle close button
+                    if (buttonId === 'close-notification-btn' || target.closest('#close-notification-btn')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Close button clicked');
+                      notification.remove();
+                      clearTourProgress();
+                      markTourCompleted();
+                      return;
+                    }
+                  };
+                  
+                  // Attach event listener using event delegation
+                  notification.addEventListener('click', handleNotificationClick);
+                  
+                  // Also attach direct listeners as backup
+                  setTimeout(() => {
+                    const continueBtn = document.getElementById('continue-tour-btn');
+                    const dismissBtn = document.getElementById('dismiss-tour-btn');
+                    const closeBtn = document.getElementById('close-notification-btn');
+                    
+                    if (continueBtn) {
+                      continueBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Continue Tour button clicked (direct listener)');
+                        notification.remove();
+                        window.location.reload();
+                      });
+                    }
+                    
+                    if (dismissBtn) {
+                      dismissBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Dismiss button clicked (direct listener)');
+                        notification.remove();
+                        clearTourProgress();
+                        markTourCompleted();
+                      });
+                    }
+                    
+                    if (closeBtn) {
+                      closeBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Close button clicked (direct listener)');
+                        notification.remove();
+                        clearTourProgress();
+                        markTourCompleted();
+                      });
+                    }
+                  }, 10);
+                  
+                  // Auto-dismiss after 15 seconds
+                  setTimeout(() => {
+                    if (notification.parentNode) {
+                      notification.remove();
+                      clearTourProgress(); // Clear saved progress
+                      markTourCompleted(); // Mark as completed if user didn't respond
+                    }
+                  }, 15000);
+                }, 300); // Show notification after cleanup
+              } else {
+                // Tour was completed normally
+                clearTourProgress(); // Clear saved progress
+                markTourCompleted();
+              }
+            },
+            onDestroyed: (element, step, options) => {
+              // Tour finished - mark as completed (backup in case onDestroyStarted doesn't fire)
+              console.log('Tour destroyed - marking as completed (backup)');
+              markTourCompleted();
+              
+              // Close sidebar if it was opened for the tour
+              setShowSidePanel(false);
+              
+              // Force cleanup of any remaining tour elements
+              const cleanup = () => {
+                document.querySelectorAll('.driver-overlay, .driver-popover, .driver-active-element').forEach(el => {
+                  if (el.classList.contains('driver-active-element')) {
+                    el.classList.remove('driver-active-element');
+                  } else {
+                    el.remove();
+                  }
+                });
+              };
+              
+              // Immediate cleanup
+              cleanup();
+              
+              // Delayed cleanup to catch any stragglers
+              setTimeout(cleanup, 100);
+            },
+            onNextClick: (element, step, options) => {
+              // IMPORTANT: When onNextClick is provided, we MUST call driver.moveNext() manually
+              // The driver instance is passed in options.driver
+              const driverInstance = options?.driver;
+              
+              if (!driverInstance) {
+                console.error('No driver instance available in onNextClick! Options:', options);
+                return;
+              }
+              
+              // Get the current step index from Driver.js's internal state
+              // Driver.js provides the active index through getActiveIndex()
+              const driverActiveIndex = driverInstance.getActiveIndex?.() ?? currentStepIndex;
+              
+              // Update our tracked index to match Driver.js's state
+              if (driverActiveIndex !== undefined && driverActiveIndex !== null) {
+                currentStepIndex = driverActiveIndex;
+              } else {
+                // Fallback: Update step index based on current element (before moving)
+                updateStepIndex(element);
+              }
+              
+              console.log('Next button clicked, current step:', currentStepIndex, 'total steps:', stepsRef.length, 'driverInstance:', !!driverInstance, 'driverActiveIndex:', driverActiveIndex);
+              
+              // If we're already inserting steps, prevent any action
+              if (isInsertingSteps) {
+                console.log('Steps are being inserted, skipping navigation');
+                return;
+              }
+              
+              // Special handling for menu button step (index 1) - open sidebar and insert toggle steps
+              // Only do this once
+              if (currentStepIndex === 1 && !hasInsertedToggles) {
+                isInsertingSteps = true; // Set flag to prevent multiple calls
+                hasInsertedToggles = true; // Mark that we've inserted toggles
+                console.log('Menu button step - opening sidebar and inserting toggle steps');
+                setShowSidePanel(true);
+                
+                // Wait for sidebar to open, then insert toggle steps and advance
+                setTimeout(() => {
+                  // Get sidebar toggle steps (excluding User Reports)
+                  const sidebarToggleSteps = getSidebarToggleSteps();
+                  const toggleValidSteps = sidebarToggleSteps.map(s => {
+                    if (typeof s.element === 'string') {
+                      const el = document.querySelector(s.element);
+                      return el ? { ...s, element: el } : null;
+                    }
+                    return s.element ? s : null;
+                  }).filter(s => s !== null);
+                  
+                  // Get the remaining steps (search, insights, weather, emergency)
+                  const remainingSteps = getTrafficMapTourSteps();
+                  const remainingValidSteps = remainingSteps.map(s => {
+                    if (typeof s.element === 'string') {
+                      const el = document.querySelector(s.element);
+                      return el ? { ...s, element: el } : null;
+                    }
+                    return s.element ? s : null;
+                  }).filter(s => s !== null);
+                  
+                  // Build new steps: welcome, menu, sidebar toggles, then remaining steps
+                  const newValidSteps = [
+                    ...stepsRef.slice(0, 2), // Keep welcome and menu
+                    ...toggleValidSteps, // Add sidebar toggle steps
+                    ...remainingValidSteps.slice(2) // Add remaining steps (skip welcome and menu)
+                  ];
+                  
+                  console.log('Inserted toggle steps. Total steps:', newValidSteps.length, 'Toggles:', toggleValidSteps.length);
+                  console.log('Step structure:', newValidSteps.map((s, i) => `${i}: ${s.popover?.title || 'unknown'}`));
+                  
+                  // Check if we have valid toggle steps
+                  if (toggleValidSteps.length === 0) {
+                    console.warn('No toggle steps found, continuing normally');
+                    isInsertingSteps = false; // Reset flag immediately
+                    try {
+                      driverInstance.moveNext();
+                    } catch (error) {
+                      console.error('Error moving next (no toggles):', error);
+                    }
+                    return;
+                  }
+                  
+                  // Update steps reference first
+                  stepsRef = newValidSteps;
+                  
+                  // Important: After setSteps(), Driver.js might reset its position
+                  // We need to manually highlight step 1 first, then move to step 2
+                  try {
+                    // Update the steps
+                    driverInstance.setSteps(newValidSteps);
+                    console.log('Steps updated, new total:', newValidSteps.length);
+                    
+                    // Force a refresh - wait for Driver.js to fully process the new steps
+                    setTimeout(() => {
+                      // Check if we can access the current step
+                      // Since we know we were on step 1, and we just updated steps,
+                      // we should be able to move to step 2
+                      try {
+                        console.log('Attempting to navigate to step 2 (first toggle)');
+                        
+                        // Verify the first toggle element exists
+                        const firstToggleEl = toggleValidSteps[0]?.element;
+                        if (!firstToggleEl) {
+                          console.error('First toggle element not found! Toggle steps:', toggleValidSteps.length);
+                          isInsertingSteps = false; // Reset flag
+                          return;
+                        }
+                        
+                        console.log('First toggle element found, proceeding with navigation');
+                        
+                        // After setSteps(), Driver.js resets to step 0
+                        // We need to directly drive to step 2 (first toggle)
+                        console.log('Directly navigating to step 2 using drive(2)');
+                        
+                        // First, clear the current highlight to prevent overlapping popovers
+                        try {
+                          // Remove any existing driver elements
+                          const existingPopover = document.querySelector('.driver-popover');
+                          const existingOverlay = document.querySelector('.driver-overlay');
+                          const existingHighlight = document.querySelector('.driver-active-element');
+                          
+                          if (existingPopover) {
+                            existingPopover.style.display = 'none';
+                            existingPopover.remove();
+                          }
+                          if (existingOverlay) {
+                            existingOverlay.style.display = 'none';
+                          }
+                          if (existingHighlight) {
+                            existingHighlight.classList.remove('driver-active-element');
+                          }
+                        } catch (e) {
+                          console.warn('Error clearing existing driver elements:', e);
+                        }
+                        
+                        // Small delay to ensure cleanup is complete
+                        setTimeout(() => {
+                          // Use drive() to go directly to step index 2
+                          // Note: We use drive() instead of moveNext() because after setSteps(),
+                          // Driver.js resets its position
+                          driverInstance.drive(2);
+                        }, 50);
+                        
+                        // Note: currentStepIndex will be updated automatically by onHighlighted callback
+                        console.log('Navigation to step 2 initiated');
+                        
+                        // Reset flag after navigation completes (accounting for the cleanup delay)
+                        setTimeout(() => {
+                          isInsertingSteps = false;
+                          console.log('Flag reset, navigation complete');
+                        }, 150);
+                      } catch (error) {
+                        console.error('Error in navigation logic:', error);
+                        isInsertingSteps = false; // Reset flag on error
+                      }
+                    }, 400); // Reduced timeout for faster transition
+                  } catch (error) {
+                    console.error('Error setting new steps:', error);
+                    isInsertingSteps = false; // Reset flag on error
+                  }
+                }, 400); // Reduced timeout for faster response
+                return; // Don't call moveNext() here, we'll do it after steps are inserted
+              }
+              
+              // Close sidebar when moving from last toggle to search step
+              const firstToggleIndex = 2;
+              const numToggles = 5;
+              const lastToggleIndex = firstToggleIndex + numToggles - 1; // Index 6 (last toggle)
+              const searchStepIndex = lastToggleIndex + 1; // Index 7 (search, first step after toggles)
+              
+              // If we're on the last toggle (index 6), close sidebar before moving to search (index 7)
+              if (currentStepIndex === lastToggleIndex) {
+                console.log('Moving from last toggle to search - closing sidebar');
+                setShowSidePanel(false);
+                // Wait a bit for sidebar to close before moving to search
+                setTimeout(() => {
+                  try {
+                    driverInstance.moveNext();
+                  } catch (error) {
+                    console.error('Error moving to search step:', error);
+                  }
+                }, 300);
+                return;
+              }
+              
+              // Check if this is the last step (currentStepIndex is 0-indexed, last is length - 1)
+              const isLastStep = currentStepIndex >= stepsRef.length - 1;
+              
+              if (isLastStep) {
+                console.log('Last step Done button clicked - marking as completed and destroying');
+                markTourCompleted();
+                // Destroy the tour
+                setTimeout(() => {
+                  driverInstance.destroy();
+                }, 50);
+              } else {
+                // Advance to next step - REQUIRED for navigation to work when onNextClick is provided
+                console.log('Moving to next step from index', currentStepIndex, 'to', currentStepIndex + 1);
+                try {
+                  driverInstance.moveNext();
+                } catch (error) {
+                  console.error('Error calling moveNext:', error);
+                }
+              }
+            },
+            onPreviousClick: (element, step, options) => {
+              // Allow previous navigation
+              const driverInstance = options?.driver;
+              if (!driverInstance) {
+                console.error('No driver instance available in onPreviousClick!');
+                return;
+              }
+              updateStepIndex(element);
+              
+              if (driverInstance && currentStepIndex > 0) {
+                console.log('Moving to previous step from index', currentStepIndex);
+                try {
+                  driverInstance.movePrevious();
+                } catch (error) {
+                  console.error('Error calling movePrevious:', error);
+                }
+              }
+            },
+            // Handle when a step is highlighted - track current step index
+            onHighlighted: (element, step, options) => {
+              // Track the current step by finding it in our stepsRef array
+              // Update the index based on the highlighted element
+              const newIndex = stepsRef.findIndex(s => {
+                if (typeof s.element === 'string') {
+                  const el = document.querySelector(s.element);
+                  return el === element;
+                }
+                return s.element === element;
+              });
+              
+              if (newIndex >= 0) {
+                currentStepIndex = newIndex;
+                console.log('Step highlighted - updated index to:', currentStepIndex, 'of', stepsRef.length - 1);
+              } else {
+                // If not found, try to update using the helper function
+                updateStepIndex(element);
+                console.log('Step highlighted - using helper, index:', currentStepIndex, 'of', stepsRef.length - 1);
+              }
+              
+              // Ensure buttons are enabled after a short delay
+              setTimeout(() => {
+                const footer = document.querySelector('.driver-popover-footer');
+                if (!footer) return;
+                
+                const nextButton = footer.querySelector('.driver-next-btn');
+                const prevButton = footer.querySelector('.driver-prev-btn');
+                const closeButton = footer.querySelector('.driver-close-btn');
+                
+                // Enable Next button
+                if (nextButton) {
+                  nextButton.style.pointerEvents = 'auto';
+                  nextButton.style.cursor = 'pointer';
+                  nextButton.disabled = false;
+                  nextButton.removeAttribute('disabled');
+                  // Remove any existing click handlers that might interfere
+                  nextButton.onclick = null;
+                }
+                
+                // Enable Previous button
+                if (prevButton) {
+                  prevButton.style.pointerEvents = 'auto';
+                  prevButton.style.cursor = currentStepIndex === 0 ? 'not-allowed' : 'pointer';
+                  if (currentStepIndex === 0) {
+                    prevButton.disabled = true;
+                  } else {
+                    prevButton.disabled = false;
+                    prevButton.removeAttribute('disabled');
+                  }
+                }
+                
+                // Enable Close button
+                if (closeButton) {
+                  closeButton.style.pointerEvents = 'auto';
+                  closeButton.style.cursor = 'pointer';
+                }
+              }, 150);
+              
+              // Close sidebar when we reach the search step (first step after toggles)
+              // The toggle steps are indices 2-6, search is index 7
+              const firstToggleIndex = 2;
+              const numToggles = 5;
+              const searchStepIndex = firstToggleIndex + numToggles; // Index 7 (search step)
+              
+              // Close sidebar when we reach the search step (after all toggles are shown)
+              if (currentStepIndex === searchStepIndex) {
+                console.log('Reached search step - ensuring sidebar is closed');
+                setShowSidePanel(false);
+              }
+            }
+          });
+
+          // Store reference for cleanup
+          driverInstanceRef = driverObj;
+          
+          // Check if there's saved progress
+          const savedProgress = getTourProgress();
+          
+          // Start the tour after a short delay to ensure all elements are rendered
+          setTimeout(() => {
+            if (savedProgress && savedProgress.stepIndex > 0) {
+              // Resume from saved step
+              console.log('Resuming tour from saved step:', savedProgress.stepIndex);
+              driverObj.drive(savedProgress.stepIndex);
+            } else {
+              // Start from beginning
+              driverObj.drive();
+            }
+          }, 1000);
+        } catch (error) {
+          console.warn('Failed to initialize tour:', error);
+        }
+      }
+    }, 2000); // Wait 2 seconds for page to fully load
+
+    return () => clearTimeout(timer);
+  }, []); // Run only once on mount
   
   // Simulation Completion Modal
   const [showSimulationCompleteModal, setShowSimulationCompleteModal] = useState(false);
@@ -493,16 +1235,11 @@ const TrafficMap = () => {
     loadUserData();
   }, [user]);
 
-  // Load traffic and heatmap data (keep for now, will refactor later)
+  // Load traffic and heatmap data with 10-minute auto-refresh from TomTom API
   useEffect(() => {
-    // Skip loading traffic data during simulation to prevent infinite loops
-    if (isSimulating) {
-      return;
-    }
-    
-    loadTrafficData();
-    const interval = setInterval(loadTrafficData, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
+    // REMOVED: Automatic traffic data loading
+    // Traffic data now loads only when Insights panel is opened (see useEffect with isMiniOpen dependency)
+    // This is for better API management - no unnecessary API calls when Insights is not being viewed
   }, [mapCenter, mapZoom, isSimulating]);
 
   // Load traffic data for selected route
@@ -589,7 +1326,7 @@ const TrafficMap = () => {
     }
   };
 
-  const loadTrafficData = async () => {
+  const loadTrafficData = async (triggerBackendUpdate = false) => {
     // Don't load traffic data during simulation to prevent loops
     if (isSimulating) {
       return;
@@ -597,91 +1334,211 @@ const TrafficMap = () => {
     
     setIsLoadingData(true);
     try {
-      // Try to fetch real traffic data from API
+      // Note: Backend update trigger requires admin authentication
+      // Skip it for now and fetch directly from TomTom API instead
+      // if (triggerBackendUpdate) {
+      //   try {
+      //     await trafficService.triggerTrafficUpdate();
+      //     await new Promise(resolve => setTimeout(resolve, 2000));
+      //   } catch (updateError) {
+      //     console.warn('Backend traffic update trigger failed:', updateError);
+      //   }
+      // }
+      
+      // Fetch real traffic monitoring data from API
+      const bounds = mapRef.current?.getBounds();
+      let ne, sw;
+      
+      if (bounds) {
+        ne = bounds.getNorthEast();
+        sw = bounds.getSouthWest();
+      }
+      
+      const params = {
+        limit: 200, // Get up to 200 traffic monitoring records
+      };
+      
+      // Add bounds filtering if available
+      if (bounds) {
+        params.lat_min = sw.lat;
+        params.lat_max = ne.lat;
+        params.lng_min = sw.lng;
+        params.lng_max = ne.lng;
+      }
+      
       try {
-        const bounds = mapRef.current?.getBounds();
-        if (bounds) {
-          const ne = bounds.getNorthEast();
-          const sw = bounds.getSouthWest();
+        // Fetch traffic data directly from TomTom API (bypasses database)
+        // This ensures we get the latest real-time data from TomTom
+        let realTrafficData = [];
+        
+        try {
+          // Try to fetch directly from TomTom API first (bypasses database)
+          // This endpoint fetches fresh data from TomTom API in real-time
+          const boundsForApi = bounds ? {
+            minLat: sw.lat,
+            maxLat: ne.lat,
+            minLng: sw.lng,
+            maxLng: ne.lng
+          } : null;
           
-          // Fetch traffic heatmap data
-          const response = await fetch(
-            `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/traffic/monitoring/heatmap?` +
-            `lat_min=${sw.lat}&lat_max=${ne.lat}&lng_min=${sw.lng}&lng_max=${ne.lng}`
-          );
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.heatmap_data && Array.isArray(data.heatmap_data)) {
-              // Render a road-aligned heatmap regardless of API shape for consistent alignment
-              const roadAligned = generateRoadBasedHeatmapData(mapCenter);
-              const boundedRoadAligned = roadAligned.filter(p => (
-                p[0] >= defaultBounds.lat_min &&
-                p[0] <= defaultBounds.lat_max &&
-                p[1] >= defaultBounds.lng_min &&
-                p[1] <= defaultBounds.lng_max
-              ));
-              setHeatmapData(boundedRoadAligned);
-              return;
+          realTrafficData = await trafficService.getRealtimeTrafficDirect(boundsForApi);
+          console.log('✅ Fetched traffic data directly from TomTom API:', realTrafficData?.length || 0, 'records');
+        } catch (directApiError) {
+          // If endpoint returns 404, server needs to be restarted to load the new endpoint
+          // Only show warning once to avoid console spam
+          if (directApiError.response?.status === 404) {
+            if (!window._directApiWarningShown) {
+              console.warn('⚠️ Direct TomTom API endpoint not found. Please restart the backend server to load the new endpoint.');
+              console.warn('Falling back to database...');
+              window._directApiWarningShown = true;
             }
+          } else if (directApiError.message?.includes('timeout') || directApiError.code === 'ECONNABORTED') {
+            // Timeout is expected when fetching many monitoring points - don't show as error
+            if (!window._timeoutWarningShown) {
+              console.warn('⏱️ Request timeout: Fetching data from many monitoring points. Falling back to database...');
+              window._timeoutWarningShown = true;
+            }
+          } else {
+            console.warn('Failed to fetch from TomTom API directly:', directApiError.message);
+          }
+          
+          // Fallback to database if direct API call fails
+          try {
+            realTrafficData = await trafficService.getTrafficMonitoring(params);
+            if (realTrafficData?.length > 0) {
+              console.log('Fetched traffic data from database (fallback):', realTrafficData.length, 'records');
+            }
+          } catch (dbError) {
+            console.error('Failed to fetch from database as well:', dbError);
+            realTrafficData = [];
           }
         }
-      } catch (apiError) {
         
+        if (realTrafficData && Array.isArray(realTrafficData) && realTrafficData.length > 0) {
+          // Filter to show recent data (today's data preferred, last 24 hours as fallback)
+          const filteredData = filterRecentTrafficData(realTrafficData);
+          
+          console.log('Filtered traffic data:', filteredData.length, 'records');
+          
+          if (filteredData.length > 0) {
+            // Use filtered recent data - ensures we show current traffic conditions
+            // The backend should be fetching data from TomTom Traffic Flow API regularly
+            setTrafficData(filteredData);
+          
+            // Also generate heatmap data for visualization if needed
+            // Try to get heatmap data for the heatmap layer
+            try {
+              if (bounds) {
+                const ne = bounds.getNorthEast();
+                const sw = bounds.getSouthWest();
+                const heatmapResponse = await trafficService.getTrafficHeatmap({
+                  lat_min: sw.lat,
+                  lat_max: ne.lat,
+                  lng_min: sw.lng,
+                  lng_max: ne.lng
+                });
+                
+                if (heatmapResponse && heatmapResponse.heatmap_data && Array.isArray(heatmapResponse.heatmap_data)) {
+                  setHeatmapData(heatmapResponse.heatmap_data);
+                } else {
+                  // Generate heatmap from traffic data if heatmap endpoint doesn't return data
+                  const heatmapFromTraffic = filteredData.map(item => {
+                  const intensityFromStatus =
+                    item.traffic_status === 'heavy' || item.traffic_status === 'severe' ? 0.8 :
+                    item.traffic_status === 'moderate' ? 0.6 :
+                    item.traffic_status === 'light' ? 0.4 : 0.2;
+                  const pct = typeof item.congestion_percentage === 'number'
+                    ? Math.max(0.2, Math.min(1, item.congestion_percentage / 100))
+                    : null;
+                  return [
+                    item.latitude || item.lat,
+                    item.longitude || item.lng,
+                    pct ?? (item.intensity || intensityFromStatus)
+                  ];
+                  });
+                  setHeatmapData(heatmapFromTraffic);
+                }
+              } else {
+                // Generate heatmap from traffic data
+                const heatmapFromTraffic = filteredData.map(item => {
+                const intensityFromStatus =
+                  item.traffic_status === 'heavy' || item.traffic_status === 'severe' ? 0.8 :
+                  item.traffic_status === 'moderate' ? 0.6 :
+                  item.traffic_status === 'light' ? 0.4 : 0.2;
+                const pct = typeof item.congestion_percentage === 'number'
+                  ? Math.max(0.2, Math.min(1, item.congestion_percentage / 100))
+                  : null;
+                return [
+                  item.latitude || item.lat,
+                  item.longitude || item.lng,
+                  pct ?? (item.intensity || intensityFromStatus)
+                ];
+                });
+                setHeatmapData(heatmapFromTraffic);
+              }
+            } catch (heatmapError) {
+              console.warn('Failed to fetch heatmap data, using traffic data for heatmap:', heatmapError);
+              // Generate heatmap from traffic data
+              const heatmapFromTraffic = filteredData.map(item => {
+              const intensityFromStatus =
+                item.traffic_status === 'heavy' || item.traffic_status === 'severe' ? 0.8 :
+                item.traffic_status === 'moderate' ? 0.6 :
+                item.traffic_status === 'light' ? 0.4 : 0.2;
+              const pct = typeof item.congestion_percentage === 'number'
+                ? Math.max(0.2, Math.min(1, item.congestion_percentage / 100))
+                : null;
+              return [
+                item.latitude || item.lat,
+                item.longitude || item.lng,
+                pct ?? (item.intensity || intensityFromStatus)
+              ];
+            });
+            setHeatmapData(heatmapFromTraffic);
+          }
+          
+            return; // Successfully loaded real traffic data
+          } else {
+            console.warn('No recent traffic data found after filtering. Total records:', realTrafficData.length);
+          }
+        } else {
+          console.warn('No traffic data returned from API');
+        }
+      } catch (apiError) {
+        console.error('Failed to fetch real traffic data:', apiError);
+        // Fall through to clear data
       }
-
-      // Fallback: Generate enhanced mock heatmap data that follows road patterns
-      const mockHeatmapData = generateRoadBasedHeatmapData(mapCenter);
-      const boundedMock = mockHeatmapData.filter(p => (
-        p[0] >= defaultBounds.lat_min &&
-        p[0] <= defaultBounds.lat_max &&
-        p[1] >= defaultBounds.lng_min &&
-        p[1] <= defaultBounds.lng_max
-      ));
-      setHeatmapData(boundedMock);
-      // Convert mock heatmap data to traffic data format for 3D visualization
-      const mockTrafficData = mockHeatmapData.map((point, index) => ({
-        latitude: point[0],
-        longitude: point[1],
-        lat: point[0],
-        lng: point[1],
-        intensity: point[2] || 0.5,
-        road_name: `Road Segment ${Math.floor(index / 10)}`,
-        status: point[2] < 0.3 ? 'free_flow' : point[2] < 0.5 ? 'light' : point[2] < 0.7 ? 'moderate' : point[2] < 0.9 ? 'heavy' : 'standstill',
-        traffic_status: point[2] < 0.3 ? 'free_flow' : point[2] < 0.5 ? 'light' : point[2] < 0.7 ? 'moderate' : point[2] < 0.9 ? 'heavy' : 'standstill',
-        vehicle_count: Math.floor(point[2] * 50),
-        congestion_percentage: Math.floor(point[2] * 100)
-      }));
-      setTrafficData(mockTrafficData);
-    } catch (error) {
       
-      // Final fallback
-      const mockHeatmapData = generateRoadBasedHeatmapData(mapCenter);
-      const boundedMock = mockHeatmapData.filter(p => (
-        p[0] >= defaultBounds.lat_min &&
-        p[0] <= defaultBounds.lat_max &&
-        p[1] >= defaultBounds.lng_min &&
-        p[1] <= defaultBounds.lng_max
-      ));
-      setHeatmapData(boundedMock);
-      // Convert mock heatmap data to traffic data format for 3D visualization
-      const mockTrafficData = mockHeatmapData.map((point, index) => ({
-        latitude: point[0],
-        longitude: point[1],
-        lat: point[0],
-        lng: point[1],
-        intensity: point[2] || 0.5,
-        road_name: `Road Segment ${Math.floor(index / 10)}`,
-        status: point[2] < 0.3 ? 'free_flow' : point[2] < 0.5 ? 'light' : point[2] < 0.7 ? 'moderate' : point[2] < 0.9 ? 'heavy' : 'standstill',
-        traffic_status: point[2] < 0.3 ? 'free_flow' : point[2] < 0.5 ? 'light' : point[2] < 0.7 ? 'moderate' : point[2] < 0.9 ? 'heavy' : 'standstill',
-        vehicle_count: Math.floor(point[2] * 50),
-        congestion_percentage: Math.floor(point[2] * 100)
-      }));
-      setTrafficData(mockTrafficData);
+      // If we get here, no valid traffic data was found
+      // Clear traffic data instead of showing stale data
+      console.warn('No valid traffic data available. Clearing traffic data.');
+      setHeatmapData([]);
+      setTrafficData([]);
+    } catch (error) {
+      console.error('Error loading traffic data:', error);
+      // Clear heatmap/traffic to avoid showing stale data
+      setHeatmapData([]);
+      setTrafficData([]);
     } finally {
       setIsLoadingData(false);
     }
   };
+  
+  // REMOVED: Traffic data loading useEffect moved after isMiniOpen declaration
+  // This useEffect will be re-added after isMiniOpen state is declared
+  
+  // Load traffic data for selected route
+  useEffect(() => {
+    // Skip loading route traffic data during simulation to prevent infinite loops
+    if (isSimulating) {
+      return;
+    }
+    
+    if (selectedRoute && selectedRoute.route_coordinates) {
+      loadRouteTrafficData();
+      const interval = setInterval(loadRouteTrafficData, 60000); // Update every minute
+      return () => clearInterval(interval);
+    }
+  }, [selectedRoute, isSimulating]);
 
   // Generate heatmap data that prioritizes major roads & landmarks with randomness
   const generateRoadBasedHeatmapData = (center) => {
@@ -1134,6 +1991,22 @@ const TrafficMap = () => {
     setSelectedPlace(locationWithDefaults);
     setShowPlaceInfoPanel(true);
     
+    // Also set as selectedSearchResult to show pin on map with animation
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+      const addressObj = typeof locationWithDefaults.address === 'string' 
+        ? { full: locationWithDefaults.address, freeformAddress: locationWithDefaults.address }
+        : (locationWithDefaults.address || { full: '', freeformAddress: '' });
+      
+      setSelectedSearchResult({
+        name: locationWithDefaults.name,
+        display_name: locationWithDefaults.name,
+        address: addressObj,
+        lat: lat,
+        lng: lng,
+        type: locationWithDefaults.type || 'general'
+      });
+    }
+    
     // Close search results and other panels
     setShowSearchResults(false);
     setShowSuggestions(false);
@@ -1143,13 +2016,14 @@ const TrafficMap = () => {
     // Center map on selected place with validated coordinates
     if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
       setMapCenter([lat, lng]);
-      setMapZoom(15); // Zoom in to show the place clearly
+      setMapZoom(17); // Zoom in closer to show the place clearly
       
-      // Also update map ref if available
+      // Also update map ref if available - use flyTo for smooth animation
       if (mapRef.current) {
         try {
-          mapRef.current.flyTo([lat, lng], 15, {
-            duration: 1.0
+          mapRef.current.flyTo([lat, lng], 17, {
+            duration: 1.0,
+            easeLinearity: 0.25
           });
         } catch (err) {
           // Silently fail if map is not ready
@@ -1241,6 +2115,7 @@ const TrafficMap = () => {
         setIsLoadingData(false);
         setShowDirectionsPanel(true);
         setDirectionsPanelMinimized(false);
+        setNavigationPanelMinimized(false);
         return;
       }
 
@@ -1272,6 +2147,7 @@ const TrafficMap = () => {
       // The panel will display the route once state is updated
       setShowDirectionsPanel(true);
       setDirectionsPanelMinimized(false);
+      setNavigationPanelMinimized(false);
       toast.success('Route calculated!', { id: 'calculate-route' });
     } catch (error) {
       console.warn('Failed to get GPS location or calculate route:', error);
@@ -1279,6 +2155,7 @@ const TrafficMap = () => {
       // Show the directions panel even if GPS fails, so user can set origin manually
       setShowDirectionsPanel(true);
       setDirectionsPanelMinimized(false);
+      setNavigationPanelMinimized(false);
       
       if (error.message && error.message.includes('Geolocation')) {
         toast.error('Unable to get your current location. Please set an origin manually in the directions panel.', { id: 'get-location' });
@@ -1354,7 +2231,11 @@ const TrafficMap = () => {
       }
       const prevDestination = selectedDestination; // Capture current destination
       setSelectedOrigin(location);
-      setOriginQuery(location.name || '');
+      setOriginQuery(location.name || location.display_name || location.address?.full || location.address?.freeformAddress || '');
+      
+      // Clear search results when a location is selected
+      setSearchResults([]);
+      setSelectedSearchResult(null);
       
       // If destination is already set and both have valid coordinates, trigger route calculation
       if (prevDestination && location.lat && location.lng && prevDestination.lat && prevDestination.lng) {
@@ -1385,7 +2266,11 @@ const TrafficMap = () => {
       }
       const prevOrigin = selectedOrigin; // Capture current origin
       setSelectedDestination(location);
-      setDestinationQuery(location.name || '');
+      setDestinationQuery(location.name || location.display_name || location.address?.full || location.address?.freeformAddress || '');
+      
+      // Clear search results when a location is selected
+      setSearchResults([]);
+      setSelectedSearchResult(null);
       
       // If origin is already set and both have valid coordinates, trigger route calculation
       if (prevOrigin && location.lat && location.lng && prevOrigin.lat && prevOrigin.lng) {
@@ -1561,8 +2446,10 @@ const TrafficMap = () => {
     setSelectedRoute(route);
     setShowRouteAlternatives(false);
     
-    // Close directions panel when selecting a route option
-    setShowDirectionsPanel(false);
+    // Minimize directions panel when selecting a route option (don't close it)
+    if (showDirectionsPanel) {
+      setNavigationPanelMinimized(true);
+    }
     
     // Center map on the selected route to ensure it's visible
     if (route && route.bounds) {
@@ -1608,11 +2495,24 @@ const TrafficMap = () => {
   };
 
   // Start navigation with GPS tracking
-  const startNavigation = () => {
+  const startNavigation = async () => {
     if (!selectedRoute) return;
 
     setIsNavigationActive(true);
     setNavigationStep(0);
+    setNavigationHUDMinimized(false);
+    
+    // Enable gyroscope for realistic navigation
+    setGyroscopeEnabled(true);
+    
+    // Request device orientation permission if needed
+    if (orientationSupported && !orientationPermission) {
+      try {
+        await requestOrientationPermission();
+      } catch (error) {
+        console.warn('Could not enable device orientation:', error);
+      }
+    }
     
     // Hide route alternatives panel when starting navigation
     setShowRouteAlternatives(false);
@@ -1620,11 +2520,12 @@ const TrafficMap = () => {
     // Close directions panel when starting navigation
     setShowDirectionsPanel(false);
 
-    // Automatically switch to light driving map theme for navigation
-    if (mapStyle !== 'light_driving') {
-      setPreviousMapStyle(mapStyle); // Save current style
-      setMapStyle('light_driving'); // Switch to light driving theme
-    }
+    // Keep current map style during navigation (TomTom maps)
+    // Removed automatic style switching to maintain user's preferred map style
+    // if (mapStyle !== 'light_driving') {
+    //   setPreviousMapStyle(mapStyle); // Save current style
+    //   setMapStyle('light_driving'); // Switch to light driving theme
+    // }
 
     // Start GPS tracking
     startLocationTracking();
@@ -1632,7 +2533,7 @@ const TrafficMap = () => {
     // Auto-zoom to route starting point (origin) with smooth animation - similar to Google Maps
     if (selectedOrigin && selectedOrigin.lat && selectedOrigin.lng) {
       setTimeout(() => {
-        smoothZoomToLocation([selectedOrigin.lat, selectedOrigin.lng], 18);
+        smoothZoomToLocation([selectedOrigin.lat, selectedOrigin.lng], 17);
       }, 300); // Small delay to allow UI to update first
     }
 
@@ -1650,16 +2551,36 @@ const TrafficMap = () => {
       clearTimeout(navigationTimeoutRef.current);
     }
 
-    // Restore previous map style when navigation stops
-    if (mapStyle === 'light_driving' && previousMapStyle !== 'light_driving') {
-      setMapStyle(previousMapStyle);
-    }
+    // Keep current map style (no need to restore since we don't change it)
+    // Removed automatic style restoration
+    // if (mapStyle === 'light_driving' && previousMapStyle !== 'light_driving') {
+    //   setMapStyle(previousMapStyle);
+    // }
 
     // Stop GPS tracking
     stopLocationTracking();
     
     // Stop simulation if active
     stopSimulation();
+
+    // Clear all routes when navigation stops
+    setSelectedRoute(null);
+    setCurrentRoute(null);
+    setRouteAlternatives([]);
+    setShowRouteAlternatives(false);
+
+    // Clear selected places (origin and destination)
+    setSelectedOrigin(null);
+    setSelectedDestination(null);
+    setSelectedPlace(null);
+    setSelectedSearchResult(null);
+
+    // Clear search bar and search history when navigation stops
+    setOriginQuery('');
+    setDestinationQuery('');
+    setSearchResults([]);
+    setShowSearchResults(false);
+    setRecentSearches([]);
   };
 
   // Fully clear current trip: stop navigation/simulation, close panels, clear inputs and routes
@@ -1691,54 +2612,64 @@ const TrafficMap = () => {
     setShowSmartRoutePanel(false);
   };
 
-  // Handle device orientation for gyroscope-based map rotation
-  const handleDeviceOrientation = useCallback((event) => {
-    if (!gyroscopeEnabled || !isNavigationActive) return;
+  // Use device orientation hook for realistic navigation
+  const { 
+    heading: deviceHeading, 
+    tilt: deviceTilt,
+    isSupported: orientationSupported,
+    permissionGranted: orientationPermission,
+    requestPermission: requestOrientationPermission
+  } = useDeviceOrientation(gyroscopeEnabled && isNavigationActive);
 
-    let heading = 0;
-    
-    // iOS devices
-    if (event.webkitCompassHeading !== undefined) {
-      heading = event.webkitCompassHeading;
-    }
-    // Android devices
-    else if (event.alpha !== null && event.alpha !== undefined) {
-      // Convert device orientation to compass heading
-      heading = (360 - event.alpha) % 360;
-    }
-    // GPS heading fallback
-    else if (userLocation?.heading !== undefined) {
-      heading = userLocation.heading;
-    }
+  // Use geolocation heading as fallback
+  const { 
+    heading: gpsHeading, 
+    speed: gpsSpeed 
+  } = useGeolocationHeading(isNavigationActive);
 
-    setUserHeading(heading);
-    setMapRotation(heading);
-  }, [gyroscopeEnabled, isNavigationActive, userLocation]);
-
-  // Start gyroscope/device orientation tracking
+  // Update heading from device orientation or GPS
   useEffect(() => {
-    if (gyroscopeEnabled && isNavigationActive) {
-      // Request permission for device orientation (iOS 13+)
-      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission()
-          .then(permissionState => {
-            if (permissionState === 'granted') {
-              window.addEventListener('deviceorientation', handleDeviceOrientation);
-            }
-          })
-          .catch(() => {
-            console.warn('Device orientation permission denied');
-          });
-      } else {
-        // Android and older iOS
-        window.addEventListener('deviceorientation', handleDeviceOrientation);
+    if (isNavigationActive) {
+      // Prefer device orientation heading if available
+      if (orientationSupported && orientationPermission && deviceHeading !== 0) {
+        setUserHeading(deviceHeading);
+        setMapRotation(deviceHeading);
+      } 
+      // Fallback to GPS heading
+      else if (gpsHeading !== 0) {
+        setUserHeading(gpsHeading);
+        setMapRotation(gpsHeading);
       }
-
-      return () => {
-        window.removeEventListener('deviceorientation', handleDeviceOrientation);
-      };
+      
+      // Update speed from GPS
+      if (gpsSpeed > 0) {
+        setCurrentSpeed(gpsSpeed);
+      }
     }
-  }, [gyroscopeEnabled, isNavigationActive, handleDeviceOrientation]);
+  }, [deviceHeading, gpsHeading, gpsSpeed, isNavigationActive, orientationSupported, orientationPermission]);
+
+  // Calculate distance to next turn
+  useEffect(() => {
+    if (isNavigationActive && userLocation && selectedRoute && selectedRoute.steps) {
+      const currentStep = selectedRoute.steps[navigationStep];
+      if (currentStep && currentStep.start_location) {
+        // Calculate distance using Haversine formula
+        const R = 6371e3; // Earth's radius in meters
+        const lat1 = userLocation.lat * Math.PI / 180;
+        const lat2 = currentStep.start_location[0] * Math.PI / 180;
+        const deltaLat = (currentStep.start_location[0] - userLocation.lat) * Math.PI / 180;
+        const deltaLng = (currentStep.start_location[1] - userLocation.lng) * Math.PI / 180;
+
+        const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
+                  Math.cos(lat1) * Math.cos(lat2) *
+                  Math.sin(deltaLng/2) * Math.sin(deltaLng/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = R * c;
+
+        setDistanceToNextTurn(distance);
+      }
+    }
+  }, [userLocation, selectedRoute, navigationStep, isNavigationActive]);
 
   // Start GPS location tracking
   const startLocationTracking = () => {
@@ -1758,28 +2689,30 @@ const TrafficMap = () => {
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy,
           timestamp: position.timestamp,
-          heading: position.coords.heading || null
+          heading: position.coords.heading || null,
+          speed: position.coords.speed || null
         };
 
         setUserLocation(location);
         setIsTrackingLocation(true);
 
-        // Update heading if GPS provides it and gyroscope is not enabled
-        if (!gyroscopeEnabled && location.heading !== null) {
-          setUserHeading(location.heading);
+        // Update speed
+        if (location.speed !== null) {
+          setCurrentSpeed(location.speed * 3.6); // Convert m/s to km/h
         }
 
-        // Center map on user location if navigation is active
-        if (isNavigationActive) {
-          setMapCenter([location.lat, location.lng]);
-          setMapZoom(16);
+        // Center map on user location if navigation is active with 3D perspective
+        if (isNavigationActive && mapRef.current) {
+          // Smooth pan to user location
+          mapRef.current.panTo([location.lat, location.lng], {
+            animate: true,
+            duration: 0.5,
+            easeLinearity: 0.25
+          });
           
-          // Apply map rotation if gyroscope is enabled
-          if (gyroscopeEnabled && mapRef.current) {
-            const map = mapRef.current;
-            if (map && typeof map.setBearing === 'function') {
-              map.setBearing(userHeading);
-            }
+          // Set zoom for navigation view (closer zoom for better detail)
+          if (mapRef.current.getZoom() < 17) {
+            mapRef.current.setZoom(17);
           }
         }
       },
@@ -1794,8 +2727,8 @@ const TrafficMap = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 30000 // Accept location up to 30 seconds old
+        timeout: 5000,
+        maximumAge: 0 // Always get fresh location
       }
     );
 
@@ -1848,9 +2781,8 @@ const TrafficMap = () => {
         simulateNavigationProgress();
       }, 5000); // 5 seconds per step for demo
     } else {
-      // Navigation complete
-      setIsNavigationActive(false);
-      setNavigationStep(0);
+      // Navigation complete - use stopNavigation to clear search and clean up
+      stopNavigation();
     }
   };
 
@@ -2201,7 +3133,7 @@ const TrafficMap = () => {
       
       setNearbyIncidents(incidents);
     } catch (error) {
-      
+      console.error('Error loading nearby incidents:', error);
       // Don't set empty array on error, keep existing incidents
     }
   }, [mapCenter]);
@@ -2212,6 +3144,42 @@ const TrafficMap = () => {
     const interval = setInterval(loadNearbyIncidents, 60000);
     return () => clearInterval(interval);
   }, [loadNearbyIncidents]);
+
+  // 3. INCIDENT PRONE AREAS API CALL
+  // Load incident prone areas when toggle is enabled (additional to useMapData hook)
+  const loadIncidentProneAreas = useCallback(async () => {
+    if (!incidentProneEnabled || !mapCenter) {
+      return;
+    }
+    
+    try {
+      console.log('Loading incident prone areas for:', mapCenter);
+      const areas = await incidentProneService.getNearbyIncidentProneAreas(
+        mapCenter[0], 
+        mapCenter[1], 
+        15 // radius in km
+      );
+      
+      // The service already handles the response format, but ensure it's an array
+      const areasArray = Array.isArray(areas) ? areas : (areas?.nearby_areas || areas?.areas || []);
+      console.log(`Loaded ${areasArray.length} incident prone areas from API`);
+      
+      // Note: The useMapData hook also loads this, but this ensures it's called when toggle changes
+      // The data from useMapData hook will be used for display
+    } catch (error) {
+      console.error('Error loading incident prone areas:', error);
+    }
+  }, [incidentProneEnabled, mapCenter]);
+
+  // Load incident prone areas when toggle is enabled or map center changes
+  useEffect(() => {
+    if (incidentProneEnabled) {
+      loadIncidentProneAreas();
+      // Refresh every 5 minutes
+      const interval = setInterval(loadIncidentProneAreas, 300000);
+      return () => clearInterval(interval);
+    }
+  }, [incidentProneEnabled, loadIncidentProneAreas]);
 
   // Handle incident report submission - saves to emergencies table
   const handleIncidentReport = async (incidentData) => {
@@ -2299,10 +3267,10 @@ const TrafficMap = () => {
       loadNearbyIncidents();
       
       // Also reload nearby emergencies if emergency layer is enabled
-      if (emergencyEnabled) {
-        // This will trigger the emergency data refresh
-        window.dispatchEvent(new Event('refresh-emergencies'));
-      }
+      // if (emergencyEnabled) {
+      //   // This will trigger the emergency data refresh
+      //   window.dispatchEvent(new Event('refresh-emergencies'));
+      // }
       
       // Refresh user's emergency reports list
       if (user) {
@@ -2464,16 +3432,13 @@ const TrafficMap = () => {
       // Store map reference
       mapRef.current = map;
       
-      // Handle map clicks to close icon selector and search results
+      // Handle map clicks to close icon selector
       const handleMapClick = () => {
         if (showIconSelector) {
           setShowIconSelector(false);
         }
-        // Close search results when clicking on map
-        if (showSearchResults) {
-          setShowSearchResults(false);
-          setShowSuggestions(false);
-        }
+        // Don't close search results when clicking on map - let users interact with pins
+        // Only close search suggestions dropdown, not the results panel
       };
       
       map.on('click', handleMapClick);
@@ -2506,6 +3471,34 @@ const TrafficMap = () => {
     return () => clearTimeout(timer);
   }, [highlightedIncident]);
 
+  // Load traffic data ONLY when Insights panel is opened (for better API management)
+  // This must be after isMiniOpen declaration to avoid "Cannot access before initialization" error
+  useEffect(() => {
+    // Skip loading traffic data during simulation to prevent infinite loops
+    if (isSimulating) {
+      return;
+    }
+    
+    // Only load data when Insights panel is opened
+    if (!isMiniOpen) {
+      return;
+    }
+    
+    // Load data when Insights panel opens
+    loadTrafficData(false);
+    
+    // Set up 10-minute interval to refresh traffic data from TomTom API
+    // Only refresh while the Insights panel is open
+    const interval = setInterval(() => {
+      if (isMiniOpen) {
+        // Fetch fresh data directly from TomTom API
+        loadTrafficData(false);
+      }
+    }, 10 * 60 * 1000); // 10 minutes = 600,000 milliseconds
+    
+    return () => clearInterval(interval);
+  }, [isMiniOpen, mapCenter, mapZoom, isSimulating]);
+
   // Current navigation step
   const currentStep = selectedRoute && selectedRoute.steps ? selectedRoute.steps[navigationStep] : null;
   const nextStep = selectedRoute && selectedRoute.steps ? selectedRoute.steps[navigationStep + 1] : null;
@@ -2513,7 +3506,7 @@ const TrafficMap = () => {
   return (
     <ErrorBoundary>
       <div 
-        className="traffic-map-container fixed inset-0 w-full min-h-screen bg-gray-900 overflow-y-auto" 
+        className="traffic-map-container fixed inset-0 w-full min-h-screen bg-gray-900 overflow-y-auto"
         style={{ 
           zIndex: 9999, 
           touchAction: 'pan-y',
@@ -2597,12 +3590,13 @@ const TrafficMap = () => {
             navigationIcon={navigationIcon}
             userHeading={userHeading}
             nearbyIncidents={nearbyIncidents}
-            emergencyEnabled={emergencyEnabled}
+            emergencyEnabled={false}
             highlightedIncident={highlightedIncident}
             user={user}
             simulationProgress={simulationProgress}
             simulationSpeed={simulationSpeed}
             gyroscopeEnabled={gyroscopeEnabled}
+            isNavigating={isNavigationActive}
           />
 
           {/* Map Layer Components - All marker rendering is now handled by these components */}
@@ -2621,7 +3615,7 @@ const TrafficMap = () => {
             enabled={incidentProneEnabled}
             user={user}
           />
-          <EmergencyLayer emergencies={nearbyEmergencies} enabled={emergencyEnabled} />
+          {/* <EmergencyLayer emergencies={nearbyEmergencies} enabled={emergencyEnabled} /> */}
           <TrafficMonitoringLayer 
             incidents={tmIncidents}
             roadworks={tmRoadworks}
@@ -2642,31 +3636,101 @@ const TrafficMap = () => {
             />
           )}
 
-          <ScaleControl position="bottomright" />
+          {/* Search Results Layer - Show pin for selected result or place */}
+          {!isNavigationActive && (selectedSearchResult || (selectedPlace && selectedPlace.lat && selectedPlace.lng)) && (
+            <SearchResultsLayer
+              searchResults={searchResults}
+              selectedResult={selectedSearchResult || (selectedPlace ? {
+                name: selectedPlace.name,
+                display_name: selectedPlace.name,
+                address: {
+                  full: selectedPlace.address,
+                  freeformAddress: selectedPlace.address
+                },
+                lat: selectedPlace.lat,
+                lng: selectedPlace.lng,
+                type: selectedPlace.type || 'general'
+              } : null)}
+              onResultSelect={(result) => {
+                setSelectedSearchResult(result);
+                // Smoothly zoom in and center map on selected result
+                if (result.lat && result.lng && mapRef.current) {
+                  // Use flyTo for smooth animation
+                  const targetZoom = 17; // Zoom in closer for better visibility
+                  mapRef.current.flyTo([result.lat, result.lng], targetZoom, {
+                    duration: 1.0,
+                    easeLinearity: 0.25
+                  });
+                  // Update state to keep in sync
+                  setMapCenter([result.lat, result.lng]);
+                  setMapZoom(targetZoom);
+                }
+              }}
+              onResultClick={(result) => {
+                // Get the location name
+                const locationName = result.name || result.display_name || result.address?.full || result.address?.freeformAddress || 'Unknown Location';
+                
+                // Update the search bar with the location name
+                setDestinationQuery(locationName);
+                
+                // Smoothly zoom in and center map first, then show place info panel
+                if (result.lat && result.lng && mapRef.current) {
+                  const targetZoom = 17; // Zoom in closer for better visibility
+                  mapRef.current.flyTo([result.lat, result.lng], targetZoom, {
+                    duration: 1.0,
+                    easeLinearity: 0.25
+                  });
+                  setMapCenter([result.lat, result.lng]);
+                  setMapZoom(targetZoom);
+                  // Set selected result to show pin with animation
+                  setSelectedSearchResult(result);
+                }
+                // Show place info panel after a short delay to allow zoom animation
+                setTimeout(() => {
+                  setSelectedPlace({
+                    name: locationName,
+                    lat: result.lat,
+                    lng: result.lng,
+                    address: result.address?.full || result.address?.freeformAddress || '',
+                    type: result.type || 'general'
+                  });
+                  setShowPlaceInfoPanel(true);
+                }, 500);
+              }}
+            />
+          )}
+
+          <ScaleControl position="bottomleft" />
           <ZoomControl position="bottomright" />
         </MapContainer>
       </div>
 
-      {/* Insights FAB - Enhanced */}
-      <div
-        className={`absolute left-4 sm:left-6 z-50 transition-all duration-500 ease-out ${isMiniOpen ? 'opacity-0 pointer-events-none scale-0' : 'opacity-100 scale-100'}`}
-        style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
-      >
-        <button
-          onClick={() => setIsMiniOpen(true)}
-          className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:via-blue-700 hover:to-blue-800 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 px-4 py-2 text-sm sm:px-5 sm:py-3 sm:text-base font-semibold transition-all duration-300 ease-out hover:scale-110 active:scale-95 relative overflow-hidden group"
+      {/* Insights FAB - Enhanced - Hide when traffic monitoring panel is open or navigation is active */}
+      {!showTrafficMonitoringPanel && !isNavigationActive && (
+        <div
+          className={`absolute left-4 sm:left-6 z-50 transition-all duration-500 ease-out ${isMiniOpen ? 'opacity-0 pointer-events-none scale-0' : 'opacity-100 scale-100'}`}
+          style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          <span className="relative z-10 flex items-center space-x-2">
-            <BarChart3 className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
-            <span>Insights</span>
-          </span>
-          <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
-        </button>
-      </div>
+          <button
+            onClick={() => {
+              setIsMiniOpen(true);
+              // Load traffic data when Insights is opened (for better API management)
+              // Data will be loaded by the useEffect that watches isMiniOpen
+            }}
+            className="min-w-[88px] min-h-[44px] bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 hover:from-blue-700 hover:via-blue-700 hover:to-blue-800 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 px-4 py-2 text-sm sm:px-5 sm:py-3 sm:text-base font-semibold transition-all duration-300 ease-out hover:scale-110 active:scale-95 relative overflow-hidden group"
+          >
+            <span className="relative z-10 flex items-center space-x-2">
+              <BarChart3 className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
+              <span>Insights</span>
+            </span>
+            <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
+          </button>
+        </div>
+      )}
 
-      {/* Mini Dashboard Bottom Sheet */}
-      {(
-        () => {
+      {/* Mini Dashboard Bottom Sheet - Hide when traffic monitoring panel is open */}
+      {!showTrafficMonitoringPanel && (
+        (() => {
           const activeIncidents = (nearbyIncidents || []).length || 0;
           const totalReports = (userReports || []).length || 0;
           const heavyCount = (tmIncidents || []).filter(i => ['high', 'critical'].includes(i.severity)).length;
@@ -2696,10 +3760,78 @@ const TrafficMap = () => {
               }}
               stats={{ activeIncidents, totalReports, trafficCondition }}
               updates={updates}
+              trafficData={trafficData || []}
               align="left"
               isLive={true}
               lastUpdated={Date.now()}
-              onSelectUpdate={(u) => {
+              isLoading={isLoadingData}
+              onSelectUpdate={async (u) => {
+                // Handle traffic data selection
+                if (u.type === 'traffic' && mapRef.current) {
+                  if (document && document.activeElement && document.activeElement.blur) {
+                    try { document.activeElement.blur(); } catch (_) {}
+                  }
+                  
+                  let targetLat = u.latitude || u.lat;
+                  let targetLng = u.longitude || u.lng;
+                  
+                  // Use TomTom geocoding to get accurate coordinates for the road name
+                  const roadName = u.road_name || u.roadName;
+                  const barangay = u.barangay;
+                  
+                  if (roadName) {
+                    // Build search query: "Road Name, Barangay, Las Piñas, Philippines"
+                    let searchQuery = roadName;
+                    if (barangay) {
+                      searchQuery += `, ${barangay}`;
+                    }
+                    searchQuery += ', Las Piñas, Philippines';
+                    
+                    // Geocode using TomTom API for accurate location
+                    // Note: This will automatically use fallback (OSM) if TomTom API returns 403/429
+                    // The service handles errors gracefully, so we don't need try/catch here
+                    const geocodeResult = await tomtomService.geocode(searchQuery, {
+                      limit: 1,
+                      countrySet: 'PH'
+                    }).catch(() => {
+                      // If geocoding completely fails, return null to use original coordinates
+                      return null;
+                    });
+                    
+                    // Extract coordinates from geocoding result
+                    // TomTom API or fallback OSM returns: { results: [{ position: { lat, lon }, address: {...} }] }
+                    if (geocodeResult?.results && geocodeResult.results.length > 0) {
+                      const bestMatch = geocodeResult.results[0];
+                      if (bestMatch.position) {
+                        targetLat = bestMatch.position.lat;
+                        targetLng = bestMatch.position.lon;
+                        // Success - geocoded location (may be from TomTom or fallback OSM)
+                        console.log(`✅ Geocoded "${roadName}" to location: ${targetLat}, ${targetLng}`);
+                      } else if (bestMatch.lat && bestMatch.lon) {
+                        // Fallback format (some APIs return lat/lon directly)
+                        targetLat = bestMatch.lat;
+                        targetLng = bestMatch.lon;
+                        console.log(`✅ Geocoded "${roadName}" to location: ${targetLat}, ${targetLng}`);
+                      }
+                    }
+                    // If no results, will use original coordinates (targetLat/targetLng from item)
+                  }
+                  
+                  // Only proceed if we have valid coordinates
+                  if (targetLat && targetLng && !isNaN(targetLat) && !isNaN(targetLng)) {
+                    const targetZoom = Math.max(mapRef.current.getZoom?.() || mapZoom, 15);
+                    mapRef.current.flyTo([targetLat, targetLng], targetZoom, { duration: 1.2 });
+                    setHighlightedIncident({
+                      lat: targetLat,
+                      lng: targetLng,
+                      title: roadName || 'Traffic Monitoring Point',
+                      severity: u.traffic_status || 'moderate',
+                    });
+                    setIsMiniOpen(false);
+                    return;
+                  }
+                }
+                // Handle incident selection (fallback)
                 const match = (nearbyIncidents || []).find(i => (i.id || i.type) === (u.id || u.type));
                 if (match && mapRef.current) {
                   if (document && document.activeElement && document.activeElement.blur) {
@@ -2715,24 +3847,24 @@ const TrafficMap = () => {
                       title: match.description || match.type?.replace('_', ' '),
                       severity: match.severity,
                     });
-                    // Minimize the sheet for better focus on map
                     setIsMiniOpen(false);
                   }
                 }
               }}
             />
           );
-        }
-      )()}
+        })()
+      )}
 
-      {/* Enhanced Search Panel */}
-      <div onClick={(e) => {
-        if (showSearchResults && !searchPanelRef.current?.contains(e.target)) {
-          setShowSearchResults(false);
-          setShowSuggestions(false);
-        }
-      }}>
-        <EnhancedSearchPanel
+      {/* Enhanced Search Panel - Hide when directions panel is open to avoid duplicate search bars */}
+      {!showDirectionsPanel && (
+        <div onClick={(e) => {
+          if (showSearchResults && !searchPanelRef.current?.contains(e.target)) {
+            setShowSearchResults(false);
+            setShowSuggestions(false);
+          }
+        }}>
+          <EnhancedSearchPanel
           selectedOrigin={selectedOrigin}
           selectedDestination={selectedDestination}
           originQuery={originQuery}
@@ -2743,7 +3875,15 @@ const TrafficMap = () => {
           onDestinationSelect={handleDestinationSelectDirect}
           onGetCurrentLocation={getCurrentLocation}
           onShowSmartRoutePanel={() => setShowSmartRoutePanel(true)}
-          onToggleSidePanel={() => setShowSidePanel(!showSidePanel)}
+          onToggleSidePanel={() => {
+            const newSidePanelState = !showSidePanel;
+            setShowSidePanel(newSidePanelState);
+            // Close Traffic Monitoring Panel when opening sidebar
+            if (newSidePanelState && showTrafficMonitoringPanel) {
+              setShowTrafficMonitoringPanel(false);
+              setTrafficMonitorNewEnabled(false);
+            }
+          }}
           isLoadingRoute={isLoadingRoute}
           isSimulating={isSimulating}
           showSidePanel={showSidePanel}
@@ -2754,32 +3894,41 @@ const TrafficMap = () => {
           lasPinasSuggestions={lasPinasSuggestions}
           onSearchPanelRef={(ref) => { searchPanelRef.current = ref?.current; }}
           onShowPlaceInfo={handleShowPlaceInfo}
+          onSearchResultsChange={(results) => {
+            // Only update search results state - don't move the map while typing
+            // Map will only move when user clicks on a place (handled by handleShowPlaceInfo)
+            setSearchResults(results);
+            // Clear selected result when new search results come in (removes old pin)
+            // This prevents showing a pin from previous search while typing
+            setSelectedSearchResult(null);
+          }}
         />
-      </div>
+        </div>
+      )}
 
       {/* Map Controls - GPS Status, Navigation Toggle, and FAB buttons */}
-      <MapControls
-        isNavigationActive={isNavigationActive}
-        isSimulating={isSimulating}
-        isTrackingLocation={isTrackingLocation}
-        simulationSpeed={simulationSpeed}
-        selectedRoute={selectedRoute}
-        onStartNavigation={startNavigation}
-        onStopNavigation={stopNavigation}
-        onShowIncidentModal={setShowIncidentModal}
-        onSetShowAuthPrompt={setShowAuthPrompt}
-        onSetWeatherEnabled={setWeatherEnabled}
-        weatherEnabled={weatherEnabled}
-        onSetShowSecondaryActions={setShowSecondaryActions}
-        showSecondaryActions={showSecondaryActions}
-        onSetShowPredictionsPanel={setShowPredictionsPanel}
-        onSetIsMiniOpen={setIsMiniOpen}
-        onToggleMultiStopMode={toggleMultiStopMode}
-        multiStopMode={multiStopMode}
-        isGuest={isGuest}
-        onSetVoiceEnabled={setVoiceEnabled}
-        voiceEnabled={voiceEnabled}
-      />
+      {!showTrafficMonitoringPanel && (
+        <MapControls
+          isNavigationActive={isNavigationActive}
+          isSimulating={isSimulating}
+          isTrackingLocation={isTrackingLocation}
+          simulationSpeed={simulationSpeed}
+          selectedRoute={selectedRoute}
+          onStartNavigation={startNavigation}
+          onStopNavigation={stopNavigation}
+          onShowIncidentModal={setShowIncidentModal}
+          onSetShowAuthPrompt={setShowAuthPrompt}
+          onSetWeatherEnabled={setWeatherEnabled}
+          weatherEnabled={weatherEnabled}
+          onSetShowPredictionsPanel={setShowPredictionsPanel}
+          onSetIsMiniOpen={setIsMiniOpen}
+          isGuest={isGuest}
+          onSetVoiceEnabled={setVoiceEnabled}
+          voiceEnabled={voiceEnabled}
+          showDirectionsPanel={showDirectionsPanel}
+          isMiniOpen={isMiniOpen}
+        />
+      )}
 
       {/* Simulation Control Panel */}
       <SimulationPanel
@@ -2798,22 +3947,25 @@ const TrafficMap = () => {
         onToggleMinimize={() => setSimulationMinimized(!simulationMinimized)}
       />
 
-      {/* Enhanced Navigation Panel */}
-      <EnhancedNavigationPanel
-        isNavigationActive={isNavigationActive}
-        selectedRoute={selectedRoute}
-        navigationStep={navigationStep}
-        navigationPanelMinimized={navigationPanelMinimized}
-        onToggleMinimize={() => setNavigationPanelMinimized(!navigationPanelMinimized)}
-        onClearTrip={clearTrip}
-        gyroscopeEnabled={gyroscopeEnabled}
-        onToggleGyroscope={() => setGyroscopeEnabled(!gyroscopeEnabled)}
-        currentStep={currentStep}
-        nextStep={nextStep}
-      />
+      {/* New Navigation HUD - Google Maps/Waze Style */}
+      {isNavigationActive && selectedRoute && (
+        <NavigationHUD
+          currentStep={currentStep}
+          nextStep={nextStep}
+          distanceToNextTurn={distanceToNextTurn}
+          estimatedTimeRemaining={selectedRoute.estimated_duration_minutes}
+          currentSpeed={currentSpeed}
+          speedLimit={currentStep?.speed_limit}
+          voiceEnabled={voiceEnabled}
+          onToggleVoice={() => setVoiceEnabled(!voiceEnabled)}
+          onExit={stopNavigation}
+          isMinimized={navigationHUDMinimized}
+          onToggleMinimize={() => setNavigationHUDMinimized(!navigationHUDMinimized)}
+        />
+      )}
 
-      {/* Route Alternatives Panel */}
-      <RouteAlternativesPanel
+      {/* Route Alternatives Panel - DISABLED: Using new Google Maps style instead */}
+      {/* <RouteAlternativesPanel
         routeAlternatives={routeAlternatives}
         selectedRoute={selectedRoute}
         onSelectRoute={selectRoute}
@@ -2821,7 +3973,7 @@ const TrafficMap = () => {
         showRouteAlternatives={showRouteAlternatives}
         isNavigationActive={isNavigationActive}
         showSmartRoutePanel={showSmartRoutePanel}
-      />
+      /> */}
 
       {/* Place Info Panel */}
       <PlaceInfoPanel
@@ -2831,6 +3983,8 @@ const TrafficMap = () => {
         onClose={() => {
           setShowPlaceInfoPanel(false);
           setSelectedPlace(null);
+          // Clear the pin when panel is closed
+          setSelectedSearchResult(null);
           // Clear routes when panel is closed by clicking outside
           // Only clear if directions panel is also closed (routes were from place info)
           if (!showDirectionsPanel) {
@@ -2863,74 +4017,244 @@ const TrafficMap = () => {
         }
       />
 
-      {/* Directions Panel */}
-      <DirectionsPanel
-        isOpen={showDirectionsPanel}
-        onClose={() => {
-          setShowDirectionsPanel(false);
-        }}
-        origin={selectedOrigin}
-        destination={selectedDestination}
-        routes={routeAlternatives.length > 0 ? routeAlternatives : (currentRoute?.routes || [])}
-        selectedRoute={selectedRoute}
-        onSelectRoute={selectRoute}
-        onStartNavigation={startNavigation}
-        onStartSimulation={startSimulation}
-        routeTrafficData={routeTrafficData}
-        isMinimized={directionsPanelMinimized}
-        onToggleMinimize={() => setDirectionsPanelMinimized(!directionsPanelMinimized)}
-        onOriginChange={setOriginQuery}
-        onDestinationChange={setDestinationQuery}
-        onOriginSelect={handleOriginSelectDirect}
-        onDestinationSelect={handleDestinationSelectDirect}
-        onSwapLocations={swapLocations}
-        onGetCurrentLocation={getCurrentLocation}
-      />
+      {/* Google Maps Style Directions Panel */}
+      {showDirectionsPanel && (
+        <GoogleMapsStyleNavigation
+          origin={selectedOrigin?.name || 'Your location'}
+          destination={selectedDestination?.name || 'Destination'}
+          routes={(() => {
+            const allRoutes = routeAlternatives.length > 0 ? routeAlternatives : (currentRoute?.routes || []);
+            
+            // If no routes, return default placeholder
+            if (allRoutes.length === 0) {
+              return [{
+                duration: 0,
+                distance: "Calculating...",
+                arrivalTime: "--:--",
+                label: "Calculating best route...",
+                isBest: true,
+                hasRestrictions: false
+              }];
+            }
+            
+            // Transform routes to Google Maps format
+            return allRoutes.map((route, index) => {
+              const duration = Math.round(route.estimated_duration_minutes || route.duration || 0);
+              const distance = route.distance_km 
+                ? `${route.distance_km.toFixed(1)} km` 
+                : route.distance || '0 km';
+              
+              // Calculate arrival time
+              const now = new Date();
+              const arrivalTime = new Date(now.getTime() + duration * 60000);
+              const formattedTime = arrivalTime.toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+              });
+
+              return {
+                duration,
+                distance,
+                arrivalTime: formattedTime,
+                label: route.route_name || route.summary?.description || `Route ${index + 1}`,
+                isBest: route.is_recommended || index === 0,
+                hasRestrictions: route.has_tolls || route.has_restrictions || false
+              };
+            });
+          })()}
+          minimized={navigationPanelMinimized}
+          onMinimizedChange={setNavigationPanelMinimized}
+          onOriginChange={(value) => {
+            setOriginQuery(value);
+            // If origin is cleared, clear the selected origin
+            if (!value || value.trim() === '') {
+              setSelectedOrigin(null);
+            }
+          }}
+          onDestinationChange={(value) => {
+            setDestinationQuery(value);
+            // If destination is cleared, clear the selected destination
+            if (!value || value.trim() === '') {
+              setSelectedDestination(null);
+            }
+          }}
+          onOriginSelect={async (location) => {
+            // Handle origin location selection from autocomplete
+            if (location) {
+              setSelectedOrigin(location);
+              const locationName = location.name || location.display_name || location.address?.full || location.address?.freeformAddress || '';
+              setOriginQuery(locationName);
+              
+              // If destination is already set, trigger route calculation
+              if (selectedDestination && location.lat && location.lng && 
+                  selectedDestination.lat && selectedDestination.lng) {
+                setTimeout(async () => {
+                  await handleGetRoute({}, location, selectedDestination);
+                }, 100);
+              }
+            }
+          }}
+          onDestinationSelect={async (location) => {
+            // Handle destination location selection from autocomplete
+            if (location) {
+              setSelectedDestination(location);
+              const locationName = location.name || location.display_name || location.address?.full || location.address?.freeformAddress || '';
+              setDestinationQuery(locationName);
+              
+              // If origin is already set, trigger route calculation
+              if (selectedOrigin && location.lat && location.lng && 
+                  selectedOrigin.lat && selectedOrigin.lng) {
+                setTimeout(async () => {
+                  await handleGetRoute({}, selectedOrigin, location);
+                }, 100);
+              }
+            }
+          }}
+          onStart={() => {
+            if (selectedRoute) {
+              startNavigation();
+              setShowDirectionsPanel(false);
+            }
+          }}
+          onSave={() => {
+            if (selectedRoute) {
+              saveAsFavorite();
+            }
+          }}
+          onClose={() => {
+            // Clear routes and search inputs when closing the panel
+            setSelectedRoute(null);
+            setCurrentRoute(null);
+            setRouteAlternatives([]);
+            setShowRouteAlternatives(false);
+            setSelectedOrigin(null);
+            setSelectedDestination(null);
+            setOriginQuery('');
+            setDestinationQuery('');
+            // Clear place info and search result markers
+            setSelectedPlace(null);
+            setSelectedSearchResult(null);
+            setShowPlaceInfoPanel(false);
+            setSearchResults([]);
+            setShowDirectionsPanel(false);
+            setNavigationPanelMinimized(true);
+          }}
+          onRouteSelectIndex={(index) => {
+            const allRoutes = routeAlternatives.length > 0 ? routeAlternatives : (currentRoute?.routes || []);
+            const picked = allRoutes[index];
+            if (picked) {
+              selectRoute(picked);
+            }
+          }}
+          onSimulate={() => {
+            startSimulation();
+          }}
+        />
+      )}
 
       {/* Route Found Panel removed - functionality moved to Smart Route Panel */}
 
-      {/* Semi-transparent overlay for sidebar */}
-      {showSidePanel && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300 animate-fade-in backdrop-blur-sm"
-          style={{ zIndex: 45}}
-          onClick={() => setShowSidePanel(false)}
+      {/* Search Results Sidebar - Desktop View */}
+      {searchResults.length > 0 && !isNavigationActive && (
+        <SearchResultsSidebar
+          searchResults={searchResults}
+          selectedResult={selectedSearchResult}
+          onResultSelect={(result) => {
+            setSelectedSearchResult(result);
+            // Smoothly zoom in and center map on selected result
+            if (result.lat && result.lng && mapRef.current) {
+              // Use flyTo for smooth animation
+              const targetZoom = 17; // Zoom in closer for better visibility
+              mapRef.current.flyTo([result.lat, result.lng], targetZoom, {
+                duration: 1.0,
+                easeLinearity: 0.25
+              });
+              // Update state to keep in sync
+              setMapCenter([result.lat, result.lng]);
+              setMapZoom(targetZoom);
+            }
+          }}
+          onResultClick={(result) => {
+            // Get the location name
+            const locationName = result.name || result.display_name || result.address?.full || result.address?.freeformAddress || 'Unknown Location';
+            
+            // Update the search bar with the location name
+            setDestinationQuery(locationName);
+            
+            // Smoothly zoom in and center map first, then show place info panel
+            if (result.lat && result.lng && mapRef.current) {
+              const targetZoom = 17; // Zoom in closer for better visibility
+              mapRef.current.flyTo([result.lat, result.lng], targetZoom, {
+                duration: 1.0,
+                easeLinearity: 0.25
+              });
+              setMapCenter([result.lat, result.lng]);
+              setMapZoom(targetZoom);
+              // Set selected result to show pin with animation
+              setSelectedSearchResult(result);
+            }
+            // Show place info panel after a short delay to allow zoom animation
+            setTimeout(() => {
+              setSelectedPlace({
+                name: locationName,
+                lat: result.lat,
+                lng: result.lng,
+                address: result.address?.full || result.address?.freeformAddress || '',
+                type: result.type || 'general'
+              });
+              setShowPlaceInfoPanel(true);
+            }, 500);
+          }}
+          onClose={() => {
+            setSearchResults([]);
+            setSelectedSearchResult(null);
+          }}
+          isOpen={searchResults.length > 0}
         />
       )}
 
       {/* Left Side Panel - extracted component */}
-      {showSidePanel && (
-        <TrafficMapSidebar
-          onClose={() => setShowSidePanel(false)}
-          onBackToDashboard={() => navigate('/dashboard')}
-          travelHistory={travelHistory}
-          onOpenHistory={() => { setShowHistoryPanel(!showHistoryPanel); setShowSidePanel(false); }}
-          onOpenEmergencyReports={() => { setShowEmergencyReportsPanel(!showEmergencyReportsPanel); setShowSidePanel(false); }}
-          myEmergencyReports={myEmergencyReports}
-          heatmapEnabled={heatmapEnabled}
-          setHeatmapEnabled={setHeatmapEnabled}
-          trafficLayerEnabled={trafficLayerEnabled}
-          setTrafficLayerEnabled={setTrafficLayerEnabled}
-          mapStyle={mapStyle}
-          setMapStyle={setMapStyle}
-          parkingEnabled={parkingEnabled}
-          setParkingEnabled={setParkingEnabled}
-          weatherEnabled={weatherEnabled}
-          setWeatherEnabled={setWeatherEnabled}
-          emergencyEnabled={emergencyEnabled}
-          setEmergencyEnabled={setEmergencyEnabled}
-          trafficMonitorNewEnabled={trafficMonitorNewEnabled}
-          setTrafficMonitorNewEnabled={setTrafficMonitorNewEnabled}
-          reportsEnabled={reportsEnabled}
-          setReportsEnabled={setReportsEnabled}
-          incidentProneEnabled={incidentProneEnabled}
-          setIncidentProneEnabled={setIncidentProneEnabled}
-          floodZonesEnabled={floodZonesEnabled}
-          setFloodZonesEnabled={setFloodZonesEnabled}
-          isGuest={isGuest}
-          // 3D map overlay removed
-        />
-      )}
+      <TrafficMapSidebar
+        sidebarOpen={showSidePanel}
+        onClose={() => setShowSidePanel(false)}
+        onBackToDashboard={() => navigate('/dashboard')}
+        travelHistory={travelHistory}
+        onOpenHistory={() => { setShowHistoryPanel(!showHistoryPanel); setShowSidePanel(false); }}
+        onOpenEmergencyReports={() => { 
+          if (user) {
+            setShowEmergencyReportsPanel(!showEmergencyReportsPanel); 
+            setShowSidePanel(false);
+          } else {
+            toast.error('Please login to view emergency reports');
+          }
+        }}
+        myEmergencyReports={myEmergencyReports}
+        heatmapEnabled={heatmapEnabled}
+        setHeatmapEnabled={setHeatmapEnabled}
+        trafficLayerEnabled={trafficLayerEnabled}
+        setTrafficLayerEnabled={setTrafficLayerEnabled}
+        mapStyle={mapStyle}
+        setMapStyle={setMapStyle}
+        parkingEnabled={parkingEnabled}
+        setParkingEnabled={setParkingEnabled}
+        weatherEnabled={weatherEnabled}
+        setWeatherEnabled={setWeatherEnabled}
+        // emergencyEnabled={emergencyEnabled}
+        // setEmergencyEnabled={setEmergencyEnabled}
+        trafficMonitorNewEnabled={trafficMonitorNewEnabled}
+        setTrafficMonitorNewEnabled={setTrafficMonitorNewEnabled}
+        reportsEnabled={reportsEnabled}
+        setReportsEnabled={setReportsEnabled}
+        incidentProneEnabled={incidentProneEnabled}
+        setIncidentProneEnabled={setIncidentProneEnabled}
+        floodZonesEnabled={floodZonesEnabled}
+        setFloodZonesEnabled={setFloodZonesEnabled}
+        showPredictionsPanel={showPredictionsPanel}
+        setShowPredictionsPanel={setShowPredictionsPanel}
+        isGuest={isGuest}
+        // 3D map overlay removed
+      />
 
       {/* History Panel */}
       <HistoryPanel
@@ -2939,6 +4263,17 @@ const TrafficMap = () => {
         travelHistory={travelHistory}
         frequentLocations={frequentLocations}
         onLocationSelect={handleLocationSelect}
+      />
+
+      {/* Traffic Monitoring Panel */}
+      <TrafficMonitoringPanel
+        isOpen={showTrafficMonitoringPanel}
+        onClose={() => {
+          setShowTrafficMonitoringPanel(false);
+          setTrafficMonitorNewEnabled(false);
+        }}
+        mapCenter={mapCenter}
+        mapBounds={mapRef.current?.getBounds() || null}
       />
 
       {/* Emergency Reports Panel */}
@@ -2993,7 +4328,7 @@ const TrafficMap = () => {
       {/* ============================================ */}
 
       {/* Weather Alert Banner */}
-      {showWeatherAlert && weatherWarnings.length > 0 && (
+      {showWeatherAlert && weatherWarnings.length > 0 && !showDirectionsPanel && (
         <div className="absolute top-20 left-4 right-4 z-40 max-w-2xl mx-auto">
           <WeatherAlertBanner
             weather={weatherData}
@@ -3262,13 +4597,12 @@ const TrafficMap = () => {
       />
 
       {/* Weather & Flood Advisory Panel - Bottom Overlay */}
-      {!showSmartRoutePanel && !isNavigationActive && !isMiniOpen && !showIncidentModal && !showPredictionsPanel && !showSharePanel && (
         <WeatherFloodAdvisory 
           mapCenter={mapCenter}
           locationName="Las Piñas City"
           sidebarOpen={showSidePanel}
+        shouldHide={showSmartRoutePanel || isNavigationActive || isMiniOpen || showIncidentModal || showPredictionsPanel || showSharePanel || showTrafficMonitoringPanel || showDirectionsPanel}
         />
-      )}
 
       {/* Traffic Predictions Panel */}
       {showPredictionsPanel && (

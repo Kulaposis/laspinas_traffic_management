@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Menu, X, Target, History, MapPin, Zap, RefreshCw, Search, Building } from 'lucide-react';
+import { Menu, X, History, MapPin, Zap, RefreshCw, Search, Building } from 'lucide-react';
 import enhancedGeocodingService from '../../services/enhancedGeocodingService';
 import geoapifyService from '../../services/geoapifyService';
 
@@ -28,7 +28,8 @@ const EnhancedSearchPanel = ({
   recentSearches = [],
   lasPinasSuggestions = [],
   onSearchPanelRef,
-  onShowPlaceInfo = null // New callback to show place info panel
+  onShowPlaceInfo = null, // New callback to show place info panel
+  onSearchResultsChange = null // Callback to pass search results to parent for map display
 }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -73,6 +74,10 @@ const EnhancedSearchPanel = ({
     if (!query || query.length < 1) {
       setSearchResults([]);
       setShowSearchResults(showSuggestions);
+      // Clear search results on map
+      if (onSearchResultsChange) {
+        onSearchResultsChange([]);
+      }
       return;
     }
 
@@ -219,14 +224,22 @@ const EnhancedSearchPanel = ({
         });
 
         setSearchResults(combinedResults);
+        
+        // Pass search results to parent for map display
+        if (onSearchResultsChange) {
+          onSearchResultsChange(combinedResults);
+        }
       } catch (error) {
-        console.error('Search error:', error);
         setSearchResults([]);
+        // Clear search results on map on error
+        if (onSearchResultsChange) {
+          onSearchResultsChange([]);
+        }
       } finally {
         setIsSearching(false);
       }
     }, debounceTime);
-  }, [recentSearches, searchMode, showSuggestions]);
+  }, [recentSearches, searchMode, showSuggestions, onSearchResultsChange]);
 
   const handleLocationSelect = (location, mode = searchMode) => {
     // Always show place info panel if callback is provided (Google Maps style)
@@ -353,30 +366,6 @@ const EnhancedSearchPanel = ({
                 maxHeight: 'min(60vh, calc(100dvh - 200px))'
               }}
             >
-              {/* Quick Actions */}
-              <div className="px-3 py-2 border-b border-gray-200">
-                <button
-                  onMouseDown={(e) => {
-                    e.preventDefault(); // Prevent input blur
-                  }}
-                  onClick={() => {
-                    const currentMode = searchMode;
-                    onGetCurrentLocation(currentMode);
-                  }}
-                  className="w-full min-h-[56px] flex items-center space-x-3 px-2 py-2 hover:bg-gray-50 rounded-lg transition-all duration-150 text-left group"
-                >
-                  {/* Icon with circular background only for "Use current location" */}
-                  <div className="w-9 h-9 bg-blue-500 rounded-full flex items-center justify-center group-hover:bg-blue-600 transition-colors flex-shrink-0">
-                    <Target className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-900">Use current location</p>
-                    <p className="text-xs text-gray-600">
-                      Set as {searchMode === 'origin' ? 'starting point' : 'destination'}
-                    </p>
-                  </div>
-                </button>
-              </div>
 
               {/* Las Piñas Suggestions */}
               {showSuggestions && !currentQuery && (

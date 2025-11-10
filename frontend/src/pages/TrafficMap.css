@@ -9,6 +9,192 @@
   z-index: 1000;
 }
 
+/* Driver.js Tour Styles - Ensure buttons are clickable and mobile-friendly */
+.driver-popover {
+  z-index: 10000 !important;
+  max-width: 90vw !important;
+  min-width: 280px !important;
+  font-size: 14px !important;
+}
+
+.driver-overlay {
+  z-index: 9999 !important;
+}
+
+.driver-popover-footer {
+  z-index: 10001 !important;
+  display: flex !important;
+  gap: 8px !important;
+  padding: 12px 16px !important;
+  flex-wrap: wrap !important;
+}
+
+.driver-popover-footer button {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 10002 !important;
+  position: relative !important;
+  min-height: 44px !important;
+  min-width: 80px !important;
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: rgba(59, 130, 246, 0.3) !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+.driver-popover-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+.driver-popover-footer button:not(:disabled):hover,
+.driver-popover-footer button:not(:disabled):active {
+  opacity: 1;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  transform: scale(1.05);
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+.driver-popover-title {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  margin-bottom: 8px !important;
+}
+
+.driver-popover-description {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: #4b5563 !important;
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  .driver-popover {
+    max-width: 95vw !important;
+    margin: 12px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important;
+  }
+  
+  .driver-popover-title {
+    font-size: 16px !important;
+  }
+  
+  .driver-popover-description {
+    font-size: 13px !important;
+  }
+  
+  .driver-popover-footer {
+    padding: 10px 12px !important;
+    gap: 6px !important;
+  }
+  
+  .driver-popover-footer button {
+    flex: 1 1 auto !important;
+    min-width: 70px !important;
+    padding: 12px 14px !important;
+    font-size: 13px !important;
+  }
+  
+  /* Ensure popover doesn't get cut off on mobile - let Driver.js handle positioning */
+  .driver-popover {
+    /* Ensure popover stays within viewport */
+    max-height: calc(100vh - 40px) !important;
+    overflow-y: auto !important;
+  }
+  
+  /* Better spacing for mobile popovers */
+  .driver-popover-wrapper {
+    padding: 8px !important;
+  }
+}
+
+/* Touch-friendly on mobile devices */
+@media (hover: none) and (pointer: coarse) {
+  .driver-popover-footer button {
+    min-height: 48px !important;
+    min-width: 100px !important;
+  }
+}
+
+/* Navigation Marker Styles - Google Maps/Waze Style */
+.navigation-marker {
+  background: transparent !important;
+  border: none !important;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.navigation-marker svg {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+/* Pulse animation for navigation marker */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.3;
+  }
+}
+
+.navigation-marker .pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Search Result Marker Styles */
+@keyframes search-result-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.search-result-pulse-ring {
+  animation: search-result-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Pin drop/bounce animation for search results */
+@keyframes pinDrop {
+  0% {
+    transform: translateY(-50px) scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: translateY(5px) scale(1.1);
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(-3px) scale(0.95);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.pin-container {
+  animation: pinDrop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pin-marker:hover {
+  transform: scale(1.1);
+}
+
 /* Modern Traffic Map Styles - Google Maps/Waze Inspired */
 
 /* Modern Animations */
@@ -118,13 +304,21 @@
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* Modern Zoom Controls */
+/* Hide text elements in any SVG overlays */
+.traffic-map-container .leaflet-container svg text,
+.traffic-map-container .leaflet-container svg tspan {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Modern Zoom Controls - Positioned above buttons */
 .traffic-map-container .leaflet-control-zoom {
   border: none !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
   border-radius: 16px !important;
   overflow: hidden;
-  margin-bottom: 120px !important;
+  margin-bottom: 200px !important; /* Increased margin to account for larger buttons (64px + 64px + spacing) */
+  z-index: 999 !important;
 }
 
 .traffic-map-container .leaflet-control-zoom a {
@@ -160,13 +354,32 @@
   margin: 8px !important;
 }
 
-/* Modern Scale Control */
+/* Modern Scale Control - Ensure visibility in bottom left */
 .traffic-map-container .leaflet-control-scale {
   background: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px);
   border-radius: 8px !important;
-  padding: 4px 8px !important;
+  padding: 6px 10px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  margin: 8px 12px 12px 12px !important; /* Proper spacing from edges */
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  z-index: 400 !important;
+  position: relative !important;
+}
+
+/* Ensure scale control container doesn't overlap with Insights button */
+.traffic-map-container .leaflet-bottom.leaflet-left {
+  margin-bottom: 80px !important; /* Add bottom margin to avoid overlap with Insights button */
+  z-index: 400 !important;
+}
+
+/* Ensure scale control is always visible and not hidden */
+.traffic-map-container .leaflet-control-scale-line {
+  border: 2px solid rgba(0, 0, 0, 0.1) !important;
+  border-top: none !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
 }
 
 /* Hide scrollbar but keep functionality */
@@ -287,7 +500,7 @@
   /* Optimize zoom controls for mobile */
   .traffic-map-container .leaflet-control-zoom {
     margin-right: 12px !important;
-    margin-bottom: 140px !important;
+    margin-bottom: 220px !important; /* Increased for larger buttons on mobile */
   }
 
   /* Ensure map takes 70-80% of screen */
@@ -597,4 +810,12 @@
 
 .shadow-3xl {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* High z-index for History and Emergency Reports Panels */
+[data-history-panel],
+.emergency-reports-panel {
+  z-index: 10005 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }

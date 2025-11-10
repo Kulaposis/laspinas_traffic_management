@@ -236,6 +236,71 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Hybrid login - tries Firebase first, then falls back to backend/database
+   * This allows both Firebase users (Google Sign-In, email/password) and 
+   * database users (admin accounts) to login with the same interface
+   */
+  const hybridLogin = async (email, password) => {
+    try {
+      // Use the authService hybridLogin method which handles the fallback logic
+      const result = await authService.hybridLogin(email, password, firebaseLogin);
+      
+      if (result && result.success) {
+        // Map user data based on auth method
+        const mappedUser = {
+          ...result.user,
+          emailVerified: result.user.emailVerified || result.user.email_verified || (result.authMethod === 'backend'),
+          email_verified: result.user.email_verified || result.user.emailVerified || (result.authMethod === 'backend'),
+          role: result.user.role?.toLowerCase() || result.user.role
+        };
+        
+        setUser(mappedUser);
+        setAuthMethod(result.authMethod);
+        localStorage.setItem('user', JSON.stringify(mappedUser));
+        
+        // Log successful login
+        try {
+          await logsService.logActivity(
+            logsService.ActivityTypes.LOGIN,
+            `User ${email} logged in successfully via ${result.authMethod}`,
+            { 
+              login_time: new Date().toISOString(),
+              auth_method: result.authMethod 
+            }
+          );
+        } catch (logError) {
+          console.error('Failed to log login activity:', logError);
+        }
+
+        return {
+          success: true,
+          user: mappedUser,
+          authMethod: result.authMethod,
+          message: result.message
+        };
+      }
+      
+      return { success: false, error: 'Authentication failed' };
+    } catch (error) {
+      // Log failed login attempt
+      try {
+        await logsService.logActivity(
+          logsService.ActivityTypes.FAILED_LOGIN,
+          `Failed login attempt for user ${email}`,
+          {
+            attempted_email: email,
+            error_message: error.message || 'Login failed'
+          }
+        );
+      } catch (logError) {
+        console.error('Failed to log failed login activity:', logError);
+      }
+
+      throw error;
+    }
+  };
+
   const register = async (userData) => {
     try {
       const result = await authService.register(userData);
@@ -332,6 +397,7 @@ export const AuthProvider = ({ children }) => {
     user,
     login,
     firebaseLogin,
+    hybridLogin, // NEW: Hybrid authentication method
     register,
     firebaseRegister,
     logout,
