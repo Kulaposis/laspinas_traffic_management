@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import emergencyService from '../services/emergencyService';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,17 +16,36 @@ const EmergencyModeration = () => {
     priority: '',
     verification_status: ''
   });
+  const [sortOrder, setSortOrder] = useState('newest'); // newest | oldest
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const searchDebounceRef = useRef(null);
 
   useEffect(() => {
     if (user?.role === 'admin' || user?.role === 'lgu_staff') {
       fetchModerationQueue();
     }
-  }, [user, filters]);
+  }, [user, filters, sortOrder, dateFrom, dateTo]);
+
+  // Auto refresh every 60s when enabled
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(fetchModerationQueue, 60000);
+    return () => clearInterval(id);
+  }, [autoRefresh, filters, sortOrder, dateFrom, dateTo]);
 
   const fetchModerationQueue = async () => {
     try {
       setLoading(true);
-      const response = await emergencyService.getModerationQueue(filters);
+      const response = await emergencyService.getModerationQueue({
+        ...filters,
+        sort: sortOrder,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        q: searchQuery || undefined
+      });
       
       // Ensure photo_urls are properly handled
       if (response.pending_reports) {
@@ -48,7 +67,42 @@ const EmergencyModeration = () => {
         });
       }
       
-      setModerationQueue(response);
+      // Client-side sort fallback in case backend ignores sort param
+      if (response?.pending_reports) {
+        response.pending_reports.sort((a, b) => {
+          const at = new Date(a.created_at).getTime();
+          const bt = new Date(b.created_at).getTime();
+          return sortOrder === 'newest' ? bt - at : at - bt;
+        });
+      }
+
+      // Client-side date filter fallback
+      const fromTs = dateFrom ? new Date(dateFrom).getTime() : null;
+      const toTs = dateTo ? new Date(dateTo).getTime() + 24 * 60 * 60 * 1000 : null;
+      if ((fromTs || toTs) && response?.pending_reports) {
+        response.pending_reports = response.pending_reports.filter(r => {
+          const t = new Date(r.created_at).getTime();
+          if (fromTs && t < fromTs) return false;
+          if (toTs && t >= toTs) return false;
+          return true;
+        });
+      }
+
+      // Client-side search fallback
+      if (searchQuery && response?.pending_reports) {
+        const q = searchQuery.toLowerCase();
+        response.pending_reports = response.pending_reports.filter(r => {
+          return (
+            (r.title || '').toLowerCase().includes(q) ||
+            (r.description || '').toLowerCase().includes(q) ||
+            (r.emergency_number || '').toLowerCase().includes(q) ||
+            (r.emergency_type || '').toLowerCase().includes(q) ||
+            (r.reporter_name || '').toLowerCase().includes(q)
+          );
+        });
+      }
+
+      setModerationQueue(response || {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -119,13 +173,46 @@ const EmergencyModeration = () => {
     );
   }
 
+  const pendingCount = moderationQueue?.total_pending || moderationQueue?.pending_reports?.length || 0;
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      fetchModerationQueue();
+    }, 400);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-4 sm:py-6">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
         {/* Header */}
         <div className="mb-4 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Emergency Report Moderation</h1>
-          <p className="text-sm sm:text-base text-gray-600">Review and verify emergency reports submitted by users</p>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Emergency Report Moderation</h1>
+              <p className="text-sm sm:text-base text-gray-600">Review and verify emergency reports submitted by users</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchModerationQueue}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                title="Refresh"
+              >
+                Refresh
+              </button>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700 bg-white px-3 py-2 rounded-lg border">
+                <input
+                  type="checkbox"
+                  className="rounded"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                />
+                Auto-refresh (60s)
+              </label>
+            </div>
+          </div>
         </div>
 
         {/* Statistics Cards */}
@@ -183,41 +270,92 @@ const EmergencyModeration = () => {
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-8 border border-gray-200">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Priority</label>
-              <select
-                value={filters.priority}
-                onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">All Priorities</option>
-                <option value="urgent">Urgent</option>
-                <option value="high">High</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
-              </select>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 flex-1">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Priority</label>
+                <select
+                  value={filters.priority}
+                  onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">All Priorities</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="high">High</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Status</label>
+                <select
+                  value={filters.verification_status}
+                  onChange={(e) => setFilters({ ...filters, verification_status: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="flagged">Flagged</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Status</label>
-              <select
-                value={filters.verification_status}
-                onChange={(e) => setFilters({ ...filters, verification_status: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="flagged">Flagged</option>
-              </select>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Sort</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="w-full sm:w-44 border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                </select>
+              </div>
+              <div className="sm:w-72">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Search</label>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  placeholder="Search title, number, reporter…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
             </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Showing <span className="font-semibold text-gray-700">{pendingCount}</span> pending report{pendingCount === 1 ? '' : 's'}
           </div>
         </div>
 
         {/* Reports List */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Reports Pending Moderation</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Reports Pending Moderation</h3>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
+                <span>Sorted:</span>
+                <span className="font-medium">{sortOrder === 'newest' ? 'Newest first' : 'Oldest first'}</span>
+              </div>
+            </div>
           </div>
 
           {loading ? (
@@ -250,11 +388,27 @@ const EmergencyModeration = () => {
                           <span className={`text-xs sm:text-sm font-medium whitespace-nowrap ${getSeverityColor(report.severity)}`}>
                             {report.severity.toUpperCase()} SEVERITY
                           </span>
+                          {report.verification_status && (
+                            <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">
+                              {report.verification_status.toUpperCase()}
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm sm:text-base text-gray-600 mb-2 break-all">#{report.emergency_number}</p>
                         <p className="text-sm sm:text-base text-gray-700 mb-3 break-words">{report.description}</p>
                         <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                           <span className="whitespace-nowrap">Reported by: {report.reporter_name || 'Anonymous'}</span>
+                          {(report.reporter_phone || report.contact_number || report.reporter_contact) && (
+                            <>
+                              <span className="hidden sm:inline">•</span>
+                              <span className="flex items-center space-x-1 whitespace-nowrap">
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                                <span>{report.reporter_phone || report.contact_number || report.reporter_contact}</span>
+                              </span>
+                            </>
+                          )}
                           <span className="hidden sm:inline">•</span>
                           <span className="whitespace-nowrap">{new Date(report.created_at).toLocaleString()}</span>
                           {report.photo_urls && report.photo_urls.length > 0 && (
@@ -271,7 +425,23 @@ const EmergencyModeration = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex justify-end sm:justify-start sm:flex-shrink-0">
+                    <div className="flex justify-end sm:justify-start sm:flex-shrink-0 gap-2">
+                      <button
+                        onClick={() => handleModeration(report.id, 'verified', 'Quick verify')}
+                        disabled={moderating}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors duration-200 text-sm"
+                        title="Verify"
+                      >
+                        Verify
+                      </button>
+                      <button
+                        onClick={() => handleModeration(report.id, 'rejected', 'Quick reject')}
+                        disabled={moderating}
+                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors duration-200 text-sm"
+                        title="Reject"
+                      >
+                        Reject
+                      </button>
                       <button
                         onClick={() => {
                           setSelectedReport(report);
@@ -344,7 +514,28 @@ const EmergencyModeration = () => {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-700">Reporter:</p>
-                          <p className="text-gray-600">{selectedReport.reporter_name || 'Anonymous'}</p>
+                          <div className="space-y-1">
+                            <p className="text-gray-600">{selectedReport.reporter_name || 'Anonymous'}</p>
+                            {(selectedReport.reporter_phone ||
+                              selectedReport.contact_number ||
+                              selectedReport.reporter_contact) && (
+                              <p className="text-sm text-gray-600 flex flex-wrap gap-2 items-center">
+                                <span className="font-medium text-gray-700">Contact:</span>
+                                <a
+                                  href={`tel:${
+                                    selectedReport.reporter_phone ||
+                                    selectedReport.contact_number ||
+                                    selectedReport.reporter_contact
+                                  }`}
+                                  className="text-blue-600 hover:text-blue-800 break-all"
+                                >
+                                  {selectedReport.reporter_phone ||
+                                    selectedReport.contact_number ||
+                                    selectedReport.reporter_contact}
+                                </a>
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-700">Reported At:</p>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Car, TrendingUp, TrendingDown, AlertCircle, Clock, X } from 'lucide-react';
+import { useDarkMode } from '../context/DarkModeContext';
 import enhancedGeocodingService from '../services/enhancedGeocodingService';
 
 /**
@@ -243,6 +244,7 @@ const MiniDashboardSheet = ({
     return { insights, analyticalInsights };
   }, [trafficData]);
 
+  const { isDarkMode } = useDarkMode();
   const [heightMode, setHeightMode] = useState('peek'); // 'peek' | 'half' | 'full'
   const [locationNames, setLocationNames] = useState(new Map()); // Cache for reverse geocoded names
 
@@ -362,14 +364,20 @@ const MiniDashboardSheet = ({
     >
       {/* Sheet - Glassmorphism (matching Weather & Flood exactly) */}
       <div
-        className={`pointer-events-auto relative ${containerAlignment} w-[calc(100%-1.5rem)] sm:w-auto sm:max-w-lg md:max-w-2xl rounded-t-2xl bg-white/98 backdrop-blur-xl shadow-2xl border-t border-x border-gray-200/30 transition-transform duration-300 ease-out overflow-hidden ${
+        className={`pointer-events-auto relative ${containerAlignment} w-[calc(100%-1.5rem)] sm:w-auto sm:max-w-lg md:max-w-2xl rounded-t-2xl backdrop-blur-xl shadow-2xl border-t border-x transition-transform duration-300 ease-out overflow-hidden ${
+          isDarkMode
+            ? 'bg-gray-900/98 border-gray-700/30'
+            : 'bg-white/98 border-gray-200/30'
+        } ${
           isOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={isOpen ? heightStyle : { minHeight: 0 }}
       >
         {/* Grab handle */}
         <button onClick={cycleHeight} className="flex items-center justify-center w-full py-2 select-none active:opacity-80">
-          <div className="h-1.5 w-12 rounded-full bg-gray-300" />
+          <div className={`h-1.5 w-12 rounded-full ${
+            isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+          }`} />
         </button>
 
         {/* Header with Gradient Background (matching Weather & Flood) */}
@@ -406,12 +414,18 @@ const MiniDashboardSheet = ({
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <div className="relative w-16 h-16">
-                <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+                <div className={`absolute inset-0 border-4 rounded-full ${
+                  isDarkMode ? 'border-blue-800' : 'border-blue-200'
+                }`}></div>
                 <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
               </div>
               <div className="text-center">
-                <p className="text-sm sm:text-base font-medium text-gray-700">Fetching traffic data...</p>
-                <p className="text-xs text-gray-500 mt-1">Please wait while we gather the latest insights</p>
+                <p className={`text-sm sm:text-base font-medium ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>Fetching traffic data...</p>
+                <p className={`text-xs mt-1 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-500'
+                }`}>Please wait while we gather the latest insights</p>
               </div>
             </div>
           ) : (
@@ -429,7 +443,11 @@ const MiniDashboardSheet = ({
                         {Object.entries(insight.metrics).map(([key, value]) => (
                           <span
                             key={key}
-                            className="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 text-xs sm:text-sm font-semibold"
+                            className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold ${
+                              isDarkMode
+                                ? 'bg-blue-900/50 text-blue-300'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}
                           >
                             {key === 'normalFlow' && `Normal flow: ${value}`}
                             {key === 'moderateTraffic' && `${value} roads moderate`}
@@ -444,10 +462,10 @@ const MiniDashboardSheet = ({
                     {/* Main insight message */}
                     <p className={`text-sm sm:text-base font-medium ${
                       insight.type === 'warning'
-                        ? 'text-red-900'
+                        ? (isDarkMode ? 'text-red-300' : 'text-red-900')
                         : insight.type === 'success'
-                        ? 'text-green-900'
-                        : 'text-gray-900'
+                        ? (isDarkMode ? 'text-green-300' : 'text-green-900')
+                        : (isDarkMode ? 'text-gray-100' : 'text-gray-900')
                     }`}>
                       {insight.message}
                     </p>
@@ -460,12 +478,20 @@ const MiniDashboardSheet = ({
                 return (
                   <div
                     key={idx}
-                    className="rounded-xl bg-blue-50 border border-blue-200 p-3 sm:p-4"
+                    className={`rounded-xl border p-3 sm:p-4 ${
+                      isDarkMode
+                        ? 'bg-blue-900/30 border-blue-700'
+                        : 'bg-blue-50 border-blue-200'
+                    }`}
                   >
                     <div className="flex items-start gap-3">
-                      <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <Clock className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                        isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                      }`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm sm:text-base text-gray-900 font-medium mb-2">
+                        <p className={`text-sm sm:text-base font-medium mb-2 ${
+                          isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                        }`}>
                           {insight.message}
                         </p>
                         {insight.metrics && (
@@ -473,7 +499,11 @@ const MiniDashboardSheet = ({
                             {Object.entries(insight.metrics).map(([key, value]) => (
                               <span
                                 key={key}
-                                className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold"
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                  isDarkMode
+                                    ? 'bg-blue-900 text-blue-300'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
                               >
                                 {key === 'peakHours' && `Peak: ${value}`}
                               </span>
@@ -492,15 +522,21 @@ const MiniDashboardSheet = ({
                   key={idx}
                   className={`rounded-xl border-l-4 p-3 sm:p-4 ${
                     insight.type === 'warning'
-                      ? 'bg-red-50 border-red-400'
-                      : 'bg-blue-50 border-blue-400'
+                      ? (isDarkMode
+                          ? 'bg-red-900/30 border-red-500'
+                          : 'bg-red-50 border-red-400')
+                      : (isDarkMode
+                          ? 'bg-blue-900/30 border-blue-500'
+                          : 'bg-blue-50 border-blue-400')
                   }`}
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-lg">{insight.icon}</span>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm sm:text-base font-medium ${
-                        insight.type === 'warning' ? 'text-red-900' : 'text-blue-900'
+                        insight.type === 'warning'
+                          ? (isDarkMode ? 'text-red-300' : 'text-red-900')
+                          : (isDarkMode ? 'text-blue-300' : 'text-blue-900')
                       }`}>
                         {insight.message}
                       </p>
@@ -513,54 +549,116 @@ const MiniDashboardSheet = ({
 
           {/* Supporting Data Section */}
           {trafficInsights.total > 0 && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
-              <p className="text-xs sm:text-sm font-semibold text-gray-700 mb-3">Supporting Data</p>
+            <div className={`mt-4 rounded-xl border p-3 sm:p-4 ${
+              isDarkMode
+                ? 'border-gray-700 bg-gray-800'
+                : 'border-gray-200 bg-gray-50'
+            }`}>
+              <p className={`text-xs sm:text-sm font-semibold mb-3 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>Supporting Data</p>
               
               {/* Key Metrics Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-3">
                 <div className="text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-gray-900">{trafficInsights.total}</div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1">Total Roads</div>
+                  <div className={`text-xl sm:text-2xl font-bold ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>{trafficInsights.total}</div>
+                  <div className={`text-[10px] sm:text-xs mt-1 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Total Roads</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                  <div className={`text-xl sm:text-2xl font-bold ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                     {trafficInsights.averageSpeed > 0 ? `${trafficInsights.averageSpeed}` : 'N/A'}
                   </div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1">Avg km/h</div>
+                  <div className={`text-[10px] sm:text-xs mt-1 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Avg km/h</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-gray-900">{trafficInsights.congestionPercentage}%</div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1">Congested</div>
+                  <div className={`text-xl sm:text-2xl font-bold ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>{trafficInsights.congestionPercentage}%</div>
+                  <div className={`text-[10px] sm:text-xs mt-1 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Congested</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                  <div className={`text-xl sm:text-2xl font-bold ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                     {trafficInsights.freeFlow + trafficInsights.light}
                   </div>
-                  <div className="text-[10px] sm:text-xs text-gray-600 mt-1">Clear Roads</div>
+                  <div className={`text-[10px] sm:text-xs mt-1 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Clear Roads</div>
                 </div>
               </div>
               
               {/* Traffic Status Breakdown - Horizontal Bars */}
               <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-2">
-                <div className="flex-1 rounded-lg border border-green-200 bg-green-50 p-2 sm:p-2.5 text-center min-w-0">
-                  <div className="text-base sm:text-lg font-bold text-green-700">{trafficInsights.freeFlow}</div>
-                  <div className="text-[10px] sm:text-xs text-green-600 mt-0.5">Free</div>
+                <div className={`flex-1 rounded-lg border p-2 sm:p-2.5 text-center min-w-0 ${
+                  isDarkMode
+                    ? 'border-green-700 bg-green-900/30'
+                    : 'border-green-200 bg-green-50'
+                }`}>
+                  <div className={`text-base sm:text-lg font-bold ${
+                    isDarkMode ? 'text-green-300' : 'text-green-700'
+                  }`}>{trafficInsights.freeFlow}</div>
+                  <div className={`text-[10px] sm:text-xs mt-0.5 ${
+                    isDarkMode ? 'text-green-400' : 'text-green-600'
+                  }`}>Free</div>
                 </div>
-                <div className="flex-1 rounded-lg border border-yellow-200 bg-yellow-50 p-2 sm:p-2.5 text-center min-w-0">
-                  <div className="text-base sm:text-lg font-bold text-yellow-700">{trafficInsights.light}</div>
-                  <div className="text-[10px] sm:text-xs text-yellow-600 mt-0.5">Light</div>
+                <div className={`flex-1 rounded-lg border p-2 sm:p-2.5 text-center min-w-0 ${
+                  isDarkMode
+                    ? 'border-yellow-700 bg-yellow-900/30'
+                    : 'border-yellow-200 bg-yellow-50'
+                }`}>
+                  <div className={`text-base sm:text-lg font-bold ${
+                    isDarkMode ? 'text-yellow-300' : 'text-yellow-700'
+                  }`}>{trafficInsights.light}</div>
+                  <div className={`text-[10px] sm:text-xs mt-0.5 ${
+                    isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+                  }`}>Light</div>
                 </div>
-                <div className="flex-1 rounded-lg border border-orange-200 bg-orange-50 p-2 sm:p-2.5 text-center min-w-0">
-                  <div className="text-base sm:text-lg font-bold text-orange-700">{trafficInsights.moderate}</div>
-                  <div className="text-[10px] sm:text-xs text-orange-600 mt-0.5">Mod</div>
+                <div className={`flex-1 rounded-lg border p-2 sm:p-2.5 text-center min-w-0 ${
+                  isDarkMode
+                    ? 'border-orange-700 bg-orange-900/30'
+                    : 'border-orange-200 bg-orange-50'
+                }`}>
+                  <div className={`text-base sm:text-lg font-bold ${
+                    isDarkMode ? 'text-orange-300' : 'text-orange-700'
+                  }`}>{trafficInsights.moderate}</div>
+                  <div className={`text-[10px] sm:text-xs mt-0.5 ${
+                    isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                  }`}>Mod</div>
                 </div>
-                <div className="flex-1 rounded-lg border border-red-200 bg-red-50 p-2 sm:p-2.5 text-center min-w-0">
-                  <div className="text-base sm:text-lg font-bold text-red-700">{trafficInsights.heavy}</div>
-                  <div className="text-[10px] sm:text-xs text-red-600 mt-0.5">Heavy</div>
+                <div className={`flex-1 rounded-lg border p-2 sm:p-2.5 text-center min-w-0 ${
+                  isDarkMode
+                    ? 'border-red-700 bg-red-900/30'
+                    : 'border-red-200 bg-red-50'
+                }`}>
+                  <div className={`text-base sm:text-lg font-bold ${
+                    isDarkMode ? 'text-red-300' : 'text-red-700'
+                  }`}>{trafficInsights.heavy}</div>
+                  <div className={`text-[10px] sm:text-xs mt-0.5 ${
+                    isDarkMode ? 'text-red-400' : 'text-red-600'
+                  }`}>Heavy</div>
                 </div>
-                <div className="flex-1 rounded-lg border border-red-300 bg-red-100 p-2 sm:p-2.5 text-center min-w-0">
-                  <div className="text-base sm:text-lg font-bold text-red-800">{trafficInsights.severe}</div>
-                  <div className="text-[10px] sm:text-xs text-red-700 mt-0.5">Severe</div>
+                <div className={`flex-1 rounded-lg border p-2 sm:p-2.5 text-center min-w-0 ${
+                  isDarkMode
+                    ? 'border-red-600 bg-red-900/50'
+                    : 'border-red-300 bg-red-100'
+                }`}>
+                  <div className={`text-base sm:text-lg font-bold ${
+                    isDarkMode ? 'text-red-200' : 'text-red-800'
+                  }`}>{trafficInsights.severe}</div>
+                  <div className={`text-[10px] sm:text-xs mt-0.5 ${
+                    isDarkMode ? 'text-red-300' : 'text-red-700'
+                  }`}>Severe</div>
                 </div>
               </div>
             </div>
@@ -568,13 +666,19 @@ const MiniDashboardSheet = ({
 
           {/* Recent Traffic Updates */}
           <div className="mt-4">
-            <p className="text-xs sm:text-sm font-semibold text-gray-700 mb-3">Recent traffic updates</p>
+            <p className={`text-xs sm:text-sm font-semibold mb-3 ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}>Recent traffic updates</p>
             {(() => {
               // Use traffic data as-is (already filtered on TrafficMap side)
               const displayTrafficData = trafficData || [];
               if (updates.length === 0 && (!displayTrafficData || displayTrafficData.length === 0)) {
                 return (
-                  <div className="rounded-lg border border-dashed border-gray-200 p-4 text-xs sm:text-sm text-gray-500 text-center">
+                  <div className={`rounded-lg border border-dashed p-4 text-xs sm:text-sm text-center ${
+                    isDarkMode
+                      ? 'border-gray-700 text-gray-400'
+                      : 'border-gray-200 text-gray-500'
+                  }`}>
                     No recent traffic updates available.
                   </div>
                 );
@@ -685,25 +789,43 @@ const MiniDashboardSheet = ({
                       }
                     }
                     const getStatusColor = (s) => {
-                      if (s === 'free_flow' || s === 'freeflow') return 'bg-green-50 border-green-400';
-                      if (s === 'light') return 'bg-yellow-50 border-yellow-400';
-                      if (s === 'moderate') return 'bg-orange-50 border-orange-400';
-                      if (s === 'heavy') return 'bg-red-50 border-red-400';
-                      if (s === 'severe' || s === 'standstill') return 'bg-red-100 border-red-500';
-                      return 'bg-blue-50 border-blue-400';
+                      if (isDarkMode) {
+                        if (s === 'free_flow' || s === 'freeflow') return 'bg-green-900/30 border-green-500';
+                        if (s === 'light') return 'bg-yellow-900/30 border-yellow-500';
+                        if (s === 'moderate') return 'bg-orange-900/30 border-orange-500';
+                        if (s === 'heavy') return 'bg-red-900/30 border-red-500';
+                        if (s === 'severe' || s === 'standstill') return 'bg-red-900/50 border-red-600';
+                        return 'bg-blue-900/30 border-blue-500';
+                      } else {
+                        if (s === 'free_flow' || s === 'freeflow') return 'bg-green-50 border-green-400';
+                        if (s === 'light') return 'bg-yellow-50 border-yellow-400';
+                        if (s === 'moderate') return 'bg-orange-50 border-orange-400';
+                        if (s === 'heavy') return 'bg-red-50 border-red-400';
+                        if (s === 'severe' || s === 'standstill') return 'bg-red-100 border-red-500';
+                        return 'bg-blue-50 border-blue-400';
+                      }
                     };
                     const getStatusIcon = (s) => {
-                      if (s === 'free_flow' || s === 'freeflow') return <TrendingDown className="w-5 h-5 text-green-600" />;
-                      if (s === 'light' || s === 'moderate') return <Car className="w-5 h-5 text-orange-600" />;
-                      return <AlertCircle className="w-5 h-5 text-red-600" />;
+                      if (s === 'free_flow' || s === 'freeflow') return <TrendingDown className={`w-5 h-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />;
+                      if (s === 'light' || s === 'moderate') return <Car className={`w-5 h-5 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`} />;
+                      return <AlertCircle className={`w-5 h-5 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />;
                     };
                     const getStatusTextColor = (s) => {
-                      if (s === 'free_flow' || s === 'freeflow') return 'text-green-700';
-                      if (s === 'light') return 'text-yellow-700';
-                      if (s === 'moderate') return 'text-orange-700';
-                      if (s === 'heavy') return 'text-red-700';
-                      if (s === 'severe' || s === 'standstill') return 'text-red-800';
-                      return 'text-gray-700';
+                      if (isDarkMode) {
+                        if (s === 'free_flow' || s === 'freeflow') return 'text-green-300';
+                        if (s === 'light') return 'text-yellow-300';
+                        if (s === 'moderate') return 'text-orange-300';
+                        if (s === 'heavy') return 'text-red-300';
+                        if (s === 'severe' || s === 'standstill') return 'text-red-200';
+                        return 'text-gray-300';
+                      } else {
+                        if (s === 'free_flow' || s === 'freeflow') return 'text-green-700';
+                        if (s === 'light') return 'text-yellow-700';
+                        if (s === 'moderate') return 'text-orange-700';
+                        if (s === 'heavy') return 'text-red-700';
+                        if (s === 'severe' || s === 'standstill') return 'text-red-800';
+                        return 'text-gray-700';
+                      }
                     };
                     return (
                       <div
@@ -712,15 +834,21 @@ const MiniDashboardSheet = ({
                       >
                         <div className="flex-shrink-0">{getStatusIcon(status)}</div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm sm:text-base font-semibold text-gray-900 truncate">{roadName}</p>
+                          <p className={`text-sm sm:text-base font-semibold truncate ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>{roadName}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className={`text-xs sm:text-sm font-medium capitalize ${getStatusTextColor(status)}`}>
                               {status.replace('_', ' ')}
                             </span>
                             {item.average_speed && (
-                              <span className="text-xs text-gray-500">• {item.average_speed} km/h</span>
+                              <span className={`text-xs ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>• {item.average_speed} km/h</span>
                             )}
-                            <span className="text-xs text-gray-500">
+                            <span className={`text-xs ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
                               {item.created_at || item.timestamp ? new Date(item.created_at || item.timestamp).toLocaleTimeString() : ''}
                             </span>
                           </div>
@@ -742,16 +870,20 @@ const MiniDashboardSheet = ({
                       key={u.id || `${u.type}-${u.timestamp}`}
                       className={`flex items-center gap-3 rounded-xl border-l-4 p-3 sm:p-4 shadow-sm ${
                         u.priority === 'high'
-                          ? 'bg-red-50 border-red-400'
+                          ? (isDarkMode ? 'bg-red-900/30 border-red-500' : 'bg-red-50 border-red-400')
                           : u.priority === 'medium'
-                          ? 'bg-amber-50 border-amber-400'
-                          : 'bg-blue-50 border-blue-400'
+                          ? (isDarkMode ? 'bg-amber-900/30 border-amber-500' : 'bg-amber-50 border-amber-400')
+                          : (isDarkMode ? 'bg-blue-900/30 border-blue-500' : 'bg-blue-50 border-blue-400')
                       }`}
                     >
                       <span className="text-lg sm:text-xl flex-shrink-0">{u.icon || '📢'}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{u.message}</p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className={`text-sm sm:text-base font-medium truncate ${
+                          isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                        }`}>{u.message}</p>
+                        <p className={`text-xs mt-1 ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
                           {u.timestamp ? new Date(u.timestamp).toLocaleTimeString() : ''}
                         </p>
                       </div>

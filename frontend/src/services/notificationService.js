@@ -73,6 +73,7 @@ class NotificationService {
   }
 
   getNotificationTypeColor(type) {
+    const key = (type || '').toString().toLowerCase();
     const colors = {
       traffic_alert: '#f59e0b',          // amber
       violation_update: '#3b82f6',       // blue
@@ -81,20 +82,22 @@ class NotificationService {
       weather_alert: '#06b6d4',          // cyan
       emergency: '#ef4444',              // red
     };
-    return colors[type] || colors.system_announcement;
+    return colors[key] || colors.system_announcement;
   }
 
   getNotificationPriorityColor(priority) {
+    const key = (priority || '').toString().toLowerCase();
     const colors = {
       low: '#6b7280',           // gray
       medium: '#3b82f6',        // blue
       high: '#f59e0b',          // amber
       urgent: '#ef4444',        // red
     };
-    return colors[priority] || colors.medium;
+    return colors[key] || colors.medium;
   }
 
   getNotificationTypeIcon(type) {
+    const key = (type || '').toString().toLowerCase();
     const icons = {
       traffic_alert: '🚦',
       violation_update: '🚔',
@@ -103,7 +106,7 @@ class NotificationService {
       weather_alert: '🌧️',
       emergency: '🚨',
     };
-    return icons[type] || '📢';
+    return icons[key] || '📢';
   }
 
   formatNotificationTime(dateString) {

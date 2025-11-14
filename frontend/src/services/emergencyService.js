@@ -29,7 +29,10 @@ class EmergencyService {
       const response = await api.get('/emergency/my-reports');
       return response.data;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to fetch your emergency reports');
+      const message = error.response?.data?.detail || 'Failed to fetch your emergency reports';
+      const enrichedError = new Error(message);
+      enrichedError.status = error.response?.status;
+      throw enrichedError;
     }
   }
 
@@ -72,7 +75,13 @@ class EmergencyService {
 
   async updateEmergency(emergencyId, updateData) {
     try {
-      const response = await api.put(`/emergency/${emergencyId}`, updateData);
+      // Normalize status to uppercase if present (backend expects uppercase enum values)
+      const normalizedData = { ...updateData };
+      if (normalizedData.status) {
+        normalizedData.status = normalizedData.status.toUpperCase();
+      }
+      
+      const response = await api.put(`/emergency/${emergencyId}`, normalizedData);
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to update emergency');
@@ -179,7 +188,16 @@ class EmergencyService {
   // Content Moderation
   async getModerationQueue(filters = {}) {
     try {
-      const response = await api.get('/emergency/moderation/queue', { params: filters });
+      // Pass only supported params and omit empty strings to avoid 422
+      const params = {};
+      if (filters && typeof filters === 'object') {
+        const { priority, verification_status, skip, limit } = filters;
+        if (priority) params.priority = priority;
+        if (verification_status) params.verification_status = verification_status;
+        if (Number.isInteger(skip)) params.skip = skip;
+        if (Number.isInteger(limit)) params.limit = limit;
+      }
+      const response = await api.get('/emergency/moderation/queue', { params });
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to fetch moderation queue');
@@ -188,9 +206,27 @@ class EmergencyService {
 
   async moderateEmergencyReport(emergencyId, moderationData) {
     try {
-      const response = await api.put(`/emergency/moderation/${emergencyId}`, moderationData);
+      // Primary attempt with PUT (backend supports PUT/POST/PATCH)
+      const response = await api.put(
+        `/emergency/moderation/${emergencyId}`,
+        moderationData,
+        { headers: { 'Content-Type': 'application/json' } }
+      );
       return response.data;
     } catch (error) {
+      // Fallback: Some environments intermittently 405 on PUT; retry with POST
+      if (error?.response?.status === 405) {
+        try {
+          const fallback = await api.post(
+            `/emergency/moderation/${emergencyId}`,
+            moderationData,
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+          return fallback.data;
+        } catch (fallbackErr) {
+          throw new Error(fallbackErr.response?.data?.detail || 'Failed to moderate emergency report');
+        }
+      }
       throw new Error(error.response?.data?.detail || 'Failed to moderate emergency report');
     }
   }

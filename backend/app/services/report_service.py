@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from ..models.report import Report, ReportStatus
 from ..models.user import User
 from ..schemas.report_schema import ReportCreate, ReportUpdate
+from ..utils.role_helpers import get_role_value
 
 class ReportService:
     def __init__(self, db: Session):
@@ -54,7 +55,7 @@ class ReportService:
         report = self.get_report_by_id(report_id)
         
         # Check permissions
-        if report.reporter_id != user.id and user.role.value not in ['lgu_staff', 'admin']:
+        if report.reporter_id != user.id and get_role_value(user.role) not in ['lgu_staff', 'admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions to update this report"
@@ -75,7 +76,7 @@ class ReportService:
         report = self.get_report_by_id(report_id)
         
         # Check permissions
-        if report.reporter_id != user.id and user.role.value != 'admin':
+        if report.reporter_id != user.id and get_role_value(user.role) != 'admin':
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions to delete this report"

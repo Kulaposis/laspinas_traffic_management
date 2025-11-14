@@ -20,12 +20,17 @@ import {
   RefreshCw,
   ChevronRight,
   X,
-  Info
+  Info,
+  Globe,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 import trafficService from '../services/trafficService';
 import roadworksService from '../services/roadworksService';
 import TomTomTileLayer from '../components/TomTomTileLayer';
 import { TrafficMonitorSkeleton } from '../components/LoadingSkeleton';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 // Fix Leaflet default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -36,6 +41,9 @@ L.Icon.Default.mergeOptions({
 });
 
 const TrafficMonitorNew = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+  
   // State management
   const [trafficData, setTrafficData] = useState([]);
   const [incidents, setIncidents] = useState([]);
@@ -47,6 +55,10 @@ const TrafficMonitorNew = () => {
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastScrapeTime, setLastScrapeTime] = useState(null);
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapeStatus, setScrapeStatus] = useState(null); // 'success', 'error', null
+  const [nextAutoScrape, setNextAutoScrape] = useState(null);
+  const [isAutoScraping, setIsAutoScraping] = useState(false); // Prevent multiple auto-scrapes
 
   // Cache management
   const cacheRef = React.useRef({
@@ -55,6 +67,19 @@ const TrafficMonitorNew = () => {
     timestamp: null
   });
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+  
+  // Auto-scrape configuration
+  const AUTO_SCRAPE_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  const AUTO_SCRAPE_STORAGE_KEY = 'trafficMonitor_lastAutoScrape';
+  
+  // Facebook pages to scrape
+  const facebookPages = [
+    'https://www.facebook.com/laspinascity',
+    'https://www.facebook.com/LPCityTrafficManagement',
+    'https://www.facebook.com/groups/laspinasresidents',
+    'https://www.facebook.com/laspinastraffic',
+    'https://www.facebook.com/laspinasweather'
+  ];
 
   // Calculate overall traffic status
   const calculateTrafficStatus = () => {
@@ -113,6 +138,203 @@ const TrafficMonitorNew = () => {
       }));
   };
 
+  // Manual scrape function - matches TrafficMonitoring.jsx logic
+  const handleManualScrape = useCallback(async () => {
+    if (!isAdmin) {
+      toast.error('Only administrators can manually scrape roadworks data');
+      return;
+    }
+
+    if (isScraping || isAutoScraping) {
+      toast.error('Scraping is already in progress. Please wait...');
+      return;
+    }
+
+    try {
+      setIsScraping(true);
+      setScrapeStatus(null);
+      
+      // Show info message that scraping may take a while
+      toast.loading('Scraping roadworks data... This may take up to 2 minutes.', { 
+        id: 'scraping-toast',
+        duration: 2000 
+      });
+      
+      // Call scraping service (same as TrafficMonitoring.jsx)
+      const result = await roadworksService.scrapeRoadworks(facebookPages);
+      
+      // Dismiss loading toast
+      toast.dismiss('scraping-toast');
+      
+      // Check if scraping had errors (backend now returns 200 even on errors)
+      if (result?.result?.success === false) {
+        setScrapeStatus('error');
+        const errorMsg = result?.result?.error || 'Scraping completed with errors';
+        toast.error(`Failed to scrape roadworks: ${errorMsg}`, { duration: 5000 });
+        setTimeout(() => setScrapeStatus(null), 5000);
+        return;
+      }
+      
+      // Update last scrape time
+      const now = Date.now();
+      setLastScrapeTime(now);
+      localStorage.setItem(AUTO_SCRAPE_STORAGE_KEY, now.toString());
+      localStorage.removeItem('trafficMonitor_lastAutoScrapeError'); // Clear error flag
+      
+      // Refresh incidents after scraping (same pattern as TrafficMonitoring.jsx)
+      const lasPinasBounds = {
+        lat_min: 14.4200,
+        lat_max: 14.4700,
+        lng_min: 120.9800,
+        lng_max: 121.0500
+      };
+      
+      // Fetch updated roadworks (same as TrafficMonitoring.jsx)
+      const updatedRoadworks = await roadworksService.getActiveRoadworks();
+      const newIncidents = processIncidents(updatedRoadworks, lasPinasBounds);
+      setIncidents(newIncidents);
+      
+      // Update cache
+      cacheRef.current = {
+        ...cacheRef.current,
+        incidents: newIncidents,
+        timestamp: now
+      };
+      
+      // Show success message (similar to TrafficMonitoring.jsx but with toast)
+      setScrapeStatus('success');
+      toast.success(
+        `Scraping completed! Found ${result?.result?.scraped_roadworks || newIncidents.length} roadworks.`,
+        { duration: 5000 }
+      );
+      
+      // Update next auto-scrape time
+      const nextScrape = new Date(now + AUTO_SCRAPE_INTERVAL);
+      setNextAutoScrape(nextScrape);
+      
+      // Reset status after 3 seconds
+      setTimeout(() => setScrapeStatus(null), 3000);
+      
+    } catch (error) {
+      console.error('Manual scrape error:', error);
+      setScrapeStatus('error');
+      
+      // Dismiss loading toast if still showing
+      toast.dismiss('scraping-toast');
+      
+      // Error handling - extract readable error message
+      let errorMessage = 'Unknown error occurred';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error.response) {
+        // AxiosError with response
+        errorMessage = error.response?.data?.result?.error || 
+                      error.response?.data?.detail || 
+                      error.response?.data?.message ||
+                      error.response?.data?.error ||
+                      `Server error (${error.response?.status || 'unknown'})`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      toast.error(`Failed to scrape roadworks: ${errorMessage}`, { duration: 5000 });
+      
+      // Reset status after 5 seconds
+      setTimeout(() => setScrapeStatus(null), 5000);
+    } finally {
+      setIsScraping(false);
+    }
+  }, [isAdmin, facebookPages, isScraping, isAutoScraping, AUTO_SCRAPE_INTERVAL]);
+
+  // Check and perform automatic daily scraping - simplified to match manual scrape pattern
+  const checkAndPerformAutoScrape = useCallback(async () => {
+    if (!isAdmin || isAutoScraping || isScraping) return; // Only admins, prevent concurrent scrapes
+    
+    try {
+      const lastAutoScrape = localStorage.getItem(AUTO_SCRAPE_STORAGE_KEY);
+      const lastAutoScrapeError = localStorage.getItem('trafficMonitor_lastAutoScrapeError');
+      const now = Date.now();
+      
+      // Check if we should scrape
+      const timeSinceLastScrape = lastAutoScrape ? (now - parseInt(lastAutoScrape)) : AUTO_SCRAPE_INTERVAL;
+      const timeSinceLastError = lastAutoScrapeError ? (now - parseInt(lastAutoScrapeError)) : AUTO_SCRAPE_INTERVAL;
+      
+      // If last scrape failed, wait at least 6 hours before retrying
+      const minRetryInterval = 6 * 60 * 60 * 1000; // 6 hours
+      const shouldRetryAfterError = !lastAutoScrapeError || timeSinceLastError >= minRetryInterval;
+      
+      if (timeSinceLastScrape >= AUTO_SCRAPE_INTERVAL && shouldRetryAfterError) {
+        setIsAutoScraping(true);
+        console.log('Performing automatic daily scrape...');
+        
+        try {
+          // Perform scrape (same pattern as manual scrape)
+          const result = await roadworksService.scrapeRoadworks(facebookPages);
+          
+          // Update last scrape time
+          const now = Date.now();
+          localStorage.setItem(AUTO_SCRAPE_STORAGE_KEY, now.toString());
+          localStorage.removeItem('trafficMonitor_lastAutoScrapeError'); // Clear error flag
+          setLastScrapeTime(now);
+          
+          // Refresh incidents after scraping (same as manual scrape)
+          const lasPinasBounds = {
+            lat_min: 14.4200,
+            lat_max: 14.4700,
+            lng_min: 120.9800,
+            lng_max: 121.0500
+          };
+          
+          // Fetch updated roadworks (same as manual scrape)
+          const updatedRoadworks = await roadworksService.getActiveRoadworks();
+          const newIncidents = processIncidents(updatedRoadworks, lasPinasBounds);
+          setIncidents(newIncidents);
+          
+          // Update cache
+          cacheRef.current = {
+            ...cacheRef.current,
+            incidents: newIncidents,
+            timestamp: now
+          };
+          
+          // Show subtle notification
+          toast.success(
+            `Auto-scrape completed: ${result?.result?.scraped_roadworks || newIncidents.length} roadworks found`,
+            { duration: 3000, position: 'bottom-right' }
+          );
+          
+          // Calculate next auto-scrape time (24 hours from now)
+          const nextScrape = new Date(now + AUTO_SCRAPE_INTERVAL);
+          setNextAutoScrape(nextScrape);
+          
+        } catch (error) {
+          console.error('Auto-scrape error:', error);
+          // Update error time
+          const now = Date.now();
+          localStorage.setItem('trafficMonitor_lastAutoScrapeError', now.toString());
+          // Calculate next retry (6 hours from now)
+          const nextRetry = new Date(now + minRetryInterval);
+          setNextAutoScrape(nextRetry);
+          // Don't show error toast for auto-scrape to avoid annoying users
+        } finally {
+          setIsAutoScraping(false);
+        }
+      } else {
+        // Calculate next auto-scrape time
+        const lastScrape = parseInt(lastAutoScrape || now);
+        const nextScrape = new Date(lastScrape + AUTO_SCRAPE_INTERVAL);
+        setNextAutoScrape(nextScrape);
+      }
+      
+    } catch (error) {
+      console.error('Error in checkAndPerformAutoScrape:', error);
+      setIsAutoScraping(false);
+    }
+  }, [isAdmin, facebookPages, AUTO_SCRAPE_INTERVAL, isAutoScraping, isScraping]);
+
   // Optimized fetch with caching and parallel loading
   const fetchData = useCallback(async () => {
     const startTime = performance.now();
@@ -165,39 +387,8 @@ const TrafficMonitorNew = () => {
       // Use stored incidents immediately (don't wait for scraping)
       const stored = storedIncidents.status === 'fulfilled' ? storedIncidents.value : [];
       
-      // Check if we should scrape (only every 10 minutes to avoid overload)
-      const shouldScrape = !lastScrapeTime || (now - lastScrapeTime) > 10 * 60 * 1000;
-      
-      let scrapedData = stored;
-      
-      // Scrape in background if needed (non-blocking)
-      if (shouldScrape) {
-        const facebookPages = [
-          'https://www.facebook.com/laspinascity',
-          'https://www.facebook.com/LPCityTrafficManagement',
-          'https://www.facebook.com/groups/laspinasresidents'
-        ];
-        
-        // Don't await - scrape in background
-        roadworksService.scrapeRoadworks(facebookPages)
-          .then(data => {
-
-            setLastScrapeTime(Date.now());
-            // Update incidents after scraping completes
-            const newIncidents = processIncidents(data, lasPinasBounds);
-            setIncidents(newIncidents);
-            // Update cache
-            cacheRef.current = {
-              trafficData: traffic,
-              incidents: newIncidents,
-              timestamp: Date.now()
-            };
-          })
-          .catch(() => {});
-      }
-      
       // Process stored incidents immediately
-      const incidents = processIncidents(scrapedData, lasPinasBounds);
+      const incidents = processIncidents(stored, lasPinasBounds);
       setIncidents(incidents);
       setLastUpdate(new Date());
       
@@ -211,31 +402,57 @@ const TrafficMonitorNew = () => {
       const loadTime = Math.round(performance.now() - startTime);
 
     } catch (error) {
-
+      console.error('Fetch data error:', error);
       // Use cache even if expired on error
       if (cacheRef.current.incidents) {
-
         setTrafficData(cacheRef.current.trafficData || []);
         setIncidents(cacheRef.current.incidents || []);
       }
     } finally {
       setLoading(false);
     }
-  }, [lastScrapeTime, CACHE_DURATION]);
+  }, [CACHE_DURATION]);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+  
+  // Separate effect for auto-refresh
+  useEffect(() => {
+    if (!autoRefresh) return;
     
-    // Auto-refresh every 30 seconds
-    let interval;
-    if (autoRefresh) {
-      interval = setInterval(fetchData, 30000);
-    }
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, fetchData]);
+  
+  // Separate effect for auto-scrape (only run once on mount and then hourly)
+  useEffect(() => {
+    if (!isAdmin) return;
+    
+    // Check on mount
+    checkAndPerformAutoScrape();
+    
+    // Then check every hour
+    const autoScrapeInterval = setInterval(() => {
+      checkAndPerformAutoScrape();
+    }, 60 * 60 * 1000);
     
     return () => {
-      if (interval) clearInterval(interval);
+      if (autoScrapeInterval) clearInterval(autoScrapeInterval);
     };
-  }, [fetchData, autoRefresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]); // Only depend on isAdmin, not the callback itself
+  
+  // Initialize next auto-scrape time on mount
+  useEffect(() => {
+    const lastScrape = localStorage.getItem(AUTO_SCRAPE_STORAGE_KEY);
+    if (lastScrape) {
+      const nextScrape = new Date(parseInt(lastScrape) + AUTO_SCRAPE_INTERVAL);
+      setNextAutoScrape(nextScrape);
+    } else {
+      setNextAutoScrape(new Date(Date.now() + AUTO_SCRAPE_INTERVAL));
+    }
+  }, [AUTO_SCRAPE_INTERVAL]);
 
   // Calculate statistics
   const stats = {
@@ -322,6 +539,29 @@ const TrafficMonitorNew = () => {
             </div>
             
             <div className="flex items-center space-x-2">
+              {isAdmin && (
+                <button
+                  onClick={handleManualScrape}
+                  disabled={isScraping}
+                  className={`p-2 sm:p-3 rounded-lg sm:rounded-xl transition-all duration-200 ${
+                    scrapeStatus === 'success'
+                      ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                      : scrapeStatus === 'error'
+                      ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                      : 'bg-purple-100 text-purple-600 hover:bg-purple-200'
+                  } disabled:opacity-50`}
+                  title="Manually scrape roadworks from web sources"
+                >
+                  {isScraping ? (
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                  ) : scrapeStatus === 'success' ? (
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                  ) : (
+                    <Globe className="w-4 h-4 sm:w-5 sm:h-5" />
+                  )}
+                </button>
+              )}
+              
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
                 className={`p-2 sm:p-3 rounded-lg sm:rounded-xl transition-all duration-200 ${
@@ -425,13 +665,28 @@ const TrafficMonitorNew = () => {
               </div>
             </div>
 
-            {/* Last Update */}
+            {/* Last Update & Scrape Info */}
             <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center sm:justify-between text-blue-100 text-xs sm:text-sm space-y-2 sm:space-y-0">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span>Live updates {autoRefresh ? 'enabled' : 'paused'}</span>
+              <div className="flex flex-col space-y-1">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span>Live updates {autoRefresh ? 'enabled' : 'paused'}</span>
+                </div>
+                {isAdmin && nextAutoScrape && (
+                  <div className="flex items-center space-x-2 text-blue-200">
+                    <Globe className="w-3 h-3" />
+                    <span>Next auto-scrape: {nextAutoScrape.toLocaleDateString()} {nextAutoScrape.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                )}
               </div>
-              <span className="text-xs">Updated: {lastUpdate.toLocaleTimeString()}</span>
+              <div className="flex flex-col items-end space-y-1">
+                <span className="text-xs">Updated: {lastUpdate.toLocaleTimeString()}</span>
+                {isAdmin && lastScrapeTime && (
+                  <span className="text-xs text-blue-200">
+                    Last scraped: {new Date(lastScrapeTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -668,6 +923,22 @@ const TrafficMonitorNew = () => {
                   <span className="text-blue-200 mt-1 flex-shrink-0">•</span>
                   <span className="leading-relaxed">Check for roadworks before planning your trip</span>
                 </li>
+                {incidents.length > 0 && (
+                  <li className="flex items-start space-x-2">
+                    <span className="text-blue-200 mt-1 flex-shrink-0">•</span>
+                    <span className="leading-relaxed">
+                      {incidents.length} active roadwork{incidents.length > 1 ? 's' : ''} detected - plan accordingly
+                    </span>
+                  </li>
+                )}
+                {isAdmin && (
+                  <li className="flex items-start space-x-2 pt-2 border-t border-white/20">
+                    <span className="text-blue-200 mt-1 flex-shrink-0">•</span>
+                    <span className="leading-relaxed text-blue-100">
+                      <strong>Admin:</strong> Roadworks are automatically scraped daily. Use the globe icon to manually trigger scraping.
+                    </span>
+                  </li>
+                )}
               </ul>
             </div>
           </div>

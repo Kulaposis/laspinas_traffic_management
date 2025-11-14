@@ -5,7 +5,7 @@ from ..db import get_db
 from ..auth import get_current_active_user, get_current_user
 from ..models.user import User
 from ..schemas.user_schema import UserResponse, UserUpdate, UserCreate
-from ..utils.role_helpers import is_admin, is_authorized
+from ..utils.role_helpers import is_admin, is_authorized, get_role_value
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -47,7 +47,7 @@ def get_user(
         )
     
     # Users can only see their own info unless they're admin/staff
-    if user.id != current_user.id and current_user.role.value not in ['admin', 'lgu_staff']:
+    if user.id != current_user.id and get_role_value(current_user.role) not in ['admin', 'lgu_staff']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"

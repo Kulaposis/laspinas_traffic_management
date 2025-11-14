@@ -14,6 +14,7 @@ import {
   Zap,
   Info
 } from 'lucide-react';
+import { useDarkMode } from '../context/DarkModeContext';
 import trafficService from '../services/trafficService';
 
 const TrafficPredictionsPanel = ({
@@ -23,6 +24,7 @@ const TrafficPredictionsPanel = ({
   selectedOrigin = null,
   selectedDestination = null
 }) => {
+  const { isDarkMode } = useDarkMode();
   const [patterns, setPatterns] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -201,7 +203,11 @@ const TrafficPredictionsPanel = ({
       
       {/* Panel - Glassmorphism (matching Weather & Flood) */}
       <div 
-        className="fixed inset-x-0 bottom-0 md:inset-x-auto md:bottom-auto md:right-4 md:top-20 bg-white/98 backdrop-blur-xl rounded-t-3xl md:rounded-2xl shadow-2xl border-t border-x border-gray-200/30 md:border md:max-w-md md:w-96 transform transition-transform duration-300 ease-out"
+        className={`fixed inset-x-0 bottom-0 md:inset-x-auto md:bottom-auto md:right-4 md:top-20 backdrop-blur-xl rounded-t-3xl md:rounded-2xl shadow-2xl border-t border-x md:border md:max-w-md md:w-96 transform transition-transform duration-300 ease-out ${
+          isDarkMode
+            ? 'bg-gray-900/98 border-gray-700/30'
+            : 'bg-white/98 border-gray-200/30'
+        }`}
         style={{ 
           maxHeight: isExpanded ? (isDesktop ? '75vh' : '90vh') : '200px',
           zIndex: 10002,
@@ -248,19 +254,31 @@ const TrafficPredictionsPanel = ({
           {loading && (
             <div className="p-6 md:p-4 text-center">
               <div className="animate-spin rounded-full h-10 w-10 md:h-8 md:w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-3 md:mt-2 text-sm md:text-xs text-gray-600">Loading traffic patterns...</p>
+              <p className={`mt-3 md:mt-2 text-sm md:text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>Loading traffic patterns...</p>
             </div>
           )}
 
           {error && (
-            <div className="p-4 m-4 bg-red-50/70 backdrop-blur-md border border-red-200/50 rounded-lg shadow-lg">
+            <div className={`p-4 m-4 backdrop-blur-md border rounded-lg shadow-lg ${
+              isDarkMode
+                ? 'bg-red-900/30 border-red-700/50'
+                : 'bg-red-50/70 border-red-200/50'
+            }`}>
               <div className="flex items-center space-x-2">
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <p className="text-red-800">{error}</p>
+                <AlertCircle className={`w-5 h-5 ${
+                  isDarkMode ? 'text-red-400' : 'text-red-600'
+                }`} />
+                <p className={isDarkMode ? 'text-red-300' : 'text-red-800'}>{error}</p>
               </div>
               <button
                 onClick={loadTrafficPatterns}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                className={`mt-2 text-sm underline ${
+                  isDarkMode
+                    ? 'text-red-400 hover:text-red-300'
+                    : 'text-red-600 hover:text-red-800'
+                }`}
               >
                 Try again
               </button>
@@ -270,13 +288,19 @@ const TrafficPredictionsPanel = ({
           {!loading && !error && patterns && (
             <div className="p-4 md:p-3">
               {/* Tabs - Glassmorphism */}
-              <div className="flex space-x-1 md:space-x-1 mb-3 md:mb-2 border-b border-gray-200/50">
+              <div className={`flex space-x-1 md:space-x-1 mb-3 md:mb-2 border-b ${
+                isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50'
+              }`}>
                 <button
                   onClick={() => setActiveTab('predictions')}
                   className={`px-3 py-1.5 md:px-2 md:py-1.5 text-sm md:text-xs font-medium transition-all rounded-t-lg ${
                     activeTab === 'predictions'
-                      ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm'
+                      ? (isDarkMode
+                          ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/50 backdrop-blur-sm'
+                          : 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm')
+                      : (isDarkMode
+                          ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-800/50 backdrop-blur-sm'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm')
                   }`}
                 >
                   Time Predictions
@@ -285,8 +309,12 @@ const TrafficPredictionsPanel = ({
                   onClick={() => setActiveTab('best-time')}
                   className={`px-3 py-1.5 md:px-2 md:py-1.5 text-sm md:text-xs font-medium transition-all rounded-t-lg ${
                     activeTab === 'best-time'
-                      ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm'
+                      ? (isDarkMode
+                          ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/50 backdrop-blur-sm'
+                          : 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm')
+                      : (isDarkMode
+                          ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-800/50 backdrop-blur-sm'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm')
                   }`}
                 >
                   Best Time
@@ -295,8 +323,12 @@ const TrafficPredictionsPanel = ({
                   onClick={() => setActiveTab('history')}
                   className={`px-3 py-1.5 md:px-2 md:py-1.5 text-sm md:text-xs font-medium transition-all rounded-t-lg ${
                     activeTab === 'history'
-                      ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm'
+                      ? (isDarkMode
+                          ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/50 backdrop-blur-sm'
+                          : 'border-b-2 border-blue-500 text-blue-600 bg-blue-50/50 backdrop-blur-sm')
+                      : (isDarkMode
+                          ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-800/50 backdrop-blur-sm'
+                          : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50/50 backdrop-blur-sm')
                   }`}
                 >
                   Historical Patterns
@@ -306,31 +338,53 @@ const TrafficPredictionsPanel = ({
               {/* Time-Based Predictions Tab */}
               {activeTab === 'predictions' && timeBasedPredictions && (
                 <div className="space-y-3 md:space-y-2">
-                  <h3 className="text-base md:text-sm font-semibold text-gray-900 mb-3 md:mb-2">Expected Traffic by Time Period</h3>
+                  <h3 className={`text-base md:text-sm font-semibold mb-3 md:mb-2 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>Expected Traffic by Time Period</h3>
                   
                   {Object.entries(timeBasedPredictions).map(([key, prediction]) => (
-                    <div key={key} className="bg-white/60 backdrop-blur-md rounded-xl md:rounded-lg p-3 md:p-2.5 border border-gray-200/50 shadow-lg hover:shadow-xl hover:bg-white/70 transition-all duration-300">
+                    <div key={key} className={`backdrop-blur-md rounded-xl md:rounded-lg p-3 md:p-2.5 border shadow-lg hover:shadow-xl transition-all duration-300 ${
+                      isDarkMode
+                        ? 'bg-gray-800/60 border-gray-700/50 hover:bg-gray-800/70'
+                        : 'bg-white/60 border-gray-200/50 hover:bg-white/70'
+                    }`}>
                       <div className="flex items-center justify-between mb-2 md:mb-1.5">
                         <div className="flex items-center space-x-2 md:space-x-1.5">
                           <div className={`w-3 h-3 md:w-2.5 md:h-2.5 rounded-full ${prediction.color}`}></div>
                           <div>
-                            <h4 className="text-sm md:text-xs font-semibold text-gray-900">{prediction.label}</h4>
-                            <p className="text-[10px] md:text-[9px] text-gray-500 mt-0.5">{prediction.timeRange}</p>
+                            <h4 className={`text-sm md:text-xs font-semibold ${
+                              isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                            }`}>{prediction.label}</h4>
+                            <p className={`text-[10px] md:text-[9px] mt-0.5 ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            }`}>{prediction.timeRange}</p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-1 md:space-x-1">
                           {prediction.congestionLevel === 'heavy' && (
-                            <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-red-100/70 backdrop-blur-sm text-red-800 rounded-full text-xs md:text-[10px] font-medium border border-red-200/50 shadow-sm">
+                            <span className={`px-2 py-0.5 md:px-1.5 md:py-0.5 backdrop-blur-sm rounded-full text-xs md:text-[10px] font-medium border shadow-sm ${
+                              isDarkMode
+                                ? 'bg-red-900/50 text-red-300 border-red-700/50'
+                                : 'bg-red-100/70 text-red-800 border-red-200/50'
+                            }`}>
                               Heavy
                             </span>
                           )}
                           {prediction.congestionLevel === 'moderate' && (
-                            <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-yellow-100/70 backdrop-blur-sm text-yellow-800 rounded-full text-xs md:text-[10px] font-medium border border-yellow-200/50 shadow-sm">
+                            <span className={`px-2 py-0.5 md:px-1.5 md:py-0.5 backdrop-blur-sm rounded-full text-xs md:text-[10px] font-medium border shadow-sm ${
+                              isDarkMode
+                                ? 'bg-yellow-900/50 text-yellow-300 border-yellow-700/50'
+                                : 'bg-yellow-100/70 text-yellow-800 border-yellow-200/50'
+                            }`}>
                               Moderate
                             </span>
                           )}
                           {prediction.congestionLevel === 'low' && (
-                            <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-green-100/70 backdrop-blur-sm text-green-800 rounded-full text-xs md:text-[10px] font-medium border border-green-200/50 shadow-sm">
+                            <span className={`px-2 py-0.5 md:px-1.5 md:py-0.5 backdrop-blur-sm rounded-full text-xs md:text-[10px] font-medium border shadow-sm ${
+                              isDarkMode
+                                ? 'bg-green-900/50 text-green-300 border-green-700/50'
+                                : 'bg-green-100/70 text-green-800 border-green-200/50'
+                            }`}>
                               Light
                             </span>
                           )}
@@ -339,22 +393,36 @@ const TrafficPredictionsPanel = ({
                       
                       <div className="grid grid-cols-3 gap-2 md:gap-1.5 mt-2 md:mt-1.5">
                         <div>
-                          <p className="text-[10px] md:text-[9px] text-gray-600 mb-0.5">Avg Speed</p>
-                          <p className="text-base md:text-sm font-bold text-gray-900">{prediction.avgSpeed} km/h</p>
+                          <p className={`text-[10px] md:text-[9px] mb-0.5 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Avg Speed</p>
+                          <p className={`text-base md:text-sm font-bold ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>{prediction.avgSpeed} km/h</p>
                         </div>
                         <div>
-                          <p className="text-[10px] md:text-[9px] text-gray-600 mb-0.5">Congestion</p>
-                          <p className="text-base md:text-sm font-bold text-gray-900">{prediction.congestionPercentage}%</p>
+                          <p className={`text-[10px] md:text-[9px] mb-0.5 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Congestion</p>
+                          <p className={`text-base md:text-sm font-bold ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>{prediction.congestionPercentage}%</p>
                         </div>
                         <div>
-                          <p className="text-[10px] md:text-[9px] text-gray-600 mb-0.5">Vehicles</p>
-                          <p className="text-base md:text-sm font-bold text-gray-900">{prediction.vehicleCount.toLocaleString()}</p>
+                          <p className={`text-[10px] md:text-[9px] mb-0.5 ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Vehicles</p>
+                          <p className={`text-base md:text-sm font-bold ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>{prediction.vehicleCount.toLocaleString()}</p>
                         </div>
                       </div>
 
                       {/* Congestion bar */}
                       <div className="mt-2 md:mt-1.5">
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 md:h-1">
+                        <div className={`w-full rounded-full h-1.5 md:h-1 ${
+                          isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                        }`}>
                           <div
                             className={`h-1.5 md:h-1 rounded-full transition-all ${
                               prediction.congestionLevel === 'heavy' ? 'bg-red-500' :
@@ -372,36 +440,66 @@ const TrafficPredictionsPanel = ({
               {/* Best Time to Leave Tab */}
               {activeTab === 'best-time' && (
                 <div className="space-y-3 md:space-y-2">
-                  <h3 className="text-base md:text-sm font-semibold text-gray-900 mb-3 md:mb-2">Best Time to Leave</h3>
+                  <h3 className={`text-base md:text-sm font-semibold mb-3 md:mb-2 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>Best Time to Leave</h3>
                   
                   {bestTimeRecommendations && bestTimeRecommendations.bestTimes && bestTimeRecommendations.bestTimes.length > 0 ? (
                     <>
-                      <div className="bg-green-50/70 backdrop-blur-md rounded-xl md:rounded-lg p-3 md:p-2.5 border-2 border-green-200/50 shadow-lg">
+                      <div className={`backdrop-blur-md rounded-xl md:rounded-lg p-3 md:p-2.5 border-2 shadow-lg ${
+                        isDarkMode
+                          ? 'bg-green-900/30 border-green-700/50'
+                          : 'bg-green-50/70 border-green-200/50'
+                      }`}>
                         <div className="flex items-center space-x-2 mb-2 md:mb-1.5">
-                          <CheckCircle className="w-4 h-4 md:w-3.5 md:h-3.5 text-green-600" />
-                          <h4 className="text-sm md:text-xs font-semibold text-gray-900">Recommended Departure Times</h4>
+                          <CheckCircle className={`w-4 h-4 md:w-3.5 md:h-3.5 ${
+                            isDarkMode ? 'text-green-400' : 'text-green-600'
+                          }`} />
+                          <h4 className={`text-sm md:text-xs font-semibold ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>Recommended Departure Times</h4>
                         </div>
-                        <p className="text-xs md:text-[10px] text-gray-600 mb-3 md:mb-2">
+                        <p className={`text-xs md:text-[10px] mb-3 md:mb-2 ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
                           Based on historical traffic patterns, these times typically have lighter traffic
                         </p>
                         
                         <div className="space-y-2 md:space-y-1.5">
                           {bestTimeRecommendations.bestTimes.map((time, index) => (
-                            <div key={index} className="bg-white/80 backdrop-blur-sm rounded-lg md:rounded p-2.5 md:p-2 border border-gray-200/50 shadow-sm hover:shadow-md hover:bg-white/90 transition-all">
+                            <div key={index} className={`backdrop-blur-sm rounded-lg md:rounded p-2.5 md:p-2 border shadow-sm hover:shadow-md transition-all ${
+                              isDarkMode
+                                ? 'bg-gray-800/80 border-gray-700/50 hover:bg-gray-800/90'
+                                : 'bg-white/80 border-gray-200/50 hover:bg-white/90'
+                            }`}>
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2 md:space-x-1.5">
-                                  <div className="w-8 h-8 md:w-7 md:h-7 rounded-full bg-green-100/80 backdrop-blur-sm flex items-center justify-center border border-green-200/50">
-                                    <Clock className="w-4 h-4 md:w-3.5 md:h-3.5 text-green-600" />
+                                  <div className={`w-8 h-8 md:w-7 md:h-7 rounded-full backdrop-blur-sm flex items-center justify-center border ${
+                                    isDarkMode
+                                      ? 'bg-green-900/80 border-green-700/50'
+                                      : 'bg-green-100/80 border-green-200/50'
+                                  }`}>
+                                    <Clock className={`w-4 h-4 md:w-3.5 md:h-3.5 ${
+                                      isDarkMode ? 'text-green-400' : 'text-green-600'
+                                    }`} />
                                   </div>
                                   <div>
-                                    <p className="text-sm md:text-xs font-semibold text-gray-900">{time.label}</p>
-                                    <p className="text-xs md:text-[10px] text-gray-600">
+                                    <p className={`text-sm md:text-xs font-semibold ${
+                                      isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                                    }`}>{time.label}</p>
+                                    <p className={`text-xs md:text-[10px] ${
+                                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                                    }`}>
                                       {time.avgSpeed} km/h avg • {time.congestionLevel === 'low' ? 'Light' : 'Moderate'} traffic
                                     </p>
                                   </div>
                                 </div>
                                 {index === 0 && (
-                                  <span className="px-2 py-0.5 md:px-1.5 md:py-0.5 bg-green-100/70 backdrop-blur-sm text-green-800 rounded-full text-xs md:text-[10px] font-medium border border-green-200/50 shadow-sm">
+                                  <span className={`px-2 py-0.5 md:px-1.5 md:py-0.5 backdrop-blur-sm rounded-full text-xs md:text-[10px] font-medium border shadow-sm ${
+                                    isDarkMode
+                                      ? 'bg-green-900 text-green-300 border-green-700/50'
+                                      : 'bg-green-100/70 text-green-800 border-green-200/50'
+                                  }`}>
                                     Best
                                   </span>
                                 )}
@@ -414,21 +512,39 @@ const TrafficPredictionsPanel = ({
                       {/* Time Period Comparison */}
                       {bestTimeRecommendations.recommendations && bestTimeRecommendations.recommendations.length > 0 && (
                         <div className="mt-6">
-                          <h4 className="font-semibold text-gray-900 mb-3">Period Comparison</h4>
+                          <h4 className={`font-semibold mb-3 ${
+                            isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                          }`}>Period Comparison</h4>
                           <div className="space-y-2">
                             {bestTimeRecommendations.recommendations.map((rec, index) => (
-                              <div key={index} className="bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-gray-200/50 shadow-sm hover:shadow-md hover:bg-white/70 transition-all">
+                              <div key={index} className={`backdrop-blur-sm rounded-lg p-3 border shadow-sm hover:shadow-md transition-all ${
+                                isDarkMode
+                                  ? 'bg-gray-800/60 border-gray-700/50 hover:bg-gray-800/70'
+                                  : 'bg-white/60 border-gray-200/50 hover:bg-white/70'
+                              }`}>
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="font-medium text-gray-900">{rec.label}</p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className={`font-medium ${
+                                      isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                                    }`}>{rec.label}</p>
+                                    <p className={`text-sm ${
+                                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                                    }`}>
                                       {rec.avgSpeed} km/h • {rec.congestionPercentage}% congestion
                                     </p>
                                   </div>
                                   <div className={`px-3 py-1 rounded-full text-sm font-medium border backdrop-blur-sm shadow-sm ${
-                                    rec.congestionLevel === 'heavy' ? 'bg-red-100/70 text-red-800 border-red-200/50' :
-                                    rec.congestionLevel === 'moderate' ? 'bg-yellow-100/70 text-yellow-800 border-yellow-200/50' :
-                                    'bg-green-100/70 text-green-800 border-green-200/50'
+                                    rec.congestionLevel === 'heavy'
+                                      ? (isDarkMode
+                                          ? 'bg-red-900/50 text-red-300 border-red-700/50'
+                                          : 'bg-red-100/70 text-red-800 border-red-200/50')
+                                      : rec.congestionLevel === 'moderate'
+                                      ? (isDarkMode
+                                          ? 'bg-yellow-900/50 text-yellow-300 border-yellow-700/50'
+                                          : 'bg-yellow-100/70 text-yellow-800 border-yellow-200/50')
+                                      : (isDarkMode
+                                          ? 'bg-green-900/50 text-green-300 border-green-700/50'
+                                          : 'bg-green-100/70 text-green-800 border-green-200/50')
                                   }`}>
                                     {rec.congestionLevel}
                                   </div>
@@ -440,10 +556,16 @@ const TrafficPredictionsPanel = ({
                       )}
                     </>
                   ) : (
-                    <div className="bg-yellow-50/70 backdrop-blur-md border border-yellow-200/50 rounded-lg p-4 shadow-sm">
+                    <div className={`backdrop-blur-md border rounded-lg p-4 shadow-sm ${
+                      isDarkMode
+                        ? 'bg-yellow-900/30 border-yellow-700/50'
+                        : 'bg-yellow-50/70 border-yellow-200/50'
+                    }`}>
                       <div className="flex items-center space-x-2">
-                        <AlertCircle className="w-5 h-5 text-yellow-600" />
-                        <p className="text-yellow-800">
+                        <AlertCircle className={`w-5 h-5 ${
+                          isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+                        }`} />
+                        <p className={isDarkMode ? 'text-yellow-300' : 'text-yellow-800'}>
                           {selectedRoute ? 'No route selected. Select a route to see best departure times.' : 'Select a route to see personalized departure time recommendations.'}
                         </p>
                       </div>
@@ -457,14 +579,22 @@ const TrafficPredictionsPanel = ({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">How Busy is This Road?</h3>
-                      <p className="text-sm text-gray-500 mt-1">See typical traffic patterns throughout the day</p>
+                      <h3 className={`text-lg font-semibold ${
+                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                      }`}>How Busy is This Road?</h3>
+                      <p className={`text-sm mt-1 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}>See typical traffic patterns throughout the day</p>
                     </div>
                     {patterns && patterns.roads && (
                       <select
                         value={selectedRoad || ''}
                         onChange={(e) => setSelectedRoad(e.target.value)}
-                        className="px-3 py-2 border border-gray-300/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm shadow-sm"
+                        className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 backdrop-blur-sm shadow-sm ${
+                          isDarkMode
+                            ? 'border-gray-700/50 bg-gray-800/80 text-gray-100'
+                            : 'border-gray-300/50 bg-white/80 text-gray-900'
+                        }`}
                       >
                         {patterns.roads.map(road => (
                           <option key={road} value={road}>{road}</option>
@@ -501,29 +631,65 @@ const TrafficPredictionsPanel = ({
                             const statusText = congestionLevel === 'heavy' ? 'Very Busy' :
                                               congestionLevel === 'moderate' ? 'Moderately Busy' : 'Light Traffic';
                             
-                            const statusColor = congestionLevel === 'heavy' ? 'bg-red-100/70 backdrop-blur-md text-red-800 border-red-200/50' :
-                                               congestionLevel === 'moderate' ? 'bg-yellow-100/70 backdrop-blur-md text-yellow-800 border-yellow-200/50' :
-                                               'bg-green-100/70 backdrop-blur-md text-green-800 border-green-200/50';
+                            const statusColor = isDarkMode
+                              ? (congestionLevel === 'heavy'
+                                  ? 'bg-red-900/30 backdrop-blur-md text-red-300 border-red-700/50'
+                                  : congestionLevel === 'moderate'
+                                  ? 'bg-yellow-900/30 backdrop-blur-md text-yellow-300 border-yellow-700/50'
+                                  : 'bg-green-900/30 backdrop-blur-md text-green-300 border-green-700/50')
+                              : (congestionLevel === 'heavy'
+                                  ? 'bg-red-100/70 backdrop-blur-md text-red-800 border-red-200/50'
+                                  : congestionLevel === 'moderate'
+                                  ? 'bg-yellow-100/70 backdrop-blur-md text-yellow-800 border-yellow-200/50'
+                                  : 'bg-green-100/70 backdrop-blur-md text-green-800 border-green-200/50');
 
                             return (
                               <div key={idx} className={`rounded-xl p-4 border-2 ${statusColor} transition-all hover:shadow-lg`}>
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center space-x-2">
                                     <span className="text-2xl">{period.icon}</span>
-                                    <h4 className="font-semibold text-gray-900">{period.name}</h4>
+                                    <h4 className={`font-semibold ${
+                                      isDarkMode
+                                        ? (congestionLevel === 'heavy' ? 'text-red-200' : congestionLevel === 'moderate' ? 'text-yellow-200' : 'text-green-200')
+                                        : 'text-gray-900'
+                                    }`}>{period.name}</h4>
                                   </div>
                                 </div>
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-sm text-gray-700">Traffic Status:</span>
-                                    <span className="font-bold text-sm">{statusText}</span>
+                                    <span className={`text-sm ${
+                                      isDarkMode
+                                        ? (congestionLevel === 'heavy' ? 'text-red-200' : congestionLevel === 'moderate' ? 'text-yellow-200' : 'text-green-200')
+                                        : 'text-gray-700'
+                                    }`}>Traffic Status:</span>
+                                    <span className={`font-bold text-sm ${
+                                      isDarkMode
+                                        ? (congestionLevel === 'heavy' ? 'text-red-100' : congestionLevel === 'moderate' ? 'text-yellow-100' : 'text-green-100')
+                                        : ''
+                                    }`}>{statusText}</span>
                                   </div>
                                   <div className="flex items-center justify-between">
-                                    <span className="text-sm text-gray-700">Average Speed:</span>
-                                    <span className="font-bold text-sm">{Math.round(avgSpeed)} km/h</span>
+                                    <span className={`text-sm ${
+                                      isDarkMode
+                                        ? (congestionLevel === 'heavy' ? 'text-red-200' : congestionLevel === 'moderate' ? 'text-yellow-200' : 'text-green-200')
+                                        : 'text-gray-700'
+                                    }`}>Average Speed:</span>
+                                    <span className={`font-bold text-sm ${
+                                      isDarkMode
+                                        ? (congestionLevel === 'heavy' ? 'text-red-100' : congestionLevel === 'moderate' ? 'text-yellow-100' : 'text-green-100')
+                                        : ''
+                                    }`}>{Math.round(avgSpeed)} km/h</span>
                                   </div>
-                                  <div className="mt-2 pt-2 border-t border-gray-300">
-                                    <div className="text-xs text-gray-600">
+                                  <div className={`mt-2 pt-2 border-t ${
+                                    isDarkMode
+                                      ? (congestionLevel === 'heavy' ? 'border-red-700/50' : congestionLevel === 'moderate' ? 'border-yellow-700/50' : 'border-green-700/50')
+                                      : 'border-gray-300'
+                                  }`}>
+                                    <div className={`text-xs ${
+                                      isDarkMode
+                                        ? (congestionLevel === 'heavy' ? 'text-red-300' : congestionLevel === 'moderate' ? 'text-yellow-300' : 'text-green-300')
+                                        : 'text-gray-600'
+                                    }`}>
                                       {period.hours[0]}:00 - {period.hours[period.hours.length - 1] + 1}:00
                                     </div>
                                   </div>
@@ -535,9 +701,17 @@ const TrafficPredictionsPanel = ({
                       </div>
 
                       {/* Simple Visual Timeline */}
-                      <div className="bg-blue-50/70 backdrop-blur-md rounded-xl p-5 border border-blue-200/50 shadow-lg">
-                        <h4 className="font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                          <Clock className="w-5 h-5 text-blue-600" />
+                      <div className={`backdrop-blur-md rounded-xl p-5 border shadow-lg ${
+                        isDarkMode
+                          ? 'bg-blue-900/30 border-blue-700/50'
+                          : 'bg-blue-50/70 border-blue-200/50'
+                      }`}>
+                        <h4 className={`font-semibold mb-4 flex items-center space-x-2 ${
+                          isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                        }`}>
+                          <Clock className={`w-5 h-5 ${
+                            isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                          }`} />
                           <span>Traffic Throughout the Day</span>
                         </h4>
                         <div className="space-y-3">
@@ -572,19 +746,28 @@ const TrafficPredictionsPanel = ({
                               return (
                                 <div key={idx} className="space-y-1">
                                   <div className="flex items-center justify-between text-sm">
-                                    <span className="font-medium text-gray-700">{period.labelShort}</span>
-                                    <span className="text-xs text-gray-500">{period.label}</span>
+                                    <span className={`font-medium ${
+                                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{period.labelShort}</span>
+                                    <span className={`text-xs ${
+                                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>{period.label}</span>
                                   </div>
                                   <div className="flex items-center space-x-2">
-                                    <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
+                                    <div className={`flex-1 rounded-full h-4 overflow-hidden ${
+                                      isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                                    }`}>
                                       <div 
                                         className={`h-4 rounded-full transition-all ${barColor}`}
                                         style={{ width: `${barWidth}%` }}
                                       />
                                     </div>
                                     <span className={`text-xs font-medium w-20 text-right ${
-                                      congestionLevel === 'heavy' ? 'text-red-700' :
-                                      congestionLevel === 'moderate' ? 'text-yellow-700' : 'text-green-700'
+                                      congestionLevel === 'heavy'
+                                        ? (isDarkMode ? 'text-red-300' : 'text-red-700')
+                                        : congestionLevel === 'moderate'
+                                        ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-700')
+                                        : (isDarkMode ? 'text-green-300' : 'text-green-700')
                                     }`}>
                                       {congestionLevel === 'heavy' ? 'Very Busy' :
                                        congestionLevel === 'moderate' ? 'Moderate' : 'Light'}
@@ -598,12 +781,22 @@ const TrafficPredictionsPanel = ({
                       </div>
 
                       {/* Quick Tips */}
-                      <div className="bg-blue-50/70 backdrop-blur-md border-l-4 border-blue-500/80 rounded-lg p-4 shadow-sm">
+                      <div className={`backdrop-blur-md border-l-4 rounded-lg p-4 shadow-sm ${
+                        isDarkMode
+                          ? 'bg-blue-900/30 border-blue-500/80'
+                          : 'bg-blue-50/70 border-blue-500/80'
+                      }`}>
                         <div className="flex items-start space-x-3">
-                          <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <Info className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                            isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                          }`} />
                           <div>
-                            <h4 className="font-semibold text-blue-900 mb-1">💡 Travel Tips</h4>
-                            <ul className="text-sm text-blue-800 space-y-1">
+                            <h4 className={`font-semibold mb-1 ${
+                              isDarkMode ? 'text-blue-300' : 'text-blue-900'
+                            }`}>💡 Travel Tips</h4>
+                            <ul className={`text-sm space-y-1 ${
+                              isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                            }`}>
                               <li>• <strong>Best times to travel:</strong> Early morning (before 6 AM) or late night (after 10 PM)</li>
                               <li>• <strong>Avoid rush hours:</strong> 6-9 AM and 5-7 PM are typically busiest</li>
                               <li>• <strong>Plan ahead:</strong> Add extra 15-20 minutes during rush hours</li>
@@ -613,10 +806,20 @@ const TrafficPredictionsPanel = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white/60 backdrop-blur-md rounded-lg p-6 border border-gray-200/50 text-center shadow-sm">
-                      <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-gray-600 font-medium">No traffic data available for this road yet</p>
-                      <p className="text-sm text-gray-500 mt-1">Check back later for historical patterns</p>
+                    <div className={`backdrop-blur-md rounded-lg p-6 border text-center shadow-sm ${
+                      isDarkMode
+                        ? 'bg-gray-800/60 border-gray-700/50'
+                        : 'bg-white/60 border-gray-200/50'
+                    }`}>
+                      <AlertCircle className={`w-12 h-12 mx-auto mb-3 ${
+                        isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                      }`} />
+                      <p className={`font-medium ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                      }`}>No traffic data available for this road yet</p>
+                      <p className={`text-sm mt-1 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}>Check back later for historical patterns</p>
                     </div>
                   )}
                 </div>

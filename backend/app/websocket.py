@@ -143,14 +143,13 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = Depends(get_db)):
-    """WebSocket endpoint for real-time communications."""
-    # Verify user exists
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        await websocket.close(code=4001, reason="User not found")
-        return
+async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = None):
+    """WebSocket endpoint for real-time communications.
     
+    Note: db parameter is optional - user should be verified before calling this.
+    This prevents holding database sessions for long-lived WebSocket connections.
+    """
+    # User verification is done in the route handler before calling this
     await manager.connect(websocket, user_id)
     
     try:

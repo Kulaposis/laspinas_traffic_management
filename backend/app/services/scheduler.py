@@ -70,8 +70,9 @@ class DataScheduler:
                     await self._refresh_daily_flood_data()
                     self.last_daily_flood_update = current_time
 
-                # Sleep for a short time before checking again
-                await asyncio.sleep(5)  # Check every 5 seconds
+                # Sleep for a reasonable time before checking again
+                # Reduced frequency to prevent excessive database session creation
+                await asyncio.sleep(30)  # Check every 30 seconds (was 5 seconds)
                 
             except asyncio.CancelledError:
                 break
@@ -81,9 +82,10 @@ class DataScheduler:
     
     async def _update_weather_data(self):
         """Update weather data using the weather service"""
-        db: Session = SessionLocal()
+        db: Session = None
         try:
             logger.info("Starting scheduled weather data update")
+            db = SessionLocal()
             
             # Update weather data for all monitoring areas
             weather_updates = await weather_service.update_all_weather_data(db)
@@ -97,14 +99,18 @@ class DataScheduler:
             
         except Exception as e:
             logger.error(f"Error updating weather data: {str(e)}")
+            if db:
+                db.rollback()
         finally:
-            db.close()
+            if db:
+                db.close()
     
     async def _update_traffic_data(self):
         """Update traffic data using real TomTom API with fallback"""
-        db: Session = SessionLocal()
+        db: Session = None
         try:
             logger.info("Starting scheduled traffic data update")
+            db = SessionLocal()
             
             # Update traffic data using real API with fallback
             await real_traffic_service.update_traffic_data(db)
@@ -112,8 +118,11 @@ class DataScheduler:
             
         except Exception as e:
             logger.error(f"Error updating traffic data: {str(e)}")
+            if db:
+                db.rollback()
         finally:
-            db.close()
+            if db:
+                db.close()
     
     # Footprint data updates disabled to reduce API calls
     # async def _update_footprint_data(self):
@@ -160,9 +169,10 @@ class DataScheduler:
 
     async def _refresh_daily_flood_data(self):
         """Run a daily flood refresh to prevent stale flood statuses."""
-        db: Session = SessionLocal()
+        db: Session = None
         try:
             logger.info("Starting daily flood monitoring refresh")
+            db = SessionLocal()
 
             # Recalculate barangay flood data with no forced rainfall input.
             # This ensures locations revert if there is no ongoing rainfall.
@@ -172,8 +182,11 @@ class DataScheduler:
 
         except Exception as e:
             logger.error(f"Error during daily flood refresh: {str(e)}")
+            if db:
+                db.rollback()
         finally:
-            db.close()
+            if db:
+                db.close()
 
 # Global scheduler instance
 data_scheduler = DataScheduler()

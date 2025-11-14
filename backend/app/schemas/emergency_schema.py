@@ -15,6 +15,11 @@ class EmergencyBase(BaseModel):
 
 class EmergencyCreate(EmergencyBase):
     photo_urls: Optional[List[str]] = Field(None, description="List of photo URLs attached to the emergency report")
+    reporter_phone: Optional[str] = Field(
+        None,
+        max_length=20,
+        description="Optional contact number of the reporter for follow-up"
+    )
 
 class EmergencyUpdate(BaseModel):
     status: Optional[EmergencyStatus] = None
@@ -132,6 +137,7 @@ class EmergencyModerationResponse(BaseModel):
     verified_at: Optional[datetime] = None
     verification_notes: Optional[str] = None
     reporter_name: Optional[str] = None
+    reporter_phone: Optional[str] = None
     created_at: datetime
     
     class Config:

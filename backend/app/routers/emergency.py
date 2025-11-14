@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -23,6 +23,118 @@ from ..utils.role_helpers import is_authorized, normalize_role, get_role_value
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/emergency", tags=["emergency"])
+
+# Helper utilities to normalize Emergency rows to the response schema
+def _normalize_photo_urls(value):
+    if value is None:
+        return []
+    parsed = value
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return [parsed] if parsed.strip() else []
+    if isinstance(parsed, dict):
+        return [v for v in parsed.values() if isinstance(v, str) and v.strip()]
+    if isinstance(parsed, list):
+        return [str(v) for v in parsed if isinstance(v, str) and v.strip()]
+    return []
+
+def _to_float(value, default=None):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+def _to_int(value):
+    try:
+        if value is None:
+            return None
+        i = int(value)
+        return i if i >= 0 else None
+    except (TypeError, ValueError):
+        return None
+
+def _to_response(emergency: Emergency) -> EmergencyResponse:
+    # Status
+    try:
+        if isinstance(emergency.status, EmergencyStatus):
+            status_value = emergency.status.value
+        else:
+            cand = str(emergency.status or "").strip().upper()
+            status_value = EmergencyStatus[cand].value if cand in EmergencyStatus.__members__ else EmergencyStatus.REPORTED.value
+    except Exception:
+        status_value = EmergencyStatus.REPORTED.value
+    # Type
+    try:
+        if isinstance(emergency.emergency_type, EmergencyType):
+            type_value = emergency.emergency_type.value
+        else:
+            cand = str(emergency.emergency_type or "").strip().upper()
+            type_value = EmergencyType[cand].value if cand in EmergencyType.__members__ else (EmergencyType.OTHER.value if hasattr(EmergencyType, "OTHER") else list(EmergencyType)[0].value)
+    except Exception:
+        type_value = EmergencyType.OTHER.value if hasattr(EmergencyType, "OTHER") else list(EmergencyType)[0].value
+    # Severity
+    try:
+        severity_value = str(emergency.severity).strip().lower()
+    except Exception:
+        severity_value = "medium"
+    if severity_value not in {"low", "medium", "high", "critical"}:
+        severity_value = "medium"
+    data = {
+        "id": emergency.id,
+        "emergency_number": emergency.emergency_number or f"EM-{emergency.id}",
+        "emergency_type": type_value,
+        "title": emergency.title or type_value.replace("_", " ").title(),
+        "description": emergency.description or "",
+        "status": status_value,
+        "severity": severity_value,
+        "latitude": _to_float(emergency.latitude, 0.0),
+        "longitude": _to_float(emergency.longitude, 0.0),
+        "address": emergency.address or "",
+        "reporter_id": emergency.reporter_id,
+        "reporter_name": emergency.reporter_name,
+        "reporter_phone": emergency.reporter_phone,
+        "assigned_responder": emergency.assigned_responder,
+        "estimated_response_time": _to_int(emergency.estimated_response_time),
+        "actual_response_time": _to_int(emergency.actual_response_time),
+        "resolution_notes": emergency.resolution_notes,
+        "requires_traffic_control": bool(emergency.requires_traffic_control) if emergency.requires_traffic_control is not None else False,
+        "photo_urls": _normalize_photo_urls(emergency.photo_urls),
+        "is_verified": bool(emergency.is_verified),
+        "verification_status": (emergency.verification_status or "pending").strip().lower(),
+        "verified_by": emergency.verified_by,
+        "verified_at": emergency.verified_at,
+        "verification_notes": emergency.verification_notes,
+        "moderation_priority": (emergency.moderation_priority or "normal").strip().lower(),
+        "created_at": emergency.created_at or datetime.utcnow(),
+        "updated_at": emergency.updated_at,
+        "resolved_at": emergency.resolved_at,
+    }
+    return EmergencyResponse.model_validate(data)
+
+def _to_moderation_response(emergency: Emergency) -> EmergencyModerationResponse:
+    """Build EmergencyModerationResponse safely from ORM."""
+    # Reuse normalization
+    normalized = _to_response(emergency)
+    return EmergencyModerationResponse.model_validate({
+        "id": normalized.id,
+        "emergency_number": normalized.emergency_number,
+        "emergency_type": normalized.emergency_type,
+        "title": normalized.title,
+        "description": normalized.description,
+        "severity": normalized.severity,
+        "photo_urls": normalized.photo_urls,
+        "verification_status": normalized.verification_status,
+        "moderation_priority": normalized.moderation_priority,
+        "is_verified": normalized.is_verified,
+        "verified_by": normalized.verified_by,
+        "verified_at": normalized.verified_at,
+        "verification_notes": normalized.verification_notes,
+        "reporter_name": emergency.reporter_name,
+        "reporter_phone": emergency.reporter_phone,
+        "created_at": normalized.created_at,
+    })
 
 # Debug endpoint to check user role
 @router.get("/debug/check-role")
@@ -56,28 +168,28 @@ def get_emergencies(
     """Get emergencies with filtering options. All authenticated users can view emergencies for safety awareness."""
     # Allow all authenticated users (including citizens) to view emergencies for safety
     # Note: parameter renamed from 'status' to 'status_filter' to avoid shadowing FastAPI's 'status' module
-    query = db.query(Emergency)
-    
-    if emergency_type:
-        query = query.filter(Emergency.emergency_type == emergency_type)
-    if status_filter:
-        query = query.filter(Emergency.status == status_filter)
-    if severity:
-        query = query.filter(Emergency.severity == severity)
-    
-    emergencies = query.order_by(Emergency.created_at.desc()).offset(skip).limit(limit).all()
-    
-    # Convert photo_urls from JSON string to list for each emergency
-    for emergency in emergencies:
-        if emergency.photo_urls:
+    try:
+        query = db.query(Emergency)
+        if emergency_type:
+            query = query.filter(Emergency.emergency_type == emergency_type)
+        if status_filter:
+            query = query.filter(Emergency.status == status_filter)
+        if severity:
+            query = query.filter(Emergency.severity == severity)
+        rows = query.order_by(Emergency.created_at.desc()).offset(skip).limit(limit).all()
+        normalized = []
+        for e in rows:
             try:
-                emergency.photo_urls = json.loads(emergency.photo_urls)
-            except (json.JSONDecodeError, TypeError):
-                emergency.photo_urls = []
-        else:
-            emergency.photo_urls = []
-    
-    return emergencies
+                normalized.append(_to_response(e))
+            except Exception as ve:
+                logger.exception("Failed to serialize emergency %s: %s", getattr(e, "id", None), ve, exc_info=True)
+                continue
+        return normalized
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to fetch emergencies: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch emergencies: {exc}")
 
 @router.get("/active", response_model=List[EmergencyResponse])
 def get_active_emergencies(
@@ -88,22 +200,21 @@ def get_active_emergencies(
     # Allow all authenticated users (including citizens) to view active emergencies for safety
     # No role check - all authenticated users can access this endpoint
     logger.info(f"get_active_emergencies called by user {current_user.id} with role {current_user.role}")
-    
-    active_emergencies = db.query(Emergency).filter(
-        Emergency.status.in_([EmergencyStatus.REPORTED, EmergencyStatus.DISPATCHED, EmergencyStatus.IN_PROGRESS])
-    ).order_by(Emergency.created_at.desc()).all()
-    
-    # Convert photo_urls from JSON string to list for each emergency
-    for emergency in active_emergencies:
-        if emergency.photo_urls:
+    try:
+        rows = db.query(Emergency).filter(
+            Emergency.status.in_([EmergencyStatus.REPORTED, EmergencyStatus.DISPATCHED, EmergencyStatus.IN_PROGRESS])
+        ).order_by(Emergency.created_at.desc()).all()
+        normalized = []
+        for e in rows:
             try:
-                emergency.photo_urls = json.loads(emergency.photo_urls)
-            except (json.JSONDecodeError, TypeError):
-                emergency.photo_urls = []
-        else:
-            emergency.photo_urls = []
-    
-    return active_emergencies
+                normalized.append(_to_response(e))
+            except Exception as ve:
+                logger.exception("Failed to serialize active emergency %s: %s", getattr(e, "id", None), ve, exc_info=True)
+                continue
+        return normalized
+    except Exception as exc:
+        logger.exception("Failed to fetch active emergencies: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch active emergencies: {exc}")
 
 @router.get("/my-reports", response_model=List[EmergencyResponse])
 def get_my_emergency_reports(
@@ -111,21 +222,165 @@ def get_my_emergency_reports(
     current_user: User = Depends(get_current_user)
 ):
     """Get current user's emergency reports."""
-    user_emergencies = db.query(Emergency).filter(
-        Emergency.reporter_id == current_user.id
-    ).order_by(Emergency.created_at.desc()).all()
-    
-    # Convert photo_urls from JSON string to list for each emergency
-    for emergency in user_emergencies:
-        if emergency.photo_urls:
+    try:
+        user_emergencies = db.query(Emergency).filter(
+            Emergency.reporter_id == current_user.id
+        ).order_by(Emergency.created_at.desc()).all()
+        
+        # Sanitize and normalize fields to avoid serialization errors
+        normalized: List[EmergencyResponse] = []
+        for emergency in user_emergencies:
+            def to_float(value, default=None):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return default
+            
+            def to_int(value):
+                try:
+                    if value is None:
+                        return None
+                    int_value = int(value)
+                    return int_value if int_value >= 0 else None
+                except (TypeError, ValueError):
+                    return None
+            
+            # Normalize photo_urls - ensure a list of strings
+            def normalize_photo_urls(value):
+                # Accept DB text, list, dict, or single string; always return list[str]
+                parsed = value
+                if parsed is None:
+                    return []
+                # If it's a JSON string, try to parse
+                if isinstance(parsed, str):
+                    try:
+                        maybe = json.loads(parsed)
+                        parsed = maybe
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        # Treat a plain string as a single URL
+                        return [parsed] if parsed.strip() else []
+                # If it's a dict, take string values
+                if isinstance(parsed, dict):
+                    return [v for v in parsed.values() if isinstance(v, str) and v.strip()]
+                # If it's a list, filter to non-empty strings
+                if isinstance(parsed, list):
+                    return [str(v) for v in parsed if isinstance(v, str) and v.strip()]
+                # Anything else -> empty list
+                return []
+            
+            emergency.photo_urls = normalize_photo_urls(emergency.photo_urls)
+            
+            # Normalize status to EmergencyStatus enum
             try:
-                emergency.photo_urls = json.loads(emergency.photo_urls)
-            except (json.JSONDecodeError, TypeError):
-                emergency.photo_urls = []
-        else:
-            emergency.photo_urls = []
-    
-    return user_emergencies
+                if isinstance(emergency.status, str):
+                    status_key = emergency.status.strip().upper()
+                    if status_key in EmergencyStatus.__members__:
+                        emergency.status = EmergencyStatus[status_key]
+                    else:
+                        emergency.status = EmergencyStatus.REPORTED
+            except Exception:
+                emergency.status = EmergencyStatus.REPORTED
+            
+            # Normalize emergency_type to EmergencyType enum
+            try:
+                if isinstance(emergency.emergency_type, str):
+                    type_key = emergency.emergency_type.strip().upper()
+                    if type_key in EmergencyType.__members__:
+                        emergency.emergency_type = EmergencyType[type_key]
+                    else:
+                        emergency.emergency_type = EmergencyType.OTHER if hasattr(EmergencyType, "OTHER") else list(EmergencyType)[0]
+            except Exception:
+                # Fallback to a safe default if mapping fails
+                emergency.emergency_type = EmergencyType.OTHER if hasattr(EmergencyType, "OTHER") else list(EmergencyType)[0]
+            
+            # Normalize severity to expected lowercase pattern
+            try:
+                if emergency.severity:
+                    emergency.severity = str(emergency.severity).strip().lower()
+                else:
+                    emergency.severity = "medium"
+                if emergency.severity not in {"low", "medium", "high", "critical"}:
+                    emergency.severity = "medium"
+            except Exception:
+                emergency.severity = "medium"
+            
+            # Ensure requires_traffic_control is boolean
+            if emergency.requires_traffic_control is None:
+                emergency.requires_traffic_control = False
+            else:
+                emergency.requires_traffic_control = bool(emergency.requires_traffic_control)
+            
+            # Prepare serializable payload
+            status_value = emergency.status.value if isinstance(emergency.status, EmergencyStatus) else str(emergency.status or EmergencyStatus.REPORTED.value).strip().upper()
+            if status_value not in EmergencyStatus.__members__:
+                status_value = EmergencyStatus.REPORTED.value
+            else:
+                status_value = EmergencyStatus[status_value].value
+            
+            type_value = emergency.emergency_type.value if isinstance(emergency.emergency_type, EmergencyType) else str(emergency.emergency_type or "").strip().upper()
+            if type_value in EmergencyType.__members__:
+                type_value = EmergencyType[type_value].value
+            else:
+                type_value = EmergencyType.OTHER.value if hasattr(EmergencyType, "OTHER") else list(EmergencyType)[0].value
+            
+            emergency_dict = {
+                "id": emergency.id,
+                "emergency_number": emergency.emergency_number or f"EM-{emergency.id}",
+                "emergency_type": type_value,
+                "title": emergency.title or type_value.replace("_", " ").title(),
+                "description": emergency.description or "",
+                "status": status_value,
+                "severity": emergency.severity,
+                "latitude": to_float(emergency.latitude, 0.0),
+                "longitude": to_float(emergency.longitude, 0.0),
+                "address": emergency.address or "",
+                "reporter_id": emergency.reporter_id,
+                "reporter_name": emergency.reporter_name,
+                "reporter_phone": emergency.reporter_phone,
+                "assigned_responder": emergency.assigned_responder,
+                "estimated_response_time": to_int(emergency.estimated_response_time),
+                "actual_response_time": to_int(emergency.actual_response_time),
+                "resolution_notes": emergency.resolution_notes,
+                "requires_traffic_control": emergency.requires_traffic_control,
+                "photo_urls": emergency.photo_urls,
+                "is_verified": bool(emergency.is_verified),
+                "verification_status": (emergency.verification_status or "pending").strip().lower(),
+                "verified_by": emergency.verified_by,
+                "verified_at": emergency.verified_at,
+                "verification_notes": emergency.verification_notes,
+                "moderation_priority": (emergency.moderation_priority or "normal").strip().lower(),
+                "created_at": emergency.created_at or datetime.utcnow(),
+                "updated_at": emergency.updated_at,
+                "resolved_at": emergency.resolved_at,
+            }
+            
+            # Validate using schema to catch issues early
+            try:
+                response_model = EmergencyResponse.model_validate(emergency_dict)
+            except Exception as validation_error:
+                logger.exception(
+                    "EmergencyResponse validation failed for emergency_id=%s owned by user %s: %s",
+                    emergency.id,
+                    current_user.id,
+                    validation_error,
+                    exc_info=True
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to serialize emergency report {emergency.id}: {validation_error}"
+                )
+            
+            normalized.append(response_model)
+        
+        return normalized
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to fetch emergency reports for user %s", current_user.id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch emergency reports: {exc}"
+        )
 
 @router.get("/nearby")
 def get_nearby_emergencies(
@@ -164,6 +419,13 @@ def report_emergency(
         
         # Prepare emergency data
         emergency_dict = emergency_data.dict()
+
+        contact_number = emergency_dict.get("reporter_phone")
+        if contact_number:
+            contact_number = str(contact_number).strip()
+            if not contact_number:
+                contact_number = None
+            emergency_dict["reporter_phone"] = contact_number
         
         # Handle photo URLs - convert list to JSON string for storage
         # Accept both base64 data URLs and regular URLs
@@ -249,6 +511,11 @@ def report_emergency_anonymous(
         
         # Prepare emergency data
         emergency_dict = emergency_data.dict()
+
+        body_contact = emergency_dict.pop("reporter_phone", None)
+        if body_contact:
+            body_contact = str(body_contact).strip()
+        final_contact = body_contact or (reporter_phone.strip() if reporter_phone else None)
         
         # Handle photo URLs - convert list to JSON string for storage
         if emergency_dict.get('photo_urls'):
@@ -267,7 +534,7 @@ def report_emergency_anonymous(
             **emergency_dict,
             emergency_number=emergency_number,
             reporter_name=reporter_name,
-            reporter_phone=reporter_phone,
+            reporter_phone=final_contact,
             moderation_priority=moderation_priority
         )
         
@@ -318,14 +585,97 @@ def update_emergency(
     for field, value in emergency_update.dict(exclude_unset=True).items():
         setattr(emergency, field, value)
     
+    # When resolving, set resolved_at timestamp
     if emergency_update.status == EmergencyStatus.RESOLVED:
         emergency.resolved_at = datetime.utcnow()
     
     db.commit()
     db.refresh(emergency)
-    return emergency
+    # Normalize response to avoid response_model validation errors (e.g., photo_urls as JSON text)
+    try:
+        return _to_response(emergency)
+    except Exception as exc:
+        # Fallback: still return raw object if something unexpected occurs
+        logger.exception("Failed to serialize updated emergency %s: %s", emergency_id, exc, exc_info=True)
+        return emergency
 
 # Content Moderation Endpoints
+@router.api_route(
+    "/moderation/{emergency_id}",
+    methods=["PUT", "POST", "PATCH"],
+    response_model=EmergencyModerationResponse
+)
+def moderate_emergency_report(
+    emergency_id: int,
+    moderation_data: EmergencyModerationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Moderate an emergency report (Admin only)."""
+    try:
+        # Case-insensitive role check
+        role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+        role_upper = role_value.upper()
+        if role_upper not in ["ADMIN", "LGU_STAFF"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Only admins can moderate reports. Your role: {role_value}"
+            )
+        
+        emergency = db.query(Emergency).filter(Emergency.id == emergency_id).first()
+        if not emergency:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Emergency report not found"
+            )
+        
+        # Update moderation fields
+        emergency.verification_status = moderation_data.verification_status
+        emergency.is_verified = moderation_data.verification_status == "verified"
+        emergency.verified_by = current_user.id
+        emergency.verified_at = datetime.utcnow()
+        
+        if moderation_data.verification_notes:
+            emergency.verification_notes = moderation_data.verification_notes
+        if moderation_data.moderation_priority:
+            emergency.moderation_priority = moderation_data.moderation_priority
+        
+        db.commit()
+        db.refresh(emergency)
+        
+        # Log moderation activity (non-blocking - don't fail the request if logging fails)
+        try:
+            activity_logger = get_activity_logger(db)
+            activity_logger.log_emergency_moderated(
+                user=current_user,
+                emergency_id=emergency.id,
+                verification_status=moderation_data.verification_status
+            )
+        except Exception as log_error:
+            # Don't fail the entire request if logging fails
+            logger.warning(f"Failed to log moderation activity for emergency {emergency_id}: {log_error}")
+        
+        # Return normalized moderation response
+        try:
+            return _to_moderation_response(emergency)
+        except Exception as ve:
+            logger.exception("Failed to serialize moderation response for emergency %s: %s", emergency_id, ve, exc_info=True)
+            # Fallback: still return normalized general response (compatible superset)
+            return _to_response(emergency)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error moderating emergency report {emergency_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to moderate emergency report: {str(e)}"
+        )
+
+@router.options("/moderation/{emergency_id}", include_in_schema=False)
+def moderation_options(emergency_id: int) -> Response:
+    """Handle CORS preflight requests for moderation endpoint."""
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 @router.get("/moderation/queue", response_model=ModerationQueueResponse)
 def get_moderation_queue(
     skip: int = Query(0, ge=0),
@@ -336,114 +686,78 @@ def get_moderation_queue(
     current_user: User = Depends(get_current_user)
 ):
     """Get emergency reports pending moderation (Admin only)."""
-    # Debug logging
-    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
-    role_upper = role_value.upper()
-    logger.info(f"Moderation queue access attempt - User ID: {current_user.id}, Username: {current_user.username}, Role: {current_user.role}, Role Value: {role_value}, Role Upper: {role_upper}")
-    
-    # Check authorization - handle both enum and string roles
-    is_admin = role_upper in ["ADMIN", "LGU_STAFF"]
-    logger.info(f"Authorization check - is_admin: {is_admin}, role_upper: {role_upper}")
-    
-    if not is_admin:
-        logger.warning(f"Access denied for user {current_user.id} ({current_user.username}) with role {role_value}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Only admins can access moderation queue. Your role: {role_value}"
+    try:
+        # Debug logging
+        role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+        role_upper = role_value.upper()
+        logger.info(f"Moderation queue access attempt - User ID: {current_user.id}, Username: {current_user.username}, Role: {current_user.role}, Role Value: {role_value}, Role Upper: {role_upper}")
+        
+        # Check authorization - handle both enum and string roles
+        is_admin = role_upper in ["ADMIN", "LGU_STAFF"]
+        logger.info(f"Authorization check - is_admin: {is_admin}, role_upper: {role_upper}")
+        
+        if not is_admin:
+            logger.warning(f"Access denied for user {current_user.id} ({current_user.username}) with role {role_value}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Only admins can access moderation queue. Your role: {role_value}"
+            )
+        
+        query = db.query(Emergency).filter(
+            Emergency.verification_status.in_(["pending", "flagged"])
         )
-    
-    query = db.query(Emergency).filter(
-        Emergency.verification_status.in_(["pending", "flagged"])
-    )
-    
-    if priority:
-        query = query.filter(Emergency.moderation_priority == priority)
-    if verification_status:
-        query = query.filter(Emergency.verification_status == verification_status)
-    
-    # Get statistics
-    total_pending = db.query(Emergency).filter(Emergency.verification_status == "pending").count()
-    high_priority = db.query(Emergency).filter(
-        Emergency.verification_status.in_(["pending", "flagged"]),
-        Emergency.moderation_priority.in_(["high", "urgent"])
-    ).count()
-    flagged_reports = db.query(Emergency).filter(Emergency.verification_status == "flagged").count()
-    
-    # Get pending reports
-    pending_reports = query.order_by(
-        Emergency.moderation_priority.desc(),
-        Emergency.created_at.desc()
-    ).offset(skip).limit(limit).all()
-    
-    # Convert photo_urls from JSON string to list for response
-    for report in pending_reports:
-        if report.photo_urls:
-            try:
-                report.photo_urls = json.loads(report.photo_urls)
-            except (json.JSONDecodeError, TypeError):
-                report.photo_urls = []
-    
-    return ModerationQueueResponse(
-        total_pending=total_pending,
-        high_priority=high_priority,
-        flagged_reports=flagged_reports,
-        pending_reports=pending_reports
-    )
+        
+        if priority:
+            query = query.filter(Emergency.moderation_priority == priority)
+        if verification_status:
+            query = query.filter(Emergency.verification_status == verification_status)
+        
+        # Get statistics
+        total_pending = db.query(Emergency).filter(Emergency.verification_status == "pending").count()
+        high_priority = db.query(Emergency).filter(
+            Emergency.verification_status.in_(["pending", "flagged"]),
+            Emergency.moderation_priority.in_(["high", "urgent"])
+        ).count()
+        flagged_reports = db.query(Emergency).filter(Emergency.verification_status == "flagged").count()
+        
+        # Get pending reports
+        pending_reports = query.order_by(
+            Emergency.moderation_priority.desc(),
+            Emergency.created_at.desc()
+        ).offset(skip).limit(limit).all()
+        
+        # Convert photo_urls from JSON string to list for response
+        for report in pending_reports:
+            if report.photo_urls:
+                try:
+                    report.photo_urls = json.loads(report.photo_urls)
+                except (json.JSONDecodeError, TypeError):
+                    report.photo_urls = []
+        
+        return ModerationQueueResponse(
+            total_pending=total_pending,
+            high_priority=high_priority,
+            flagged_reports=flagged_reports,
+            pending_reports=pending_reports
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching moderation queue: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch moderation queue: {str(e)}"
+        )
 
-@router.put("/moderation/{emergency_id}", response_model=EmergencyModerationResponse)
-def moderate_emergency_report(
+# Provide a harmless GET handler for /moderation/{emergency_id} AFTER the /moderation/queue
+# declaration so that static route takes precedence. This avoids noisy 405s from stray GETs.
+@router.get("/moderation/{emergency_id}", include_in_schema=False)
+def moderation_noop_get_after_queue(
     emergency_id: int,
-    moderation_data: EmergencyModerationUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Moderate an emergency report (Admin only)."""
-    # Case-insensitive role check
-    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
-    role_upper = role_value.upper()
-    if role_upper not in ["ADMIN", "LGU_STAFF"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Only admins can moderate reports. Your role: {role_value}"
-        )
-    
-    emergency = db.query(Emergency).filter(Emergency.id == emergency_id).first()
-    if not emergency:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Emergency report not found"
-        )
-    
-    # Update moderation fields
-    emergency.verification_status = moderation_data.verification_status
-    emergency.is_verified = moderation_data.verification_status == "verified"
-    emergency.verified_by = current_user.id
-    emergency.verified_at = datetime.utcnow()
-    
-    if moderation_data.verification_notes:
-        emergency.verification_notes = moderation_data.verification_notes
-    if moderation_data.moderation_priority:
-        emergency.moderation_priority = moderation_data.moderation_priority
-    
-    db.commit()
-    db.refresh(emergency)
-    
-    # Convert photo_urls from JSON string to list for response
-    if emergency.photo_urls:
-        try:
-            emergency.photo_urls = json.loads(emergency.photo_urls)
-        except (json.JSONDecodeError, TypeError):
-            emergency.photo_urls = []
-    
-    # Log moderation activity
-    activity_logger = get_activity_logger(db)
-    activity_logger.log_emergency_moderated(
-        user=current_user,
-        emergency_id=emergency.id,
-        verification_status=moderation_data.verification_status
-    )
-    
-    return emergency
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # Complaints & Suggestions Endpoints
 @router.get("/complaints", response_model=List[ComplaintSuggestionResponse])

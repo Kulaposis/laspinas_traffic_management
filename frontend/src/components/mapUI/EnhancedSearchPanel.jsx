@@ -1,11 +1,21 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Menu, X, History, MapPin, Zap, RefreshCw, Search, Building } from 'lucide-react';
+import { useDarkMode } from '../../context/DarkModeContext';
 import enhancedGeocodingService from '../../services/enhancedGeocodingService';
 import geoapifyService from '../../services/geoapifyService';
 
 /**
  * Enhanced Search Panel Component
  * Handles origin and destination search with autocomplete, suggestions, and recent searches
+ * 
+ * Mobile Responsive Features:
+ * - Responsive positioning (full-width on mobile, adjusted for side panels on larger screens)
+ * - Touch-friendly buttons with minimum 44px touch targets
+ * - Optimized padding and spacing for mobile screens
+ * - Safe area insets support for notched devices
+ * - Smooth scrolling with -webkit-overflow-scrolling: touch
+ * - Responsive text sizes and icon sizes
+ * - Active states for better touch feedback
  */
 const EnhancedSearchPanel = ({
   selectedOrigin,
@@ -31,6 +41,7 @@ const EnhancedSearchPanel = ({
   onShowPlaceInfo = null, // New callback to show place info panel
   onSearchResultsChange = null // Callback to pass search results to parent for map display
 }) => {
+  const { isDarkMode } = useDarkMode();
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -38,12 +49,27 @@ const EnhancedSearchPanel = ({
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef(null);
   const searchPanelRef = useRef(null);
+  // Track small screens to adjust layout when sidebar is open
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const SIDEBAR_MOBILE_WIDTH = 700; // px, approximate sidebar width on mobile (wider for tighter shrink)
   
   // Expose ref to parent if needed
   useEffect(() => {
     if (typeof onSearchPanelRef === 'function') {
       onSearchPanelRef(searchPanelRef);
     }
+  }, []);
+
+  // Listen for resize to detect small screen
+  useEffect(() => {
+    const handleResize = () => {
+      try {
+        setIsSmallScreen(window.innerWidth < 640); // Tailwind sm breakpoint
+      } catch (_) {}
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Handle clicks outside search panel to close it
@@ -67,7 +93,37 @@ const EnhancedSearchPanel = ({
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showSearchResults]);
+
+  // Prevent body scroll when dropdown is open on mobile
+  useEffect(() => {
+    if (showSearchResults) {
+      // Save current scroll position
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      
+      // Prevent body scroll on mobile
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      const originalPosition = window.getComputedStyle(document.body).position;
+      
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+
+      return () => {
+        // Restore body scroll
+        document.body.style.overflow = originalStyle;
+        document.body.style.position = originalPosition;
+        document.body.style.top = '';
+        document.body.style.width = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
   }, [showSearchResults]);
 
   const handleSearch = useCallback(async (query, mode = searchMode) => {
@@ -283,35 +339,57 @@ const EnhancedSearchPanel = ({
     <div 
       className={`absolute transition-all duration-300 ease-out ${
         showSidePanel
-          ? 'left-80 right-4 sm:left-96 sm:right-6'
+          ? 'left-0 right-0 sm:left-80 sm:right-4 md:left-96 md:right-6'
           : (showHistoryPanel
-            ? 'left-72 right-4 sm:left-80 sm:right-6'
-            : 'left-4 right-4 sm:left-6 sm:right-6')
-      } top-3 sm:top-4 ${
+            ? 'left-0 right-0 sm:left-72 sm:right-4 md:left-80 md:right-6'
+            : 'left-2 right-2 sm:left-4 sm:right-4 md:left-6 md:right-6')
+      } top-2 sm:top-3 md:top-4 ${
         isNavigationActive && !searchBarVisible
           ? 'opacity-0 pointer-events-none translate-y-[-100%]'
           : 'opacity-100 translate-y-0'
       }`} 
-      style={{ zIndex: 40 }}
+      style={{ 
+        zIndex: 1000,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        // On small screens, when the sidebar is open, shift and shrink the bar
+        ...(showSidePanel && isSmallScreen
+          ? { 
+              left: `${SIDEBAR_MOBILE_WIDTH}px`, 
+              right: '6px',
+              maxWidth: `calc(100vw - ${SIDEBAR_MOBILE_WIDTH + 12}px)` 
+            }
+          : {})
+      }}
     >
-      <div className="flex items-center justify-center space-x-2 max-w-4xl mx-auto">
+      <div className="flex items-center justify-center space-x-1.5 sm:space-x-2 max-w-4xl mx-auto">
         {/* Hamburger Menu - Positioned separately */}
         {onToggleSidePanel && (
           <button
             onClick={onToggleSidePanel}
-            className="bg-white hover:bg-gray-50 rounded-full p-2.5 flex-shrink-0 shadow-md hover:shadow-lg transition-all duration-200 min-w-[40px] min-h-[40px] flex items-center justify-center z-50 border border-gray-300"
-            style={{ zIndex: 41 }}
+            className={`rounded-full p-2 sm:p-2.5 flex-shrink-0 shadow-md hover:shadow-lg active:scale-95 transition-all duration-200 min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] flex items-center justify-center z-50 border touch-manipulation ${
+              isDarkMode
+                ? 'bg-gray-800 hover:bg-gray-700 border-gray-700 active:bg-gray-600'
+                : 'bg-white hover:bg-gray-50 border-gray-300 active:bg-gray-100'
+            }`}
+            style={{ zIndex: 1001 }}
             title="Menu"
+            aria-label="Toggle menu"
           >
-            <Menu className="w-5 h-5 text-gray-700" />
+            <Menu className={`w-5 h-5 sm:w-5 sm:h-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`} />
           </button>
         )}
 
         {/* Google Maps Style - Single Search Bar - Normal/Standard */}
-        <div ref={searchPanelRef} className="flex-1 bg-gray-100 rounded-lg shadow-md border border-gray-300 overflow-hidden transition-all duration-200 relative">
-          <div className="flex items-center px-4 py-2.5">
+        <div ref={searchPanelRef} className={`flex-1 rounded-lg sm:rounded-lg shadow-md border overflow-visible transition-all duration-200 relative ${
+          isDarkMode
+            ? 'bg-gray-800 border-gray-700'
+            : 'bg-gray-100 border-gray-300'
+        }`}>
+          <div className="flex items-center px-3 py-2 sm:px-4 sm:py-2.5">
             {/* Search Icon */}
-            <Search className="w-5 h-5 text-gray-500 flex-shrink-0 mr-3" />
+            <Search className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mr-2 sm:mr-3 ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+            }`} />
             
             {/* Single Search Input - Google Maps Style */}
             <input
@@ -334,7 +412,11 @@ const EnhancedSearchPanel = ({
               onBlur={() => {
                 setTimeout(() => setShowSuggestions(false), 200);
               }}
-              className="flex-1 text-base text-gray-900 placeholder-gray-500 bg-transparent focus:outline-none min-w-0"
+              className={`flex-1 text-sm sm:text-base bg-transparent focus:outline-none min-w-0 ${
+                isDarkMode
+                  ? 'text-gray-100 placeholder-gray-500'
+                  : 'text-gray-900 placeholder-gray-500'
+              }`}
             />
             
             {/* Clear Button - X icon like Google Maps */}
@@ -350,31 +432,56 @@ const EnhancedSearchPanel = ({
                   setShowSearchResults(false);
                   setShowSuggestions(false);
                 }}
-                className="p-1.5 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0 ml-1"
+                className={`p-1 sm:p-1.5 rounded-full transition-colors flex-shrink-0 ml-1 touch-manipulation active:scale-95 ${
+                  isDarkMode
+                    ? 'hover:bg-gray-700 active:bg-gray-600'
+                    : 'hover:bg-gray-100 active:bg-gray-200'
+                }`}
                 title="Clear search"
+                aria-label="Clear search"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className={`w-4 h-4 sm:w-5 sm:h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
               </button>
             )}
           </div>
 
-          {/* Search Results Dropdown - Google Maps Style - More Compact */}
+          {/* Search Results Dropdown - Google Maps Style - Mobile Responsive */}
           {showSearchResults && (
             <div 
-              className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-y-auto animate-slide-down z-50"
+              className={`absolute top-full left-0 right-0 mt-1 sm:mt-2 rounded-xl sm:rounded-2xl shadow-2xl border overflow-hidden z-[9999] ${
+                isDarkMode
+                  ? 'bg-gray-900/98 backdrop-blur-md border-gray-600'
+                  : 'bg-white border-gray-200'
+              }`}
               style={{
-                maxHeight: 'min(60vh, calc(100dvh - 200px))'
+                maxHeight: 'min(calc(100vh - 120px), calc(100dvh - 120px), 70vh)',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+                position: 'absolute',
+                willChange: 'transform'
               }}
             >
+              <div 
+                className="overflow-y-auto overflow-x-hidden h-full"
+                style={{
+                  maxHeight: 'min(calc(100vh - 120px), calc(100dvh - 120px), 70vh)',
+                  WebkitOverflowScrolling: 'touch',
+                  overscrollBehavior: 'contain'
+                }}
+              >
 
               {/* Las Piñas Suggestions */}
               {showSuggestions && !currentQuery && (
-                <div className="px-3 py-2 border-b border-gray-200">
-                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 px-2 flex items-center">
-                    <MapPin className="w-3 h-3 mr-1.5" />
+                <div className={`px-2 sm:px-3 py-2 border-b ${
+                  isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                }`}>
+                  <div className={`text-xs font-semibold uppercase tracking-wide mb-2 px-2 flex items-center ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    <MapPin className={`w-3 h-3 mr-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
                     Popular Places in Las Piñas City
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-1.5">
                     {lasPinasSuggestions.map((suggestion, index) => {
                       return (
                       <button
@@ -398,15 +505,19 @@ const EnhancedSearchPanel = ({
                           };
                           handleLocationSelect(location, 'destination');
                         }}
-                        className="w-full min-h-[56px] flex items-center space-x-2.5 px-2.5 py-2 hover:bg-gray-50 rounded-lg transition-all duration-150 text-left group border border-gray-100 bg-white hover:border-gray-200 active:scale-[0.98]"
+                        className={`w-full min-h-[52px] sm:min-h-[56px] flex items-center space-x-2 sm:space-x-2.5 px-2.5 sm:px-2.5 py-2 rounded-lg transition-all duration-150 text-left group border active:scale-[0.97] touch-manipulation ${
+                          isDarkMode
+                            ? 'bg-gray-800/90 border-gray-600 active:bg-gray-700 active:border-gray-500'
+                            : 'bg-white border-gray-100 active:bg-gray-50 active:border-gray-200'
+                        }`}
                       >
                         {/* Icon without circular background - Google Maps style */}
-                        <div className="text-xl flex-shrink-0">
+                        <div className={`text-lg sm:text-xl flex-shrink-0 leading-none ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                           {suggestion.icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{suggestion.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{suggestion.category} • Las Piñas City</p>
+                          <p className={`text-sm font-semibold truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{suggestion.name}</p>
+                          <p className={`text-xs truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{suggestion.category} • Las Piñas City</p>
                         </div>
                       </button>
                       );
@@ -417,9 +528,13 @@ const EnhancedSearchPanel = ({
 
               {/* Recent Searches */}
               {recentSearches.length > 0 && (
-                <div className="px-3 py-2 border-b border-gray-200">
-                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 px-2 flex items-center">
-                    <History className="w-3 h-3 mr-1.5" />
+                <div className={`px-2 sm:px-3 py-2 border-b ${
+                  isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                }`}>
+                  <div className={`text-xs font-semibold uppercase tracking-wide mb-2 px-2 flex items-center ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    <History className={`w-3 h-3 mr-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
                     Recent Searches
                   </div>
                   <div className="space-y-0.5">
@@ -434,16 +549,20 @@ const EnhancedSearchPanel = ({
                           e.stopPropagation();
                           handleLocationSelect(recent, 'destination');
                         }}
-                        className="w-full min-h-[56px] flex items-center space-x-2.5 px-2.5 py-2 hover:bg-gray-50 rounded-lg transition-all duration-150 text-left group border border-gray-100 bg-white hover:border-gray-200 active:scale-[0.98]"
+                        className={`w-full min-h-[52px] sm:min-h-[56px] flex items-center space-x-2 sm:space-x-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 text-left group border active:scale-[0.97] touch-manipulation ${
+                          isDarkMode
+                            ? 'bg-gray-800/90 border-gray-600 active:bg-gray-700 active:border-gray-500'
+                            : 'bg-white border-gray-100 active:bg-gray-50 active:border-gray-200'
+                        }`}
                       >
                         {/* Icon without circular background - Google Maps style */}
                         <div className="flex-shrink-0">
-                          <History className="w-5 h-5 text-gray-500" />
+                          <History className={`w-4 h-4 sm:w-5 sm:h-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{recent.name}</p>
+                          <p className={`text-sm font-semibold truncate ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{recent.name}</p>
                           {recent.address?.full && (
-                            <p className="text-xs text-gray-500 truncate mt-0.5">{recent.address.full}</p>
+                            <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{recent.address.full}</p>
                           )}
                         </div>
                       </button>
@@ -455,27 +574,31 @@ const EnhancedSearchPanel = ({
 
               {/* Loading Indicator */}
               {isSearching && currentQuery && (
-                <div className="px-3 py-4 flex items-center justify-center">
-                  <div className="flex items-center space-x-2 text-gray-600">
-                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                    <span className="text-sm">Searching places...</span>
+                <div className="px-2 sm:px-3 py-4 flex items-center justify-center">
+                  <div className={`flex items-center space-x-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <div className={`w-4 h-4 border-2 rounded-full animate-spin ${
+                      isDarkMode ? 'border-gray-600 border-t-blue-500' : 'border-gray-300 border-t-blue-500'
+                    }`}></div>
+                    <span className="text-xs sm:text-sm">Searching places...</span>
                   </div>
                 </div>
               )}
 
               {/* No Results Message */}
               {!isSearching && currentQuery && searchResults.length === 0 && (
-                <div className="px-3 py-4 text-center">
-                  <p className="text-sm text-gray-500">No places found</p>
-                  <p className="text-xs text-gray-400 mt-1">Try a different search term</p>
+                <div className="px-2 sm:px-3 py-4 text-center">
+                  <p className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>No places found</p>
+                  <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Try a different search term</p>
                 </div>
               )}
 
               {/* Search Results */}
               {!isSearching && searchResults.filter(result => !result.isRecent).length > 0 && (
-                <div className="px-3 py-2">
-                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 px-2 flex items-center">
-                    <MapPin className="w-3 h-3 mr-1.5" />
+                <div className="px-2 sm:px-3 py-2">
+                  <div className={`text-xs font-semibold uppercase tracking-wide mb-2 px-2 flex items-center ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    <MapPin className={`w-3 h-3 mr-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
                     {searchResults.some(r => r.isPriority) ? 'Las Piñas & Nearby' : 'Search Results'}
                   </div>
                   <div className="space-y-0.5">
@@ -508,31 +631,43 @@ const EnhancedSearchPanel = ({
                           e.stopPropagation();
                           handleLocationSelect(result, 'destination');
                         }}
-                        className={`w-full min-h-[56px] flex items-center space-x-2.5 px-2.5 py-2 hover:bg-gray-50 rounded-lg transition-all duration-150 text-left group border active:scale-[0.98] ${
-                          result.isPriority 
-                            ? 'border-blue-100 bg-blue-50/20 hover:border-blue-200' 
-                            : 'border-gray-100 bg-white hover:border-gray-200'
+                        className={`w-full min-h-[52px] sm:min-h-[56px] flex items-center space-x-2 sm:space-x-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 text-left group border active:scale-[0.97] touch-manipulation ${
+                          result.isPriority
+                            ? isDarkMode
+                              ? 'border-blue-600 bg-blue-900/40 active:border-blue-500 active:bg-blue-900/60'
+                              : 'border-blue-100 bg-blue-50/20 active:border-blue-200'
+                            : isDarkMode
+                              ? 'border-gray-600 bg-gray-800/90 active:border-gray-500 active:bg-gray-700'
+                              : 'border-gray-100 bg-white active:border-gray-200'
                         }`}
                       >
                         {/* Icon - Building for POIs/businesses, MapPin for addresses (Geoapify style) */}
                         <div className="flex-shrink-0">
                           {isPOI ? (
-                            <Building className={`w-5 h-5 ${result.isPriority ? 'text-blue-600' : 'text-gray-500'}`} />
+                            <Building className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                              result.isPriority
+                                ? (isDarkMode ? 'text-blue-400' : 'text-blue-600')
+                                : (isDarkMode ? 'text-gray-400' : 'text-gray-500')
+                            }`} />
                           ) : (
-                            <MapPin className={`w-5 h-5 ${result.isPriority ? 'text-blue-600' : 'text-gray-500'}`} />
+                            <MapPin className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                              result.isPriority
+                                ? (isDarkMode ? 'text-blue-400' : 'text-blue-600')
+                                : (isDarkMode ? 'text-gray-400' : 'text-gray-500')
+                            }`} />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{result.name}</p>
+                          <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
+                            <p className={`text-sm font-semibold truncate flex-1 min-w-0 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{result.name}</p>
                             {result.isPriority && (
-                              <span className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full font-medium flex-shrink-0">
+                              <span className="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] sm:text-xs rounded-full font-medium flex-shrink-0">
                                 Las Piñas
                               </span>
                             )}
                           </div>
                           {formattedAddress && (
-                            <p className="text-xs text-gray-500 truncate mt-0.5">{formattedAddress}</p>
+                            <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{formattedAddress}</p>
                           )}
                         </div>
                       </button>
@@ -541,6 +676,7 @@ const EnhancedSearchPanel = ({
                   </div>
                 </div>
               )}
+              </div>
             </div>
           )}
         </div>

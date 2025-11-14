@@ -9,6 +9,7 @@ import re
 import json
 import logging
 from typing import List, Dict, Optional
+from sqlalchemy import and_
 from ..db import SessionLocal
 from ..models.traffic import RoadIncident
 import time
@@ -32,24 +33,40 @@ class RoadworksScraperService:
             'lng_max': 121.0500
         }
         
-        # Common Las Piñas roads for keyword matching
+        # Common Las Piñas roads for keyword matching (excluding Sucat - it's in Parañaque)
         self.laspinas_roads = [
             'alabang-zapote', 'alabang zapote', 'c-5', 'c5', 'quirino avenue', 'quirino',
-            'naga road', 'real street', 'sucat road', 'bf homes', 'talon road',
+            'naga road', 'real street', 'bf homes', 'talon road',
             'CAA road', 'tiongquiao', 'casimiro', 'camella', 'perpetual help',
             'las piñas', 'las pinas', 'laspinas', 'laspinas city', 'las piñas city',
-            'zapote road', 'alabang road', 'muntinlupa road', 'paranaque road',
+            'zapote road', 'alabang road', 'muntinlupa road',
             'pamplona road', 'pamplona avenue', 'tambo road', 'tambo avenue',
             'pulang lupa', 'pulang lupa road', 'ilaya road', 'ilaya avenue',
             'pilar road', 'pilar avenue', 'veraville', 'veraville road',
             'manila bay', 'manila bay road', 'coastal road', 'coastal',
             'south luzon expressway', 'slex', 'skyway', 'skyway extension'
         ]
+        
+        # Roads to exclude (outside Las Piñas City)
+        self.excluded_roads = [
+            'sucat', 'sucat road', 'paranaque', 'paranaque road'
+        ]
 
     def is_laspinas_related(self, text: str, location: str = None) -> bool:
-        """Check if the content is related to Las Piñas City"""
+        """Check if the content is related to Las Piñas City (excluding Sucat and Parañaque)"""
         text_lower = text.lower()
         location_lower = location.lower() if location else ""
+        combined_text = f"{text_lower} {location_lower}"
+        
+        # First, check if it contains excluded roads (Sucat, Parañaque) - exclude these
+        for excluded in self.excluded_roads:
+            if excluded.lower() in combined_text:
+                # Only exclude if it's clearly about Sucat/Parañaque, not just a passing mention
+                if 'sucat' in combined_text and 'las piñas' not in combined_text and 'laspinas' not in combined_text:
+                    return False
+                if 'paranaque' in combined_text or 'parañaque' in combined_text:
+                    if 'las piñas' not in combined_text and 'laspinas' not in combined_text:
+                        return False
         
         # Check for Las Piñas keywords
         laspinas_keywords = ['las piñas', 'las pinas', 'laspinas']
@@ -57,7 +74,7 @@ class RoadworksScraperService:
             if keyword in text_lower or keyword in location_lower:
                 return True
         
-        # Check for road names
+        # Check for road names (only Las Piñas roads)
         for road in self.laspinas_roads:
             if road.lower() in text_lower or road.lower() in location_lower:
                 return True
@@ -90,7 +107,6 @@ class RoadworksScraperService:
             'quirino': {'latitude': 14.438, 'longitude': 121.022},
             'naga road': {'latitude': 14.432, 'longitude': 121.019},
             'real street': {'latitude': 14.442, 'longitude': 121.018},
-            'sucat road': {'latitude': 14.448, 'longitude': 121.025},
             'bf homes': {'latitude': 14.445, 'longitude': 121.028},
             'talon road': {'latitude': 14.435, 'longitude': 121.025},
             'caa road': {'latitude': 14.436, 'longitude': 121.021},
@@ -98,7 +114,6 @@ class RoadworksScraperService:
             'zapote road': {'latitude': 14.4504, 'longitude': 121.017},
             'alabang road': {'latitude': 14.4504, 'longitude': 121.017},
             'muntinlupa road': {'latitude': 14.445, 'longitude': 121.028},
-            'paranaque road': {'latitude': 14.448, 'longitude': 121.025},
             'pamplona road': {'latitude': 14.440, 'longitude': 121.020},
             'pamplona avenue': {'latitude': 14.440, 'longitude': 121.020},
             'tambo road': {'latitude': 14.435, 'longitude': 121.025},
@@ -691,12 +706,12 @@ class RoadworksScraperService:
                     'incident_type': 'road_work'
                 },
                 {
-                    'title': 'Sucat Road drainage system upgrade',
-                    'description': 'Major drainage system upgrade on Sucat Road to prevent flooding. Expect lane closures and traffic diversions.',
-                    'source': 'Local News Facebook',
-                    'source_url': 'https://facebook.com/laspinasnews',
-                    'coordinates': {'latitude': 14.448, 'longitude': 121.025},
-                    'severity': 'medium',
+                    'title': 'Alabang-Zapote Road maintenance',
+                    'description': 'Routine maintenance work on Alabang-Zapote Road near Las Piñas City Hall. Minor delays expected during off-peak hours.',
+                    'source': 'Las Piñas LGU Facebook',
+                    'source_url': 'https://facebook.com/laspinascity',
+                    'coordinates': {'latitude': 14.4504, 'longitude': 121.017},
+                    'severity': 'low',
                     'incident_type': 'road_work'
                 }
             ]
@@ -832,53 +847,110 @@ class RoadworksScraperService:
         db = SessionLocal()
         saved_count = 0
         updated_count = 0
+        error_count = 0
         
         try:
+            if not roadworks:
+                logger.warning("No roadworks to save")
+                return {
+                    'new_roadworks': 0,
+                    'updated_roadworks': 0,
+                    'total_processed': 0,
+                    'errors': 0
+                }
+            
             for roadwork_data in roadworks:
-                coords = roadwork_data['coordinates']
-                
-                # Check if similar roadwork already exists
-                existing = db.query(RoadIncident).filter(
-                    RoadIncident.title.ilike(f"%{roadwork_data['title'][:50]}%"),
-                    RoadIncident.incident_type == 'road_work',
-                    RoadIncident.is_active == True
-                ).first()
-                
-                if existing:
-                    # Update existing roadwork
-                    existing.description = roadwork_data['description']
-                    existing.severity = roadwork_data['severity']
-                    existing.updated_at = datetime.now(timezone.utc)
-                    updated_count += 1
-                else:
-                    # Create new roadwork incident
-                    new_incident = RoadIncident(
-                        incident_type='road_work',
-                        title=roadwork_data['title'],
-                        description=roadwork_data['description'],
-                        severity=roadwork_data['severity'],
-                        latitude=coords['latitude'],
-                        longitude=coords['longitude'],
-                        reporter_source='web_scraping',
-                        is_active=True,
-                        impact_radius_meters=500.0,
-                        estimated_clearance_time=datetime.now(timezone.utc) + timedelta(days=30)  # Default 30 days
-                    )
-                    db.add(new_incident)
-                    saved_count += 1
+                try:
+                    # Validate required fields
+                    if not roadwork_data.get('title'):
+                        logger.warning(f"Skipping roadwork with missing title: {roadwork_data}")
+                        error_count += 1
+                        continue
+                    
+                    # Filter out Sucat and Parañaque roadworks (not in Las Piñas City)
+                    title_lower = str(roadwork_data.get('title', '')).lower()
+                    desc_lower = str(roadwork_data.get('description', '')).lower()
+                    combined_text = f"{title_lower} {desc_lower}"
+                    
+                    # Check if it's about Sucat or Parañaque (exclude these)
+                    if any(excluded in combined_text for excluded in ['sucat', 'paranaque', 'parañaque']):
+                        # Only exclude if it's clearly about Sucat/Parañaque, not just a passing mention
+                        if 'sucat' in combined_text and 'las piñas' not in combined_text and 'laspinas' not in combined_text:
+                            logger.info(f"Excluding Sucat roadwork: {roadwork_data.get('title')}")
+                            continue
+                        if ('paranaque' in combined_text or 'parañaque' in combined_text) and 'las piñas' not in combined_text and 'laspinas' not in combined_text:
+                            logger.info(f"Excluding Parañaque roadwork: {roadwork_data.get('title')}")
+                            continue
+                    
+                    # Get coordinates - handle different formats
+                    coords = roadwork_data.get('coordinates') or {}
+                    if not coords:
+                        # Try to get from root level
+                        coords = {
+                            'latitude': roadwork_data.get('latitude', 14.4504),  # Default Las Piñas center
+                            'longitude': roadwork_data.get('longitude', 121.0170)
+                        }
+                    
+                    # Ensure coordinates are valid
+                    if not isinstance(coords.get('latitude'), (int, float)) or not isinstance(coords.get('longitude'), (int, float)):
+                        logger.warning(f"Skipping roadwork with invalid coordinates: {roadwork_data}")
+                        error_count += 1
+                        continue
+                    
+                    title = str(roadwork_data['title'])[:200]  # Limit title length
+                    description = str(roadwork_data.get('description', ''))[:1000]  # Limit description length
+                    severity = roadwork_data.get('severity', 'medium')
+                    
+                    # Check if similar roadwork already exists
+                    existing = db.query(RoadIncident).filter(
+                        and_(
+                            RoadIncident.title.ilike(f"%{title[:50]}%"),
+                            RoadIncident.incident_type == 'road_work',
+                            RoadIncident.is_active == True
+                        )
+                    ).first()
+                    
+                    if existing:
+                        # Update existing roadwork
+                        existing.description = description
+                        existing.severity = severity
+                        existing.updated_at = datetime.now(timezone.utc)
+                        updated_count += 1
+                    else:
+                        # Create new roadwork incident
+                        new_incident = RoadIncident(
+                            incident_type='road_work',
+                            title=title,
+                            description=description,
+                            severity=severity,
+                            latitude=float(coords['latitude']),
+                            longitude=float(coords['longitude']),
+                            reporter_source='web_scraping',
+                            is_active=True,
+                            impact_radius_meters=500.0,
+                            estimated_clearance_time=datetime.now(timezone.utc) + timedelta(days=30)  # Default 30 days
+                        )
+                        db.add(new_incident)
+                        saved_count += 1
+                        
+                except Exception as e:
+                    logger.error(f"Error processing individual roadwork: {e}, data: {roadwork_data}")
+                    error_count += 1
+                    continue
             
             db.commit()
-            logger.info(f"Saved {saved_count} new roadworks, updated {updated_count} existing ones")
+            logger.info(f"Saved {saved_count} new roadworks, updated {updated_count} existing ones, {error_count} errors")
             
             return {
                 'new_roadworks': saved_count,
                 'updated_roadworks': updated_count,
-                'total_processed': len(roadworks)
+                'total_processed': len(roadworks),
+                'errors': error_count
             }
             
         except Exception as e:
             db.rollback()
-            logger.error(f"Error saving roadworks to database: {e}")
+            logger.error(f"Error saving roadworks to database: {e}", exc_info=True)
             return {'error': str(e)}
         finally:
             db.close()
@@ -895,8 +967,32 @@ async def scrape_and_save_roadworks(facebook_pages: List[str] = None):
             timeout=120  # 2 minutes total timeout
         )
         
+        if not roadworks:
+            logger.warning("No roadworks scraped, returning empty result")
+            return {
+                'success': True,
+                'scraped_roadworks': 0,
+                'database_result': {
+                    'new_roadworks': 0,
+                    'updated_roadworks': 0,
+                    'total_processed': 0,
+                    'errors': 0
+                },
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        
         # Save to database
         result = roadworks_scraper_service.save_roadworks_to_database(roadworks)
+        
+        # Check if database save had errors
+        if 'error' in result:
+            logger.error(f"Database save failed: {result['error']}")
+            return {
+                'success': False,
+                'error': f"Failed to save to database: {result['error']}",
+                'scraped_roadworks': len(roadworks),
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
         
         return {
             'success': True,
@@ -905,18 +1001,20 @@ async def scrape_and_save_roadworks(facebook_pages: List[str] = None):
             'timestamp': datetime.now(timezone.utc).isoformat()
         }
         
-    except asyncio.TimeoutError:
-        logger.error("Roadworks scraping timed out after 2 minutes")
+    except asyncio.TimeoutError as e:
+        logger.error(f"Roadworks scraping timed out after 2 minutes: {e}", exc_info=True)
         return {
             'success': False,
-            'error': 'Scraping operation timed out. Please try again.',
+            'error': f"Scraping timed out: {str(e)}",
+            'scraped_roadworks': 0,
             'timestamp': datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:
-        logger.error(f"Error in scrape_and_save_roadworks: {e}")
+        logger.error(f"Unexpected error in scrape_and_save_roadworks: {e}", exc_info=True)
         return {
             'success': False,
             'error': str(e),
+            'scraped_roadworks': 0,
             'timestamp': datetime.now(timezone.utc).isoformat()
         }
 

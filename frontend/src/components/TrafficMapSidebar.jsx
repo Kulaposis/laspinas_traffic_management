@@ -1,28 +1,37 @@
 import React from 'react';
 import { X, History, Layers, Map as MapIcon, UserCircle, LogOut, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useDarkMode } from '../context/DarkModeContext';
 
 const noop = () => {};
 
-const Toggle = ({ label, checked, onChange, helper, icon, iconColor }) => (
-  <label className="flex items-center justify-between p-4 hover:bg-blue-50 rounded-xl transition-all duration-200 cursor-pointer group border border-transparent hover:border-blue-200">
+const Toggle = ({ label, checked, onChange, helper, icon, iconColor, isDarkMode = false }) => (
+  <label className={`flex items-center justify-between p-4 rounded-xl transition-all duration-200 cursor-pointer group border ${
+    isDarkMode 
+      ? 'hover:bg-gray-800 border-gray-700 hover:border-gray-600' 
+      : 'hover:bg-blue-50 border-transparent hover:border-blue-200'
+  }`}>
     <div className="flex items-center space-x-3 flex-1">
       {icon && (
         <div className={`flex-shrink-0 p-2 rounded-lg transition-all duration-200 ${
           checked 
-            ? iconColor || 'bg-blue-100 text-blue-600' 
-            : 'bg-gray-100 text-gray-400'
+            ? iconColor || (isDarkMode ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-600')
+            : isDarkMode ? 'bg-gray-700 text-gray-500' : 'bg-gray-100 text-gray-400'
         }`}>
           {icon}
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <span className={`text-sm font-semibold ${checked ? 'text-gray-900' : 'text-gray-600'}`}>{label}</span>
-        {helper && <p className="text-xs text-gray-500 mt-0.5">{helper}</p>}
+        <span className={`text-sm font-semibold ${checked ? (isDarkMode ? 'text-gray-100' : 'text-gray-900') : (isDarkMode ? 'text-gray-400' : 'text-gray-600')}`}>{label}</span>
+        {helper && <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>{helper}</p>}
       </div>
     </div>
     <div className="flex items-center space-x-3">
-      <div className={`w-12 h-7 rounded-full transition-all duration-200 relative shadow-inner ${checked ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gray-300'}`}>
+      <div className={`w-12 h-7 rounded-full transition-all duration-200 relative shadow-inner ${
+        checked 
+          ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
+          : isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+      }`}>
         <div className={`w-5 h-5 bg-white rounded-full shadow-lg transform transition-transform absolute top-1 ${checked ? 'translate-x-6' : 'translate-x-1'}`}></div>
       </div>
       <input type="checkbox" checked={checked} onChange={onChange} className="sr-only" />
@@ -30,13 +39,21 @@ const Toggle = ({ label, checked, onChange, helper, icon, iconColor }) => (
   </label>
 );
 
-const Section = ({ title, subtitle, children, icon }) => (
-  <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
-    <div className="p-5 bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200 flex items-center space-x-2">
-      {icon}
+const Section = ({ title, subtitle, children, icon, isDarkMode = false }) => (
+  <div className={`rounded-2xl border shadow-md overflow-hidden ${
+    isDarkMode 
+      ? 'bg-gray-800 border-gray-700' 
+      : 'bg-white border-gray-200'
+  }`}>
+    <div className={`p-5 border-b flex items-center space-x-2 ${
+      isDarkMode 
+        ? 'bg-gradient-to-r from-gray-800 to-gray-750 border-gray-700' 
+        : 'bg-gradient-to-r from-gray-50 to-slate-50 border-gray-200'
+    }`}>
+      {icon && React.cloneElement(icon, { className: `w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}` })}
       <div>
-        <h3 className="font-bold text-gray-900 text-lg leading-tight">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-600">{subtitle}</p>}
+        <h3 className={`font-bold text-lg leading-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{title}</h3>
+        {subtitle && <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{subtitle}</p>}
       </div>
     </div>
     <div className="p-5 space-y-3">
@@ -45,13 +62,15 @@ const Section = ({ title, subtitle, children, icon }) => (
   </div>
 );
 
-const StyleButton = ({ active, label, onClick }) => (
+const StyleButton = ({ active, label, onClick, isDarkMode = false }) => (
   <button
     onClick={onClick}
     className={`w-full px-5 py-3.5 rounded-xl text-sm font-bold transition-all duration-200 ${
       active
         ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-[1.02]'
-        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+        : isDarkMode 
+          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600' 
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
     }`}
   >
     {label}
@@ -65,6 +84,8 @@ const TrafficMapSidebar = ({
   onOpenHistory = noop,
   onOpenEmergencyReports = noop,
   myEmergencyReports = [],
+  onOpenActiveIncidents = noop,
+  activeIncidentsCount = 0,
   heatmapEnabled = false,
   setHeatmapEnabled = noop,
   trafficLayerEnabled = true,
@@ -96,6 +117,7 @@ const TrafficMapSidebar = ({
   sidebarOpen = false,
 }) => {
   const { user, logout } = useAuth();
+  const { isDarkMode } = useDarkMode();
   const isCitizen = !!user && (user.role?.toLowerCase?.() === 'citizen');
 
   return (
@@ -109,24 +131,35 @@ const TrafficMapSidebar = ({
         />
       )}
       <div
-        className={`fixed top-0 left-0 h-full w-80 sm:w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-out rounded-r-3xl border-r border-gray-100 overflow-hidden flex flex-col ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } ${sidebarOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        className={`fixed top-0 left-0 h-full w-80 sm:w-96 shadow-2xl transform transition-transform duration-300 ease-out rounded-r-3xl border-r overflow-hidden flex flex-col ${
+          isDarkMode 
+            ? 'bg-gray-900 border-gray-700' 
+            : 'bg-white border-gray-100'
+        } ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
         style={{ zIndex: 120 }}
         onClick={(e) => e.stopPropagation()}
       >
-      <div className="p-6 border-b border-gray-100 bg-white">
+      {/* Header */}
+      <div className={`p-6 border-b ${
+        isDarkMode 
+          ? 'border-gray-700 bg-gray-900' 
+          : 'border-gray-100 bg-white'
+      }`}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
-            <MapIcon className="w-6 h-6 text-primary-600" />
-            <h2 className="text-2xl font-bold text-gray-900">Traffic Map</h2>
+            <MapIcon className={`w-6 h-6 ${isDarkMode ? 'text-blue-400' : 'text-primary-600'}`} />
+            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Traffic Map</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 transform hover:scale-110 hover:rotate-90"
+            className={`p-2 rounded-full transition-all duration-200 transform hover:scale-110 hover:rotate-90 ${
+              isDarkMode 
+                ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' 
+                : 'hover:bg-gray-100 text-gray-500'
+            }`}
             aria-label="Close sidebar"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5" />
           </button>
         </div>
         {isGuest ? (
@@ -167,23 +200,54 @@ const TrafficMapSidebar = ({
         )}
       </div>
 
-      <div className="p-6 space-y-6 overflow-y-auto flex-1 pb-24 modern-scrollbar overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className={`p-6 space-y-6 overflow-y-auto flex-1 pb-24 modern-scrollbar overscroll-contain ${
+        isDarkMode ? 'scrollbar-dark' : ''
+      }`} style={{ WebkitOverflowScrolling: 'touch' }}>
         {/* History */}
         <div>
           <button
             onClick={onOpenHistory}
-            className="w-full flex items-center space-x-4 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 rounded-2xl transition-all duration-200 text-left group border border-indigo-100 hover:border-indigo-200 shadow-sm hover:shadow-md"
+            className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-200 text-left group border shadow-sm hover:shadow-md ${
+              isDarkMode
+                ? 'bg-gradient-to-r from-indigo-900/50 to-blue-900/50 hover:from-indigo-800/50 hover:to-blue-800/50 border-indigo-700/50 hover:border-indigo-600/50'
+                : 'bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 border-indigo-100 hover:border-indigo-200'
+            }`}
           >
             <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
               <History className="w-6 h-6 text-white" />
             </div>
             <div className="flex-1">
-              <span className="text-base font-bold text-gray-900">Travel History</span>
-              <p className="text-xs text-gray-600 mt-0.5">View your past trips</p>
+              <span className={`text-base font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Travel History</span>
+              <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>View your past trips</p>
             </div>
             {travelHistory.length > 0 && (
               <span className="bg-gradient-to-br from-indigo-500 to-blue-500 text-white text-xs rounded-full w-7 h-7 flex items-center justify-center font-bold shadow-md">
                 {travelHistory.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Active Incidents - Accessible to all users, especially CITIZEN */}
+        <div>
+          <button
+            onClick={onOpenActiveIncidents}
+            className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-200 text-left group border shadow-sm hover:shadow-md ${
+              isDarkMode
+                ? 'bg-gradient-to-r from-orange-900/50 to-red-900/50 hover:from-orange-800/50 hover:to-red-800/50 border-orange-700/50 hover:border-orange-600/50'
+                : 'bg-gradient-to-r from-orange-50 to-red-50 hover:from-orange-100 hover:to-red-100 border-orange-100 hover:border-orange-200'
+            }`}
+          >
+            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+              <AlertTriangle className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <span className={`text-base font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Active Incidents</span>
+              <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>View roadworks & traffic incidents</p>
+            </div>
+            {activeIncidentsCount > 0 && (
+              <span className="bg-gradient-to-br from-orange-500 to-red-500 text-white text-xs rounded-full w-7 h-7 flex items-center justify-center font-bold shadow-md animate-pulse">
+                {activeIncidentsCount > 99 ? '99+' : activeIncidentsCount}
               </span>
             )}
           </button>
@@ -194,14 +258,18 @@ const TrafficMapSidebar = ({
           <div>
             <button
               onClick={onOpenEmergencyReports}
-              className="w-full flex items-center space-x-4 p-4 bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 rounded-2xl transition-all duration-200 text-left group border border-red-100 hover:border-red-200 shadow-sm hover:shadow-md"
+              className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-200 text-left group border shadow-sm hover:shadow-md ${
+                isDarkMode
+                  ? 'bg-gradient-to-r from-red-900/50 to-orange-900/50 hover:from-red-800/50 hover:to-orange-800/50 border-red-700/50 hover:border-red-600/50'
+                  : 'bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 border-red-100 hover:border-red-200'
+              }`}
             >
               <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
                 <AlertTriangle className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1">
-                <span className="text-base font-bold text-gray-900">Emergency Reports</span>
-                <p className="text-xs text-gray-600 mt-0.5">View and report emergencies</p>
+                <span className={`text-base font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Emergency Reports</span>
+                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>View and report emergencies</p>
               </div>
               {myEmergencyReports.length > 0 && (
                 <span className="bg-gradient-to-br from-red-500 to-orange-500 text-white text-xs rounded-full w-7 h-7 flex items-center justify-center font-bold shadow-md">
@@ -213,29 +281,37 @@ const TrafficMapSidebar = ({
         )}
 
         {/* Map Layers */}
-        <Section title="Map Layers" subtitle="Toggle map overlays" icon={<Layers className="w-5 h-5 text-gray-600" />}>
-          <Toggle label="Traffic Heatmap" checked={heatmapEnabled} onChange={(e) => setHeatmapEnabled(e.target.checked)} />
-          <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} />
+        <Section title="Map Layers" subtitle="Toggle map overlays" icon={<Layers className="w-5 h-5" />} isDarkMode={isDarkMode}>
+          <Toggle label="Traffic Heatmap" checked={heatmapEnabled} onChange={(e) => setHeatmapEnabled(e.target.checked)} isDarkMode={isDarkMode} />
+          <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} isDarkMode={isDarkMode} />
         </Section>
 
         {/* Map Style */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
-          <div className="p-5 bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
-            <h3 className="font-bold text-gray-900 text-lg mb-1">Map Style</h3>
-            <p className="text-xs text-gray-600">Choose your preferred view</p>
+        <div className={`rounded-2xl border shadow-md overflow-hidden ${
+          isDarkMode 
+            ? 'bg-gray-800 border-gray-700' 
+            : 'bg-white border-gray-200'
+        }`}>
+          <div className={`p-5 border-b ${
+            isDarkMode 
+              ? 'bg-gradient-to-r from-gray-800 to-gray-750 border-gray-700' 
+              : 'bg-gradient-to-r from-gray-50 to-slate-50 border-gray-200'
+          }`}>
+            <h3 className={`font-bold text-lg mb-1 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Map Style</h3>
+            <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Choose your preferred view</p>
           </div>
           <div className="p-5">
             <div className="space-y-2">
-              <StyleButton label="☀️ Day" active={mapStyle === 'main'} onClick={() => setMapStyle('main')} />
-              <StyleButton label="🌙 Night" active={mapStyle === 'night'} onClick={() => setMapStyle('night')} />
-              <StyleButton label="🛰️ Satellite" active={mapStyle === 'satellite'} onClick={() => setMapStyle('satellite')} />
+              <StyleButton label="☀️ Day" active={mapStyle === 'main'} onClick={() => setMapStyle('main')} isDarkMode={isDarkMode} />
+              <StyleButton label="🌙 Night" active={mapStyle === 'night'} onClick={() => setMapStyle('night')} isDarkMode={isDarkMode} />
+              <StyleButton label="🛰️ Satellite" active={mapStyle === 'satellite'} onClick={() => setMapStyle('satellite')} isDarkMode={isDarkMode} />
             </div>
           </div>
         </div>
 
         {/* Data Layers (API-backed) */}
-        <Section title="Data Layers" subtitle="City services and live data" icon={<Layers className="w-5 h-5 text-gray-600" />}>
-          <Toggle label="No‑Parking & Restricted Zones" checked={parkingEnabled} onChange={(e) => setParkingEnabled(e.target.checked)} helper="Highlights areas where stopping/parking is restricted" />
+        <Section title="Data Layers" subtitle="City services and live data" icon={<Layers className="w-5 h-5" />} isDarkMode={isDarkMode}>
+          <Toggle label="No‑Parking & Restricted Zones" checked={parkingEnabled} onChange={(e) => setParkingEnabled(e.target.checked)} helper="Highlights areas where stopping/parking is restricted" isDarkMode={isDarkMode} />
           <Toggle 
             label="Weather & Flood" 
             checked={weatherEnabled || floodZonesEnabled} 
@@ -245,27 +321,31 @@ const TrafficMapSidebar = ({
               setFloodZonesEnabled(isChecked);
             }} 
             helper="Weather alerts, flood zones, and active floods"
+            isDarkMode={isDarkMode}
           />
-          {/* <Toggle label="Emergency Reports" checked={emergencyEnabled} onChange={(e) => setEmergencyEnabled(e.target.checked)} /> */}
-          <Toggle label="Traffic Monitoring" checked={trafficMonitorNewEnabled} onChange={(e) => setTrafficMonitorNewEnabled(e.target.checked)} />
-          <Toggle label="Traffic Predictions" checked={showPredictionsPanel} onChange={(e) => setShowPredictionsPanel(e.target.checked)} helper="View traffic predictions and future congestion forecasts" />
-          <Toggle label="Incident Prone Areas" checked={incidentProneEnabled} onChange={(e) => setIncidentProneEnabled(e.target.checked)} />
-          {/* <Toggle label="TomTom Traffic Incidents" checked={tomtomIncidentsEnabled} onChange={(e) => setTomtomIncidentsEnabled(e.target.checked)} /> */}
-          {/* <div className="text-xs text-gray-500 pt-1">
-            These layers will fetch from your API when enabled. TomTom incidents show recent accidents/incidents from the last 3 days.
-          </div> */}
+          <Toggle label="Traffic Monitoring" checked={trafficMonitorNewEnabled} onChange={(e) => setTrafficMonitorNewEnabled(e.target.checked)} isDarkMode={isDarkMode} />
+          <Toggle label="Traffic Predictions" checked={showPredictionsPanel} onChange={(e) => setShowPredictionsPanel(e.target.checked)} helper="View traffic predictions and future congestion forecasts" isDarkMode={isDarkMode} />
+          <Toggle label="Incident Prone Areas" checked={incidentProneEnabled} onChange={(e) => setIncidentProneEnabled(e.target.checked)} isDarkMode={isDarkMode} />
         </Section>
 
         {/* Helpful hint */}
-        <div className="text-xs text-gray-400 px-1">Designed for a Google Maps-like feel: clean, responsive, and fast.</div>
+        <div className={`text-xs px-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Designed for a Google Maps-like feel: clean, responsive, and fast.</div>
       </div>
 
       {/* Footer - Logout */}
       {!isGuest && (
-        <div className="p-6 border-t border-gray-100 bg-white">
+        <div className={`p-6 border-t ${
+          isDarkMode 
+            ? 'border-gray-700 bg-gray-900' 
+            : 'border-gray-100 bg-white'
+        }`}>
           <button
             onClick={logout}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-semibold border border-red-200 transition-colors"
+            className={`w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl font-semibold border transition-colors ${
+              isDarkMode
+                ? 'bg-red-900/50 hover:bg-red-800/50 text-red-300 border-red-700/50'
+                : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+            }`}
           >
             <LogOut className="w-4 h-4" />
             <span>Log out</span>
@@ -278,5 +358,3 @@ const TrafficMapSidebar = ({
 };
 
 export default TrafficMapSidebar;
-
-

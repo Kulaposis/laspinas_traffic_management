@@ -1,26 +1,15 @@
 // Firebase Configuration for Firestore and Storage
-import { initializeApp } from 'firebase/app';
+// Reuse the app initialized in src/firebase.js to avoid duplicate-app errors
+import '../firebase';
+import { getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
-
-// Firebase configuration object
-const firebaseConfig = {
-  apiKey: "AIzaSyAUgpqB3LoCDjpKNBN-Xec-TUHAKszlQVY",
-  authDomain: "traffic-management-9c2f4.firebaseapp.com",
-  projectId: "traffic-management-9c2f4",
-  storageBucket: "traffic-management-9c2f4.firebasestorage.app",
-  messagingSenderId: "870304007603",
-  appId: "1:870304007603:web:9d347421d1ea2abcc977c6",
-  measurementId: "G-MWNPN4MPQH"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Importing auth is unnecessary here; consumers should import from src/firebase.js
+// to ensure a single source of truth for auth instance.
 
 // Initialize Firebase services
+const app = getApp();
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const auth = getAuth(app);
 
 export default app;

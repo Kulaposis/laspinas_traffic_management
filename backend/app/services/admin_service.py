@@ -12,6 +12,7 @@ from ..models.admin_models import (
     SystemSetting, NotificationTemplate, SystemAlert, DataExportJob,
     SecurityEvent, SystemMetric, UserSession, ContentModerationQueue
 )
+from ..utils.role_helpers import get_role_value
 from ..models.user import User
 from ..models.report import Report
 from ..models.violation import Violation
@@ -136,7 +137,7 @@ class AdminService:
             username=user.username,
             email=user.email,
             full_name=user.full_name,
-            role=user.role.value,
+            role=get_role_value(user.role),
             last_login=last_session.last_activity if last_session else None,
             total_reports=total_reports,
             total_violations=total_violations,

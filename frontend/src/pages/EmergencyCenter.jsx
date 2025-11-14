@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { CheckCircle, X } from 'lucide-react';
 import emergencyService from '../services/emergencyService';
 import { CardSkeleton, ListItemSkeleton } from '../components/LoadingSkeleton';
 import logsService from '../services/logsService';
 import { useAuth } from '../context/AuthContext';
+import { useDarkMode } from '../context/DarkModeContext';
 
 const EmergencyCenter = () => {
   const { user } = useAuth();
+  const { isDarkMode } = useDarkMode();
   const [activeEmergencies, setActiveEmergencies] = useState([]);
   const [allEmergencies, setAllEmergencies] = useState([]);
   const [complaints, setComplaints] = useState([]);
@@ -40,6 +43,10 @@ const EmergencyCenter = () => {
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [submittedEmergency, setSubmittedEmergency] = useState(null);
+  
+  // Update Success Modal State
+  const [showUpdateSuccessModal, setShowUpdateSuccessModal] = useState(false);
+  const [updateSuccessMessage, setUpdateSuccessMessage] = useState('');
 
   // Photo Modal State
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -80,6 +87,7 @@ const EmergencyCenter = () => {
   });
 
   const isStaff = ['admin', 'lgu_staff'].includes((user?.role || '').toLowerCase());
+  const isAdmin = (user?.role || '').toLowerCase() === 'admin';
 
   // Restrict page to admin-side only
   if (!user || !isStaff) {
@@ -432,12 +440,29 @@ const EmergencyCenter = () => {
       setIsUpdatingEmergency(true);
       await emergencyService.updateEmergency(emergencyId, updateData);
       
+      // Determine success message based on update type
+      let message = 'Emergency updated successfully!';
+      if (updateData.status === 'RESOLVED') {
+        message = 'Emergency resolved successfully!';
+      } else if (updateData.status === 'DISPATCHED') {
+        message = 'Emergency dispatched successfully!';
+      } else if (updateData.status === 'IN_PROGRESS') {
+        message = 'Emergency status updated to In Progress!';
+      }
+      
+      // Show success modal
+      setUpdateSuccessMessage(message);
+      setShowUpdateSuccessModal(true);
+      
       // Refresh data and close modal
       fetchData();
       setShowEmergencyDetail(false);
       setSelectedEmergency(null);
       
-      alert('Emergency updated successfully!');
+      // Auto-close modal after 3 seconds
+      setTimeout(() => {
+        setShowUpdateSuccessModal(false);
+      }, 3000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -468,6 +493,10 @@ const EmergencyCenter = () => {
       case 'pending': return '⏳';
       default: return '⏳';
     }
+  };
+
+  const getReporterContact = (record) => {
+    return record?.reporter_phone || record?.contact_number || record?.reporter_contact || '';
   };
 
   // Progress Tracker Component
@@ -549,7 +578,7 @@ const EmergencyCenter = () => {
               <span className="font-semibold text-gray-600">Current Status:</span>
               <p className={`font-bold ${
                 isCancelled ? 'text-red-600' : 
-                emergency.status === 'resolved' ? 'text-green-600' : 'text-blue-600'
+                emergency.status?.toUpperCase() === 'RESOLVED' ? 'text-green-600' : 'text-blue-600'
               }`}>
                 {emergency.status.replace('_', ' ').toUpperCase()}
                 {isCancelled && ' - Emergency Cancelled'}
@@ -581,7 +610,7 @@ const EmergencyCenter = () => {
                 <p className="text-gray-900">{emergency.assigned_responder}</p>
               </div>
             )}
-            {emergency.estimated_response_time && emergency.status !== 'resolved' && (
+            {emergency.estimated_response_time && emergency.status?.toUpperCase() !== 'RESOLVED' && (
               <div>
                 <span className="font-semibold text-gray-600">Estimated Time:</span>
                 <p className="text-blue-600 font-semibold">{emergency.estimated_response_time} minutes</p>
@@ -638,37 +667,40 @@ const EmergencyCenter = () => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              {/* Enhanced Emergency Button */}
-              <button
-                onClick={() => setShowEmergencyButton(true)}
-                className="group relative px-8 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-2xl font-bold text-lg shadow-2xl transform transition-all duration-300 hover:scale-110 hover:shadow-red-500/25 hover:from-red-600 hover:to-red-700 active:scale-95"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-red-400 to-red-500 rounded-2xl blur opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative flex items-center space-x-3">
-                  <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
-                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+            {/* Hide EMERGENCY and Report Issue buttons for admin users */}
+            {!isAdmin && (
+              <div className="flex items-center space-x-4">
+                {/* Enhanced Emergency Button */}
+                <button
+                  onClick={() => setShowEmergencyButton(true)}
+                  className="group relative px-8 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-2xl font-bold text-lg shadow-2xl transform transition-all duration-300 hover:scale-110 hover:shadow-red-500/25 hover:from-red-600 hover:to-red-700 active:scale-95"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-400 to-red-500 rounded-2xl blur opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="relative flex items-center space-x-3">
+                    <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                    </div>
+                    <span>EMERGENCY</span>
+                    <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </div>
-                  <span>EMERGENCY</span>
-                  <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-              </button>
-              
-              {/* Enhanced Complaint Button */}
-              <button
-                onClick={() => setShowComplaintForm(true)}
-                className="group px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/25 hover:from-blue-600 hover:to-indigo-700 active:scale-95"
-              >
-                <div className="flex items-center space-x-2">
-                  <svg className="w-5 h-5 group-hover:rotate-6 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span>Report Issue</span>
-                </div>
-              </button>
-            </div>
+                </button>
+                
+                {/* Enhanced Complaint Button */}
+                <button
+                  onClick={() => setShowComplaintForm(true)}
+                  className="group px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-semibold shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/25 hover:from-blue-600 hover:to-indigo-700 active:scale-95"
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 group-hover:rotate-6 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>Report Issue</span>
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -922,7 +954,10 @@ const EmergencyCenter = () => {
                           <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                             <span>📍 {emergency.address || `${emergency.latitude}, ${emergency.longitude}`}</span>
                             <span>⏰ {new Date(emergency.created_at).toLocaleString()}</span>
-                            <span>📞 {emergency.emergency_number}</span>
+                            {getReporterContact(emergency) && (
+                              <span>☎️ {getReporterContact(emergency)}</span>
+                            )}
+                            <span>🆔 #{emergency.emergency_number}</span>
                           </div>
                           {emergency.assigned_responder && (
                             <p className="text-sm text-blue-600 mt-1">
@@ -1099,7 +1134,7 @@ const EmergencyCenter = () => {
                         </button>
                       )}
                       
-                      {emergency.status !== 'resolved' && emergency.status !== 'cancelled' && (
+                      {emergency.status?.toUpperCase() !== 'RESOLVED' && emergency.status?.toUpperCase() !== 'CANCELLED' && (
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                           <span>Live tracking active</span>
@@ -1204,8 +1239,11 @@ const EmergencyCenter = () => {
                         <h4 className="font-semibold text-gray-900">{emergency.title}</h4>
                         <p className="text-gray-600 text-sm mt-1">{emergency.description}</p>
                         <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                          <span>📞 {emergency.emergency_number}</span>
+                          <span>🆔 #{emergency.emergency_number}</span>
                           <span>⏰ {new Date(emergency.created_at).toLocaleString()}</span>
+                          {getReporterContact(emergency) && (
+                            <span>☎️ {getReporterContact(emergency)}</span>
+                          )}
                           {emergency.resolved_at && (
                             <span>✅ Resolved: {new Date(emergency.resolved_at).toLocaleString()}</span>
                           )}
@@ -1564,7 +1602,8 @@ const EmergencyCenter = () => {
       </div>
 
         {/* Enhanced Emergency Wizard Modal */}
-        {showEmergencyButton && (
+        {/* Prevent emergency form from showing for admin users */}
+        {showEmergencyButton && !isAdmin && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl transform transition-all duration-300 scale-100 max-h-[90vh] overflow-y-auto">
               {/* Modal Header with Progress */}
@@ -2398,13 +2437,13 @@ const EmergencyCenter = () => {
                           </div>
                         )}
                         
-                        {selectedEmergency.reporter_phone && (
+                        {getReporterContact(selectedEmergency) && (
                           <div>
                             <label className="text-sm font-semibold text-gray-600">Phone</label>
                             <p className="text-gray-900 flex items-center space-x-2">
-                              <span>{selectedEmergency.reporter_phone}</span>
+                              <span>{getReporterContact(selectedEmergency)}</span>
                               <a 
-                                href={`tel:${selectedEmergency.reporter_phone}`}
+                                href={`tel:${getReporterContact(selectedEmergency)}`}
                                 className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2623,24 +2662,24 @@ const EmergencyCenter = () => {
                       
                       <div className="grid grid-cols-2 gap-3">
                         <button
-                          onClick={() => handleUpdateEmergencyStatus(selectedEmergency.id, { status: 'dispatched' })}
-                          disabled={isUpdatingEmergency || selectedEmergency.status !== 'reported'}
+                          onClick={() => handleUpdateEmergencyStatus(selectedEmergency.id, { status: 'DISPATCHED' })}
+                          disabled={isUpdatingEmergency || selectedEmergency.status?.toUpperCase() !== 'REPORTED'}
                           className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 text-sm font-medium"
                         >
                           Dispatch
                         </button>
                         
                         <button
-                          onClick={() => handleUpdateEmergencyStatus(selectedEmergency.id, { status: 'in_progress' })}
-                          disabled={isUpdatingEmergency || !['reported', 'dispatched'].includes(selectedEmergency.status)}
+                          onClick={() => handleUpdateEmergencyStatus(selectedEmergency.id, { status: 'IN_PROGRESS' })}
+                          disabled={isUpdatingEmergency || !['REPORTED', 'DISPATCHED'].includes(selectedEmergency.status?.toUpperCase())}
                           className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 text-sm font-medium"
                         >
                           In Progress
                         </button>
                         
                         <button
-                          onClick={() => handleUpdateEmergencyStatus(selectedEmergency.id, { status: 'resolved' })}
-                          disabled={isUpdatingEmergency || selectedEmergency.status === 'resolved'}
+                          onClick={() => handleUpdateEmergencyStatus(selectedEmergency.id, { status: 'RESOLVED' })}
+                          disabled={isUpdatingEmergency || selectedEmergency.status?.toUpperCase() === 'RESOLVED'}
                           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 text-sm font-medium"
                         >
                           Resolve
@@ -3108,6 +3147,83 @@ const EmergencyCenter = () => {
               }}
             />
           </div>
+        </div>
+      )}
+
+      {/* Update Success Modal */}
+      {showUpdateSuccessModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[130] p-4 animate-fade-in">
+          <div 
+            className={`relative w-full max-w-md rounded-2xl shadow-2xl transform transition-all duration-300 animate-scale-in ${
+              isDarkMode 
+                ? 'bg-gray-900 border border-gray-700' 
+                : 'bg-white border border-gray-200'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setShowUpdateSuccessModal(false)}
+              className={`absolute top-4 right-4 p-2 rounded-full transition-colors ${
+                isDarkMode 
+                  ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200' 
+                  : 'hover:bg-gray-100 text-gray-500'
+              }`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Content */}
+            <div className="flex flex-col items-center justify-center py-8 sm:py-10 px-6 sm:px-8">
+              {/* Animated Success Icon */}
+              <div className="relative mb-6">
+                {/* Pulsing background circle */}
+                <div className={`absolute inset-0 rounded-full animate-ping ${
+                  isDarkMode ? 'bg-green-500/20' : 'bg-green-500/30'
+                }`} style={{ animationDuration: '2s' }}></div>
+                
+                {/* Main success circle */}
+                <div className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center ${
+                  isDarkMode 
+                    ? 'bg-gradient-to-br from-green-600 to-green-700' 
+                    : 'bg-gradient-to-br from-green-500 to-green-600'
+                } shadow-2xl`}>
+                  <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-white animate-scale-in" />
+                </div>
+              </div>
+
+              {/* Success Message */}
+              <h3 className={`text-xl sm:text-2xl font-bold mb-2 text-center ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
+                Success!
+              </h3>
+              
+              <p className={`text-sm sm:text-base mb-6 text-center ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                {updateSuccessMessage}
+              </p>
+
+              {/* Action Button */}
+              <button
+                onClick={() => setShowUpdateSuccessModal(false)}
+                className={`w-full sm:w-auto px-6 sm:px-8 py-3 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105 active:scale-95 ${
+                  isDarkMode
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30'
+                    : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/20'
+                }`}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+
+          {/* Backdrop click to close */}
+          <div 
+            className="absolute inset-0 -z-10"
+            onClick={() => setShowUpdateSuccessModal(false)}
+          />
         </div>
       )}
       </div>

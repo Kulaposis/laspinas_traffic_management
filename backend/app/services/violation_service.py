@@ -6,6 +6,7 @@ from ..models.user import User
 from ..schemas.violation_schema import ViolationCreate, ViolationUpdate
 import uuid
 from datetime import datetime
+from ..utils.role_helpers import get_role_value
 
 class ViolationService:
     def __init__(self, db: Session):
@@ -13,7 +14,7 @@ class ViolationService:
 
     def create_violation(self, violation_data: ViolationCreate, enforcer: User) -> Violation:
         """Create a new traffic violation (only enforcers can create)."""
-        if enforcer.role.value not in ['traffic_enforcer', 'admin']:
+        if get_role_value(enforcer.role) not in ['traffic_enforcer', 'admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only traffic enforcers can issue violations"
@@ -81,7 +82,7 @@ class ViolationService:
         violation = self.get_violation_by_id(violation_id)
         
         # Check permissions
-        if user.role.value not in ['traffic_enforcer', 'lgu_staff', 'admin']:
+        if get_role_value(user.role) not in ['traffic_enforcer', 'lgu_staff', 'admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions to update violations"

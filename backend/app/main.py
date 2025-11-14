@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded  # type: ignore
 from .routers import auth, users, reports, violations, notifications, traffic, weather, emergency, footprints, parking, incident_prone_areas, logs, admin, travel_history
 from .websocket import websocket_endpoint
 from .services.scheduler import start_weather_scheduler, stop_weather_scheduler
+from .models.user import User
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -243,9 +244,27 @@ app.include_router(admin.router)
 app.include_router(travel_history.router, prefix="/traffic")
 
 # WebSocket endpoint
+# Note: Verify user before establishing WebSocket connection to avoid holding DB session
 @app.websocket("/ws/{user_id}")
-async def websocket_route(websocket: WebSocket, user_id: int, db: Session = Depends(get_db)):
-    await websocket_endpoint(websocket, user_id, db)
+async def websocket_route(websocket: WebSocket, user_id: int):
+    # Verify user exists before establishing WebSocket connection (don't hold DB session)
+    db = None
+    try:
+        db = next(get_db())
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            await websocket.close(code=4001, reason="User not found")
+            return
+    except Exception as e:
+        logger.error(f"Error verifying user for WebSocket: {e}")
+        await websocket.close(code=4002, reason="Database error")
+        return
+    finally:
+        if db:
+            db.close()
+    
+    # Now establish WebSocket connection without holding DB session
+    await websocket_endpoint(websocket, user_id, None)
 
 @app.get("/")
 def read_root():

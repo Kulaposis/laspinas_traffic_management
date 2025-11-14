@@ -32,7 +32,7 @@ async def update_realtime_traffic(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger real-time traffic data update from TomTom API with fallback"""
-    from ..utils.role_helpers import is_authorized
+    from ..utils.role_helpers import is_authorized, get_role_value
     if not is_authorized(current_user.role, ["admin", "traffic_enforcer"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -40,7 +40,7 @@ async def update_realtime_traffic(
         )
     
     try:
-        logger.info(f"Traffic update triggered by user: {current_user.username} (role: {current_user.role.value})")
+        logger.info(f"Traffic update triggered by user: {current_user.username} (role: {get_role_value(current_user.role)})")
         
         # Update traffic data in background using real API with fallback
         background_tasks.add_task(real_traffic_service.update_traffic_data, db)
@@ -51,7 +51,7 @@ async def update_realtime_traffic(
             "message": "Real-time traffic update initiated",
             "status": "success",
             "initiated_by": current_user.username,
-            "user_role": current_user.role.value,
+            "user_role": get_role_value(current_user.role),
             "timestamp": datetime.utcnow(),
             "api_provider": "tomtom_with_fallback"
         }
@@ -446,7 +446,7 @@ async def trigger_heatmap_broadcast(
     current_user: User = Depends(get_current_user)
 ):
     """Manually trigger a heatmap broadcast for testing purposes."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can trigger broadcasts"
@@ -463,7 +463,7 @@ async def create_traffic_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Create new traffic monitoring entry (for traffic enforcers/admin)."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can create traffic monitoring data"
@@ -488,7 +488,7 @@ async def update_traffic_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Update traffic monitoring data."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can update traffic data"
@@ -539,7 +539,7 @@ def create_route_alternative(
     current_user: User = Depends(get_current_user)
 ):
     """Create new route alternative."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can create routes"
@@ -601,7 +601,7 @@ def report_road_incident(
 ):
     """Report a new road incident."""
     incident = RoadIncident(**incident_data.dict())
-    incident.reporter_source = f"{current_user.role.value}_{current_user.id}"
+    incident.reporter_source = f"{get_role_value(current_user.role)}_{current_user.id}"
     
     db.add(incident)
     db.commit()
@@ -616,7 +616,7 @@ def update_road_incident(
     current_user: User = Depends(get_current_user)
 ):
     """Update road incident information."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can update incidents"
@@ -643,7 +643,7 @@ def deactivate_road_incident(
     current_user: User = Depends(get_current_user)
 ):
     """Deactivate/resolve a road incident."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can resolve incidents"
@@ -668,7 +668,7 @@ async def start_traffic_simulation(
     current_user: User = Depends(get_current_user)
 ):
     """Start the traffic simulation for demonstration purposes."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can control traffic simulation"
@@ -687,7 +687,7 @@ async def stop_traffic_simulation(
     current_user: User = Depends(get_current_user)
 ):
     """Stop the traffic simulation."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can control traffic simulation"
@@ -701,7 +701,7 @@ async def get_simulation_status(
     current_user: User = Depends(get_current_user)
 ):
     """Get the current status of the traffic simulation."""
-    if current_user.role.value not in ["admin", "traffic_enforcer"]:
+    if get_role_value(current_user.role) not in ["admin", "traffic_enforcer"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and traffic enforcers can view simulation status"
@@ -716,35 +716,101 @@ async def get_simulation_status(
 # Import roadworks scraper service
 from ..services.roadworks_scraper_service import scrape_and_save_roadworks
 from ..schemas.traffic_schema import RoadworksScrapingRequest
+from ..utils.role_helpers import get_role_value
+
+@router.get("/roadworks/scrape")
+async def get_scrape_info(
+    current_user: User = Depends(get_current_user)
+):
+    """Get information about the roadworks scraping endpoint"""
+    return {
+        "message": "This endpoint only accepts POST requests for scraping roadworks",
+        "endpoint": "/traffic/roadworks/scrape",
+        "method": "POST",
+        "description": "Use POST to trigger roadworks scraping. Only admins can access this endpoint."
+    }
 
 @router.post("/roadworks/scrape")
 async def scrape_roadworks(
-    request: RoadworksScrapingRequest,
-    background_tasks: BackgroundTasks,
+    request: RoadworksScrapingRequest = RoadworksScrapingRequest(),
+    background_tasks: BackgroundTasks = None,
     current_user: User = Depends(get_current_user)
 ):
     """Scrape ongoing roadworks in Las Piñas City and save to database"""
-    if current_user.role.value not in ["admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can scrape roadworks data"
-        )
-    
     try:
-        # Run scraping in background with optional Facebook pages
-        result = await scrape_and_save_roadworks(request.facebook_pages)
+        # Check admin role
+        try:
+            role_value = get_role_value(current_user.role)
+            if role_value.lower() not in ["admin"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only admins can scrape roadworks data"
+                )
+        except HTTPException:
+            raise
+        except Exception as role_error:
+            logger.error(f"Error checking user role: {role_error}", exc_info=True)
+            return {
+                "message": "Roadworks scraping failed",
+                "result": {
+                    "success": False,
+                    "error": f"Authorization error: {str(role_error)}",
+                    "scraped_roadworks": 0
+                },
+                "timestamp": datetime.now().isoformat()
+            }
         
+        # Get Facebook pages from request
+        facebook_pages = request.facebook_pages if request else None
+        
+        # Run scraping in background with optional Facebook pages
+        try:
+            result = await scrape_and_save_roadworks(facebook_pages)
+        except Exception as scrape_error:
+            logger.error(f"Error in scrape_and_save_roadworks: {scrape_error}", exc_info=True)
+            return {
+                "message": "Roadworks scraping failed",
+                "result": {
+                    "success": False,
+                    "error": str(scrape_error),
+                    "scraped_roadworks": 0
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Check if scraping was successful
+        if result and result.get('success') is False:
+            # Return 200 with error details instead of 500 (matches TrafficMonitoring.jsx pattern)
+            return {
+                "message": "Roadworks scraping completed with errors",
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Return success response
         return {
             "message": "Roadworks scraping completed",
             "result": result,
             "timestamp": datetime.now().isoformat()
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403) as they are
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error scraping roadworks: {str(e)}"
-        )
+        logger.error(f"Unexpected error in scrape_roadworks endpoint: {str(e)}", exc_info=True)
+        
+        # Return 200 with error details instead of 500 to match TrafficMonitoring.jsx error handling
+        # This allows frontend to handle errors gracefully
+        return {
+            "message": "Roadworks scraping failed",
+            "result": {
+                "success": False,
+                "error": str(e),
+                "scraped_roadworks": 0
+            },
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.get("/roadworks/active")
 async def get_active_roadworks(
@@ -772,7 +838,7 @@ async def create_manual_roadwork(
     current_user: User = Depends(get_current_user)
 ):
     """Manually create a roadwork incident"""
-    if current_user.role.value not in ["admin", "lgu_staff", "traffic_enforcer"]:
+    if get_role_value(current_user.role) not in ["admin", "lgu_staff", "traffic_enforcer"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins, LGU staff, and traffic enforcers can create roadwork incidents"
@@ -968,7 +1034,7 @@ async def save_preferred_route(
     current_user: User = Depends(get_current_user)
 ):
     """Save a user's preferred route for future reference."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can save routes"

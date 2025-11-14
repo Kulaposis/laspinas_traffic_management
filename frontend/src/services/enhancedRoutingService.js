@@ -1,11 +1,12 @@
 /**
  * Enhanced Routing Service with Multiple API Integration
  * Provides Google Maps/Waze-like turn-by-turn navigation
- * Routing Priority: Geoapify -> OSRM -> TomTom
+ * Routing Priority: OSRM -> Geoapify -> TomTom
  */
 
 import tomtomService from './tomtomService';
 import geoapifyService from './geoapifyService';
+import hereRoutingService from './hereRoutingService';
 import api from './api';
 
 class EnhancedRoutingService {
@@ -15,28 +16,62 @@ class EnhancedRoutingService {
   }
 
   /**
+   * Get detailed route from HERE Routing API
+   */
+  async getHereDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
+    const origin = { lat: originLat, lng: originLng };
+    const destination = { lat: destinationLat, lng: destinationLng };
+
+    const routeOptions = {
+      transportMode: options.travelMode || 'car',
+      maxAlternatives: options.maxAlternatives || 2,
+      avoidTolls: options.avoidTolls || false
+    };
+
+    try {
+      const result = await hereRoutingService.calculateRoute(origin, destination, routeOptions);
+
+      if (!result || !result.routes || result.routes.length === 0) {
+        throw new Error('HERE Routing API returned no routes');
+      }
+
+      return this.transformHereRoute(result);
+    } catch (error) {
+      console.error('HERE routing error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get detailed route with turn-by-turn instructions
-   * Priority: Geoapify -> OSRM -> TomTom
+   * Priority: HERE -> OSRM -> Geoapify -> TomTom
    */
   async getDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     const maxAlternatives = options.maxAlternatives || 3;
     
     try {
-      // Try Geoapify first (with traffic data support)
-      try {
-        const geoapifyRoute = await this.getGeoapifyDetailedRoute(
-          originLat, originLng, destinationLat, destinationLng, options
-        );
+      // Try HERE Routing first (traffic-aware, high quality maneuvers)
+      // Check if API key is configured before attempting
+      const hereApiKey = 
+        import.meta.env.VITE_HERE_API_KEY ||
+        import.meta.env.VITE_HERE_APIKEY ||
+        import.meta.env.VITE_HERE_ROUTING_KEY;
+      
+      if (hereApiKey) {
+        try {
+          const hereRoute = await this.getHereDetailedRoute(
+            originLat, originLng, destinationLat, destinationLng, options
+          );
 
-        if (geoapifyRoute && geoapifyRoute.routes && geoapifyRoute.routes.length > 0) {
-          console.log('✅ Using Geoapify for routing');
-          return geoapifyRoute;
+          if (hereRoute && hereRoute.routes && hereRoute.routes.length > 0) {
+            return hereRoute;
+          }
+        } catch (hereError) {
+          // Silently fall back to OSRM
         }
-      } catch (geoapifyError) {
-        console.warn('Geoapify routing failed, falling back to OSRM:', geoapifyError.message);
       }
 
-      // Fallback to OSRM for reliable routing (OSRM typically provides better alternatives)
+      // Try OSRM (fast open-source routing with good alternates)
       try {
         const osrmRoute = await this.getOSRMDetailedRoute(
           originLat, originLng, destinationLat, destinationLng, options
@@ -47,7 +82,21 @@ class EnhancedRoutingService {
           return osrmRoute;
         }
       } catch (osrmError) {
-        console.warn('OSRM routing failed, falling back to TomTom:', osrmError.message);
+        console.warn('OSRM routing failed, falling back to Geoapify:', osrmError.message);
+      }
+
+      // Fallback to Geoapify (with traffic data support)
+      try {
+        const geoapifyRoute = await this.getGeoapifyDetailedRoute(
+          originLat, originLng, destinationLat, destinationLng, options
+        );
+
+        if (geoapifyRoute && geoapifyRoute.routes && geoapifyRoute.routes.length > 0) {
+          console.log('✅ Using Geoapify for routing');
+          return geoapifyRoute;
+        }
+      } catch (geoapifyError) {
+        console.warn('Geoapify routing failed, falling back to TomTom:', geoapifyError.message);
       }
 
       // Final fallback to TomTom API (with traffic data)
@@ -169,12 +218,14 @@ class EnhancedRoutingService {
    */
   async getOSRMDetailedRoute(originLat, originLng, destinationLat, destinationLng, options = {}) {
     try {
-      const maxAlternatives = options.maxAlternatives || 3;
+      const requestedAlternatives = options.maxAlternatives || 3;
+      // Ensure we request at least 3 alternatives (OSRM returns up to 3) and cap to 4 for safety
+      const osrmAlternatives = Math.min(Math.max(requestedAlternatives, 3), 4);
       
       // OSRM API expects coordinates in longitude,latitude order
-      // Use alternatives=true to get multiple routes (OSRM supports this better than TomTom)
+      // Use alternatives parameter to request multiple routes
       const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destinationLng},${destinationLat}?overview=full&geometries=geojson&steps=true&alternatives=true`
+        `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destinationLng},${destinationLat}?overview=full&geometries=geojson&steps=true&alternatives=${osrmAlternatives}`
       );
 
       if (!response.ok) {
@@ -188,8 +239,7 @@ class EnhancedRoutingService {
       }
 
       // Log how many routes were returned for debugging
-      const requestedAlternatives = options.maxAlternatives || 3;
-      console.log(`OSRM API returned ${data.routes.length} route(s) (requested ${requestedAlternatives} alternatives)`);
+      console.log(`OSRM API returned ${data.routes.length} route(s) (requested ${osrmAlternatives} alternatives)`);
 
       // Validate response structure
       if (!data.routes[0].geometry || !data.routes[0].geometry.coordinates) {
@@ -401,16 +451,16 @@ class EnhancedRoutingService {
       return null;
     }
 
-    // Sort routes by distance (shortest first) - fastest route = lowest km
+    // Sort routes by duration (fastest first)
     routes.sort((a, b) => {
-      const distanceA = a.distance_km || Infinity;
-      const distanceB = b.distance_km || Infinity;
-      return distanceA - distanceB;
+      const durationA = a.estimated_duration_minutes || Infinity;
+      const durationB = b.estimated_duration_minutes || Infinity;
+      return durationA - durationB;
     });
 
     return {
       routes: routes,
-      recommended_route: routes[0], // First route is now the shortest (fastest)
+      recommended_route: routes[0], // First route is now the fastest by ETA
       origin: {
         lat: routes[0].route_coordinates[0][0],
         lon: routes[0].route_coordinates[0][1]
@@ -665,16 +715,16 @@ class EnhancedRoutingService {
       return null;
     }
 
-    // Sort routes by distance (shortest first) - fastest route = lowest km
+    // Sort routes by duration (fastest first)
     routes.sort((a, b) => {
-      const distanceA = a.distance_km || Infinity;
-      const distanceB = b.distance_km || Infinity;
-      return distanceA - distanceB;
+      const durationA = a.estimated_duration_minutes || Infinity;
+      const durationB = b.estimated_duration_minutes || Infinity;
+      return durationA - durationB;
     });
 
     return {
       routes: routes,
-      recommended_route: routes[0], // First route is now the shortest (fastest)
+      recommended_route: routes[0], // First route is now the fastest by ETA
       origin: {
         lat: routes[0].route_coordinates[0][0],
         lon: routes[0].route_coordinates[0][1]
@@ -729,6 +779,247 @@ class EnhancedRoutingService {
     };
 
     return maneuverMap[tomtomType] || 'straight';
+  }
+
+  /**
+   * Transform HERE Routing v8 response to our internal route format
+   */
+  transformHereRoute(hereData) {
+    if (!hereData || !hereData.routes || hereData.routes.length === 0) {
+      return null;
+    }
+
+    const routes = hereData.routes.map((route, index) => {
+      const sections = Array.isArray(route.sections) ? route.sections : [];
+      if (sections.length === 0) {
+        return null;
+      }
+
+      const allCoordinates = [];
+      const steps = [];
+
+      // Aggregate distance/duration across sections
+      let totalLengthMeters = 0;
+      let totalDurationSeconds = 0;
+
+      // Try to get polyline from route level first (HERE v8 sometimes puts it here)
+      if (route.polyline && typeof route.polyline === 'string') {
+        try {
+          const decoded = hereRoutingService.decodePolyline(route.polyline);
+          if (Array.isArray(decoded) && decoded.length > 0) {
+            decoded.forEach((coord) => {
+              const [lat, lon] = Array.isArray(coord) ? coord : [coord.lat, coord.lon ?? coord.lng];
+              if (
+                typeof lat === 'number' &&
+                typeof lon === 'number' &&
+                !isNaN(lat) &&
+                !isNaN(lon) &&
+                lat >= -90 &&
+                lat <= 90 &&
+                lon >= -180 &&
+                lon <= 180
+              ) {
+                allCoordinates.push([lat, lon]);
+              }
+            });
+          }
+        } catch (e) {
+          // Silently continue if decoding fails
+        }
+      }
+
+      // Also check sections for polylines (HERE v8 can put it in either place)
+      sections.forEach((section, sectionIndex) => {
+        // Decode geometry - HERE v8 returns polyline in section.polyline
+        if (section.polyline && typeof section.polyline === 'string') {
+          try {
+            const decoded = hereRoutingService.decodePolyline(section.polyline);
+            if (Array.isArray(decoded) && decoded.length > 0) {
+              decoded.forEach((coord) => {
+                const [lat, lon] = Array.isArray(coord) ? coord : [coord.lat, coord.lon ?? coord.lng];
+                if (
+                  typeof lat === 'number' &&
+                  typeof lon === 'number' &&
+                  !isNaN(lat) &&
+                  !isNaN(lon) &&
+                  lat >= -90 &&
+                  lat <= 90 &&
+                  lon >= -180 &&
+                  lon <= 180
+                ) {
+                  // Avoid duplicates if route.polyline was already decoded
+                  const isDuplicate = allCoordinates.some(
+                    ([existingLat, existingLon]) =>
+                      Math.abs(existingLat - lat) < 0.00001 && Math.abs(existingLon - lon) < 0.00001
+                  );
+                  if (!isDuplicate) {
+                    allCoordinates.push([lat, lon]);
+                  }
+                }
+              });
+            }
+          } catch (e) {
+            // Silently continue if decoding fails
+          }
+        }
+        
+        // Fallback: Try to extract from section geometry if polyline is missing
+        if (allCoordinates.length === 0 && section.geometry) {
+          if (Array.isArray(section.geometry)) {
+            section.geometry.forEach((point) => {
+              const lat = point.lat ?? point.latitude;
+              const lon = point.lon ?? point.longitude ?? point.lng;
+              if (
+                typeof lat === 'number' &&
+                typeof lon === 'number' &&
+                !isNaN(lat) &&
+                !isNaN(lon) &&
+                lat >= -90 &&
+                lat <= 90 &&
+                lon >= -180 &&
+                lon <= 180
+              ) {
+                allCoordinates.push([lat, lon]);
+              }
+            });
+          }
+        }
+
+        // Summary metrics
+        const length = section.summary?.length || 0;
+        const duration = section.summary?.duration || 0;
+        totalLengthMeters += length;
+        totalDurationSeconds += duration;
+      });
+
+      if (allCoordinates.length < 2) {
+        return null;
+      }
+
+      // Build steps from actions, mapping offsets to coordinates as best effort
+      let coordinateIndexOffset = 0;
+      sections.forEach((section) => {
+        const sectionCoordsCount = allCoordinates.length;
+        const actions = Array.isArray(section.actions) ? section.actions : [];
+        actions.forEach((action, stepIndex) => {
+          const globalIndex =
+            coordinateIndexOffset +
+            Math.min(
+              typeof action.offset === 'number' ? action.offset : 0,
+              sectionCoordsCount - 1
+            );
+          const loc =
+            allCoordinates[globalIndex] ||
+            allCoordinates[allCoordinates.length - 1];
+
+          steps.push({
+            index: steps.length,
+            instruction: action.instruction || action.action || 'Continue',
+            maneuver_type: this.mapHereManeuverType(action.action),
+            distance_meters: action.length || 0,
+            travel_time_seconds: action.duration || 0,
+            street_name: action.street || '',
+            location: loc
+          });
+        });
+
+        coordinateIndexOffset += sectionCoordsCount;
+      });
+
+      if (steps.length === 0) {
+        // Fallback single step if HERE did not return actions
+        steps.push({
+          index: 0,
+          instruction: 'Follow the route to your destination',
+          maneuver_type: 'straight',
+          distance_meters: totalLengthMeters,
+          travel_time_seconds: totalDurationSeconds,
+          street_name: '',
+          location: allCoordinates[0]
+        });
+      }
+
+      return {
+        route_id: `here_${Date.now()}_${index}`,
+        route_name: index === 0 ? 'Fastest Route' : `Alternative ${index}`,
+        route_type: index === 0 ? 'fastest' : 'alternative',
+        route_quality: index === 0 ? 'primary' : 'alternative',
+
+        distance_km: totalLengthMeters / 1000,
+        estimated_duration_minutes: totalDurationSeconds / 60,
+
+        route_coordinates: allCoordinates,
+        steps,
+
+        traffic_conditions: 'moderate',
+        has_tolls: false,
+        has_highways: false,
+        has_ferries: false,
+
+        confidence_level: 'high',
+        data_source: 'here',
+        real_time_traffic: true,
+
+        bounds: this.calculateBounds(allCoordinates)
+      };
+    }).filter(route => route !== null);
+
+    if (routes.length === 0) {
+      return null;
+    }
+
+    // Sort by ETA so first is fastest
+    routes.sort((a, b) => {
+      const durationA = a.estimated_duration_minutes || Infinity;
+      const durationB = b.estimated_duration_minutes || Infinity;
+      return durationA - durationB;
+    });
+
+    return {
+      routes,
+      recommended_route: routes[0],
+      origin: {
+        lat: routes[0].route_coordinates[0][0],
+        lon: routes[0].route_coordinates[0][1]
+      },
+      destination: {
+        lat: routes[0].route_coordinates[routes[0].route_coordinates.length - 1][0],
+        lon: routes[0].route_coordinates[routes[0].route_coordinates.length - 1][1]
+      }
+    };
+  }
+
+  /**
+   * Map HERE Routing maneuver action types to our internal maneuver types
+   */
+  mapHereManeuverType(hereAction) {
+    const action = (hereAction || '').toLowerCase();
+    const map = {
+      depart: 'depart',
+      arrive: 'arrive',
+      'turn-left': 'turn-left',
+      'turn-right': 'turn-right',
+      'keep-left': 'keep-left',
+      'keep-right': 'keep-right',
+      'u-turn': 'uturn',
+      'enter-roundabout': 'roundabout-enter',
+      'leave-roundabout': 'roundabout-exit',
+      straight: 'straight',
+      continue: 'straight',
+      merge: 'merge',
+      exit: 'exit'
+    };
+
+    // HERE actions are often like "turn", "keepLeft", "keepRight", "uTurn"
+    if (!map[action]) {
+      if (action.includes('left')) return 'turn-left';
+      if (action.includes('right')) return 'turn-right';
+      if (action.includes('uturn') || action.includes('u-turn')) return 'uturn';
+      if (action.includes('roundabout')) return 'roundabout-enter';
+      if (action.includes('exit')) return 'exit';
+    }
+
+    return map[action] || 'straight';
   }
 
   /**

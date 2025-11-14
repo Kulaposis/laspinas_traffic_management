@@ -1,5 +1,5 @@
 // Firebase Configuration and Initialization
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -18,18 +18,33 @@ import {
 
 // Firebase configuration object
 // Using environment variables for security
+// Fail-fast check to ensure required env vars are present (prevents accidental key exposure)
+const requiredEnvVars = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_APP_ID',
+];
+const missingEnv = requiredEnvVars.filter((key) => !import.meta?.env?.[key]);
+if (missingEnv.length > 0) {
+  throw new Error(`Missing required Firebase environment variables: ${missingEnv.join(', ')}`);
+}
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAUgpqB3LoCDjpKNBN-Xec-TUHAKszlQVY",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "traffic-management-9c2f4.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "traffic-management-9c2f4",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "traffic-management-9c2f4.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "870304007603",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:870304007603:web:9d347421d1ea2abcc977c6",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-MWNPN4MPQH"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  // measurementId is optional; omit if not provided
+  ...(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+    ? { measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID }
+    : {}),
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase (reuse existing app in dev/HMR to avoid duplicate-app error)
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Analytics is intentionally not initialized to avoid blocked tracking requests
 

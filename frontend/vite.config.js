@@ -19,6 +19,22 @@ export default defineConfig({
   server: {
     fs: {
       strict: false
+    },
+    proxy: {
+      // Dev-time proxy to avoid CORS when calling TomTom from the browser
+      '/tomtom': {
+        target: 'https://api.tomtom.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/tomtom/, '')
+      },
+      // Dev-time proxy for HERE Traffic APIs
+      '/here': {
+        target: 'https://traffic.ls.hereapi.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/here/, '')
+      }
     }
   }
 })

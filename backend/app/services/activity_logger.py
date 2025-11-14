@@ -5,6 +5,7 @@ import logging
 
 from ..models.activity_log import ActivityLog, ActivityType
 from ..models.user import User
+from ..utils.role_helpers import get_role_value
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class ActivityLogger:
             ip_address=ip_address,
             user_agent=user_agent,
             extra_data={
-                "user_role": user.role.value,
+                "user_role": get_role_value(user.role),
                 "login_time": datetime.utcnow().isoformat()
             }
         )
@@ -111,7 +112,7 @@ class ActivityLogger:
             ip_address=ip_address,
             user_agent=user_agent,
             extra_data={
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -127,7 +128,7 @@ class ActivityLogger:
             resource_id=emergency_id,
             extra_data={
                 "emergency_type": emergency_type,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -147,7 +148,7 @@ class ActivityLogger:
             resource_id=emergency_id,
             extra_data={
                 "status_change": status_change,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -163,7 +164,7 @@ class ActivityLogger:
             resource_id=emergency_id,
             extra_data={
                 "resolution_notes": resolution_notes,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -180,7 +181,7 @@ class ActivityLogger:
             extra_data={
                 "verification_status": verification_status,
                 "moderation_action": True,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -196,7 +197,7 @@ class ActivityLogger:
             resource_id=complaint_id,
             extra_data={
                 "category": category,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -212,7 +213,7 @@ class ActivityLogger:
             resource_id=report_id,
             extra_data={
                 "report_type": report_type,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -228,7 +229,7 @@ class ActivityLogger:
             resource_id=violation_id,
             extra_data={
                 "violation_type": violation_type,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -257,7 +258,7 @@ class ActivityLogger:
             extra_data={
                 "export_type": export_type,
                 "record_count": record_count,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
     
@@ -295,7 +296,7 @@ class ActivityLogger:
                 "endpoint": endpoint,
                 "method": method,
                 "response_code": response_code,
-                "user_role": user.role.value
+                "user_role": get_role_value(user.role)
             }
         )
 

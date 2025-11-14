@@ -26,15 +26,15 @@ async def update_realtime_weather(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger real-time weather data update for all monitoring areas"""
-    from ..utils.role_helpers import is_authorized
+    from ..utils.role_helpers import is_authorized, get_role_value
     if not is_authorized(current_user.role, ["admin", "lgu_staff"]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access denied. User role '{current_user.role.value}' not authorized. Only admins and LGU staff can trigger weather updates"
+            detail=f"Access denied. User role '{get_role_value(current_user.role)}' not authorized. Only admins and LGU staff can trigger weather updates"
         )
     
     try:
-        logger.info(f"Weather update triggered by user: {current_user.username} (role: {current_user.role.value})")
+        logger.info(f"Weather update triggered by user: {current_user.username} (role: {get_role_value(current_user.role)})")
 
         # Background runner that manages its own DB session and schedules async tasks properly
         def trigger_weather_updates():
@@ -59,7 +59,7 @@ async def update_realtime_weather(
             "message": "Real-time weather update initiated",
             "status": "success",
             "initiated_by": current_user.username,
-            "user_role": current_user.role.value,
+            "user_role": get_role_value(current_user.role),
             "timestamp": datetime.utcnow()
         }
     except Exception as e:
@@ -76,7 +76,7 @@ async def update_realtime_flood(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger real-time flood monitoring update with WebSocket broadcast"""
-    if current_user.role.value not in ["admin", "lgu_staff", "traffic_enforcer"]:
+    if get_role_value(current_user.role) not in ["admin", "lgu_staff", "traffic_enforcer"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins, LGU staff, and traffic enforcers can trigger flood updates"
@@ -244,7 +244,7 @@ async def update_barangay_flood_data(
     current_user: User = Depends(get_current_user)
 ):
     """Update flood monitoring data for all barangays"""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    if get_role_value(current_user.role) not in ["admin", "lgu_staff"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins and LGU staff can update flood data"
@@ -364,7 +364,7 @@ def create_weather_data(
     current_user: User = Depends(get_current_user)
 ):
     """Create new weather data entry (for admin/system)."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can create weather data"
@@ -438,7 +438,7 @@ def create_flood_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Create new flood monitoring entry."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can create flood monitoring data"
@@ -458,7 +458,7 @@ def update_flood_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Update flood monitoring data."""
-    if current_user.role.value not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only traffic enforcers and admins can update flood data"
@@ -536,7 +536,7 @@ def create_weather_alert(
     current_user: User = Depends(get_current_user)
 ):
     """Create new weather alert (for admin only)."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can create weather alerts"
@@ -556,7 +556,7 @@ def update_weather_alert(
     current_user: User = Depends(get_current_user)
 ):
     """Update weather alert."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can update weather alerts"
@@ -583,7 +583,7 @@ def deactivate_weather_alert(
     current_user: User = Depends(get_current_user)
 ):
     """Deactivate a weather alert."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can deactivate weather alerts"

@@ -6,9 +6,11 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import csv
 import io
+import logging
 
 from ..db import get_db
 from ..auth import get_current_user
+from ..utils.role_helpers import get_role_value
 from ..models import User, ActivityLog, SystemLog, AuditLog
 from ..schemas.activity_log_schema import (
     ActivityLogResponse, SystemLogResponse, AuditLogResponse,
@@ -21,7 +23,7 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 def require_admin_or_staff(current_user: User = Depends(get_current_user)):
     """Require admin or staff role for logs access."""
     # Case-insensitive role check - enum values are uppercase (ADMIN, LGU_STAFF)
-    role_value = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    role_value = get_role_value(current_user.role) if hasattr(current_user.role, 'value') else str(current_user.role)
     role_upper = role_value.upper()
     if role_upper not in ["ADMIN", "LGU_STAFF"]:
         raise HTTPException(
@@ -46,76 +48,90 @@ async def get_activity_logs(
     current_user: User = Depends(require_admin_or_staff)
 ):
     """Get activity logs with filtering options."""
-    query = db.query(ActivityLog).outerjoin(User, ActivityLog.user_id == User.id)
-    
-    # Apply filters
-    if start_date:
-        query = query.filter(ActivityLog.created_at >= start_date)
-    if end_date:
-        query = query.filter(ActivityLog.created_at <= end_date)
-    if user_id:
-        query = query.filter(ActivityLog.user_id == user_id)
-    if activity_type:
-        query = query.filter(ActivityLog.activity_type == activity_type)
-    if resource_type:
-        query = query.filter(ActivityLog.resource_type == resource_type)
-    if is_successful is not None:
-        query = query.filter(ActivityLog.is_successful == is_successful)
-    if search_query:
-        search_filter = or_(
-            ActivityLog.activity_description.contains(search_query),
-            User.username.contains(search_query),
-            User.email.contains(search_query)
+    try:
+        query = db.query(ActivityLog).outerjoin(User, ActivityLog.user_id == User.id)
+        
+        # Apply filters
+        if start_date:
+            query = query.filter(ActivityLog.created_at >= start_date)
+        if end_date:
+            query = query.filter(ActivityLog.created_at <= end_date)
+        if user_id:
+            query = query.filter(ActivityLog.user_id == user_id)
+        if activity_type:
+            query = query.filter(ActivityLog.activity_type == activity_type)
+        if resource_type:
+            query = query.filter(ActivityLog.resource_type == resource_type)
+        if is_successful is not None:
+            query = query.filter(ActivityLog.is_successful == is_successful)
+        if search_query:
+            search_filter = or_(
+                ActivityLog.activity_description.contains(search_query),
+                User.username.contains(search_query),
+                User.email.contains(search_query)
+            )
+            query = query.filter(search_filter)
+        
+        # Get total count for pagination
+        total_count = query.count()
+        
+        # Order by most recent first
+        query = query.order_by(desc(ActivityLog.created_at))
+        
+        # Apply pagination
+        logs = query.offset(offset).limit(limit).all()
+        
+        # Format response with user information
+        result = []
+        for log in logs:
+            try:
+                log_dict = {
+                    "id": log.id,
+                    "user_id": log.user_id,
+                    "activity_type": log.activity_type,
+                    "activity_description": log.activity_description,
+                    "ip_address": log.ip_address,
+                    "user_agent": log.user_agent,
+                    "session_id": log.session_id,
+                    "latitude": log.latitude,
+                    "longitude": log.longitude,
+                    "location_description": log.location_description,
+                    "extra_data": log.extra_data,
+                    "resource_type": log.resource_type,
+                    "resource_id": log.resource_id,
+                    "is_successful": log.is_successful,
+                    "error_message": log.error_message,
+                    "response_time_ms": log.response_time_ms,
+                    "created_at": log.created_at.isoformat() if log.created_at else None,
+                    "user_name": log.user.username if log.user else None,
+                    "user_email": log.user.email if log.user else None,
+                    "user_role": get_role_value(log.user.role) if log.user and log.user.role else None
+                }
+                result.append(log_dict)
+            except Exception as e:
+                # Log error for individual log but continue processing others
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error processing log {log.id}: {str(e)}")
+                continue
+        
+        # Return different formats based on the format parameter
+        if format == "paginated":
+            return {
+                "logs": result,
+                "total": total_count,
+                "limit": limit,
+                "offset": offset
+            }
+        else:
+            # Return direct list for backward compatibility (Emergency Center)
+            return result
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching activity logs: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch activity logs: {str(e)}"
         )
-        query = query.filter(search_filter)
-    
-    # Get total count for pagination
-    total_count = query.count()
-    
-    # Order by most recent first
-    query = query.order_by(desc(ActivityLog.created_at))
-    
-    # Apply pagination
-    logs = query.offset(offset).limit(limit).all()
-    
-    # Format response with user information
-    result = []
-    for log in logs:
-        log_dict = {
-            "id": log.id,
-            "user_id": log.user_id,
-            "activity_type": log.activity_type,
-            "activity_description": log.activity_description,
-            "ip_address": log.ip_address,
-            "user_agent": log.user_agent,
-            "session_id": log.session_id,
-            "latitude": log.latitude,
-            "longitude": log.longitude,
-            "location_description": log.location_description,
-            "extra_data": log.extra_data,
-            "resource_type": log.resource_type,
-            "resource_id": log.resource_id,
-            "is_successful": log.is_successful,
-            "error_message": log.error_message,
-            "response_time_ms": log.response_time_ms,
-            "created_at": log.created_at,
-            "user_name": log.user.username if log.user else None,
-            "user_email": log.user.email if log.user else None,
-            "user_role": log.user.role.value if log.user else None
-        }
-        result.append(log_dict)
-    
-    # Return different formats based on the format parameter
-    if format == "paginated":
-        return {
-            "logs": result,
-            "total": total_count,
-            "limit": limit,
-            "offset": offset
-        }
-    else:
-        # Return direct list for backward compatibility (Emergency Center)
-        return result
 
 @router.get("/activity/export")
 async def export_activity_logs(
@@ -177,7 +193,7 @@ async def export_activity_logs(
             log.id,
             log.user_id,
             log.user.email if log.user else 'N/A',
-            log.user.role.value if log.user else 'N/A',
+            get_role_value(log.user.role) if log.user else 'N/A',
             log.activity_type,
             log.activity_description or '',
             log.resource_type or '',
@@ -298,7 +314,7 @@ async def get_audit_logs(
             "created_at": log.created_at,
             "user_name": log.user.username if log.user else None,
             "user_email": log.user.email if log.user else None,
-            "user_role": log.user.role.value if log.user else None
+            "user_role": get_role_value(log.user.role) if log.user else None
         }
         result.append(AuditLogResponse(**log_dict))
     
@@ -362,7 +378,7 @@ async def get_logs_statistics(
             "user_id": user.id,
             "username": user.username,
             "email": user.email,
-            "role": user.role.value,
+            "role": get_role_value(user.role),
             "activity_count": user.activity_count
         }
         for user in most_active_users_query
@@ -492,7 +508,7 @@ async def get_user_activity_summary(
         user_id=user.id,
         user_name=user.username,
         user_email=user.email,
-        user_role=user.role.value,
+        user_role=get_role_value(user.role),
         total_activities=total_activities,
         last_activity=last_activity,
         most_common_activities=most_common_activities,
@@ -534,7 +550,7 @@ async def create_activity_log(
         "created_at": activity_log.created_at,
         "user_name": user.username if user else None,
         "user_email": user.email if user else None,
-        "user_role": user.role.value if user else None
+        "user_role": get_role_value(user.role) if user else None
     }
     
     return ActivityLogResponse(**log_dict)
@@ -579,7 +595,7 @@ async def create_audit_log(
         "created_at": audit_log.created_at,
         "user_name": user.username if user else None,
         "user_email": user.email if user else None,
-        "user_role": user.role.value if user else None
+        "user_role": get_role_value(user.role) if user else None
     }
     
     return AuditLogResponse(**log_dict)

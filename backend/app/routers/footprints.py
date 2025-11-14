@@ -6,6 +6,7 @@ from ..db import get_db
 from ..models.footprint import Footprint, CrowdLevel
 from ..models.user import User
 from ..auth import get_current_user
+from ..utils.role_helpers import get_role_value
 from ..services.footprint_service import footprint_service
 from ..schemas.footprint_schema import (
     FootprintCreate, FootprintResponse, FootprintUpdate
@@ -21,7 +22,7 @@ async def update_realtime_footprints(
     current_user: User = Depends(get_current_user)
 ):
     """Trigger real-time footprint data update for all monitoring areas"""
-    if current_user.role.value not in ["admin", "lgu_staff", "traffic_enforcer"]:
+    if get_role_value(current_user.role) not in ["admin", "lgu_staff", "traffic_enforcer"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only authorized personnel can trigger footprint updates"
@@ -174,7 +175,7 @@ def create_footprint_area(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new footprint monitoring area."""
-    if current_user.role.value not in ["admin", "lgu_staff"]:
+    if get_role_value(current_user.role) not in ["admin", "lgu_staff"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin and LGU staff can create monitoring areas"
@@ -219,7 +220,7 @@ def update_footprint_area(
     current_user: User = Depends(get_current_user)
 ):
     """Update footprint monitoring area."""
-    if current_user.role.value not in ["admin", "lgu_staff", "traffic_enforcer"]:
+    if get_role_value(current_user.role) not in ["admin", "lgu_staff", "traffic_enforcer"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only authorized personnel can update monitoring areas"
@@ -261,7 +262,7 @@ def delete_footprint_area(
     current_user: User = Depends(get_current_user)
 ):
     """Delete footprint monitoring area."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can delete monitoring areas"
@@ -294,7 +295,7 @@ async def initialize_footprint_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Initialize footprint monitoring areas with predefined locations."""
-    if current_user.role.value not in ["admin"]:
+    if get_role_value(current_user.role) not in ["admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can initialize monitoring areas"

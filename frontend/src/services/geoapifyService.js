@@ -305,11 +305,11 @@ class GeoapifyService {
       return { routes: [] };
     }
 
-    // Sort routes by distance (shortest first)
+    // Sort routes by duration (fastest first)
     routes.sort((a, b) => {
-      const distanceA = a.distance_km || a.summary?.lengthInMeters / 1000 || Infinity;
-      const distanceB = b.distance_km || b.summary?.lengthInMeters / 1000 || Infinity;
-      return distanceA - distanceB;
+      const durationA = a.estimated_duration_minutes || a.summary?.travelTimeInSeconds / 60 || Infinity;
+      const durationB = b.estimated_duration_minutes || b.summary?.travelTimeInSeconds / 60 || Infinity;
+      return durationA - durationB;
     });
 
     // Return in format compatible with both TomTom and our enhanced routing service
@@ -1174,8 +1174,8 @@ class GeoapifyService {
       // Remove duplicates (routes that are too similar)
       const uniqueRoutes = this.deduplicateRoutes(routes);
       
-      // Sort by distance (shortest first)
-      uniqueRoutes.sort((a, b) => (a.distance_km || Infinity) - (b.distance_km || Infinity));
+      // Sort by duration (fastest first)
+      uniqueRoutes.sort((a, b) => (a.estimated_duration_minutes || Infinity) - (b.estimated_duration_minutes || Infinity));
 
       return {
         routes: uniqueRoutes,

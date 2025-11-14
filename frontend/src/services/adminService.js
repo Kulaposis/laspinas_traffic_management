@@ -1,6 +1,15 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Prefer env var, but gracefully fall back to localhost:8000 to avoid runtime crashes
+const DEFAULT_API_URL =
+  typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || DEFAULT_API_URL;
+if (!import.meta.env.VITE_API_URL) {
+  // Non-fatal: help developers notice missing config without breaking the app
+  console.warn('[config] VITE_API_URL is not set; using fallback:', API_URL);
+}
 
 class AdminService {
   constructor() {

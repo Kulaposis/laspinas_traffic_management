@@ -18,8 +18,19 @@ const RouteAlternativesPanel = ({
   if (!routeAlternatives || routeAlternatives.length === 0 || !showRouteAlternatives || isNavigationActive || showSmartRoutePanel) return null;
 
   return (
-    <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-80 sm:max-h-96">
+    <div 
+      className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40"
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+      }}
+    >
+      <div 
+        className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+        style={{
+          maxHeight: 'min(calc(100vh - 100px), calc(100dvh - 100px), 80vh)',
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
         <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">Choose Route</h3>
@@ -32,7 +43,14 @@ const RouteAlternativesPanel = ({
           </div>
         </div>
 
-        <div className="max-h-80 overflow-y-auto">
+        <div 
+          className="overflow-y-auto overflow-x-hidden"
+          style={{
+            maxHeight: 'min(calc(100vh - 180px), calc(100dvh - 180px), 60vh)',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain'
+          }}
+        >
           {routeAlternatives.map((route, index) => {
             const isSelected = selectedRoute && selectedRoute.route_id === route.route_id;
             return (

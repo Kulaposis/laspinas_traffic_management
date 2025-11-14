@@ -29,13 +29,13 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
       name: 'Dashboard',
       href: '/dashboard',
       icon: LayoutDashboard,
-      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin']
+      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer'] // Removed 'admin'
     },
     {
       name: 'Reports',
       href: '/reports',
       icon: FileText,
-      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin']
+      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer'] // Removed 'admin'
     },
     // {
     //   name: 'Violations',
@@ -59,7 +59,7 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
       name: 'Parking',
       href: '/parking',
       icon: Car,
-      allowedRoles: ['citizen', 'lgu_staff', 'admin']
+      allowedRoles: ['citizen', 'lgu_staff'] // Removed 'admin'
     },
     {
       name: 'Notifications',
@@ -69,16 +69,9 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
     },
     {
       name: 'Traffic Monitor',
-      href: '/traffic',
-      icon: Activity,
-      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin']
-    },
-    {
-      name: 'Traffic Monitor (New)',
       href: '/traffic-monitor-new',
       icon: Activity,
-      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin'],
-      badge: 'NEW'
+      allowedRoles: ['citizen', 'lgu_staff', 'traffic_enforcer', 'admin']
     },
     {
       name: 'Traffic Map',
@@ -117,6 +110,12 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
       allowedRoles: ['admin']
     },
     {
+      name: 'Hazard Center',
+      href: '/admin/hazard-center',
+      icon: AlertTriangle,
+      allowedRoles: ['admin', 'lgu_staff']
+    },
+    {
       name: 'Emergency Center',
       href: '/emergency',
       icon: Phone,
@@ -132,9 +131,38 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
 
   // Normalize user role to lowercase for comparison (backend returns uppercase)
   const normalizedUserRole = user?.role?.toLowerCase();
-  const filteredNavigation = navigationItems.filter(item =>
+  const filteredNavigation = navigationItems
+    .filter(item =>
     item.allowedRoles.some(role => role.toLowerCase() === normalizedUserRole)
-  );
+    )
+    .sort((a, b) => {
+      // For admin users, prioritize Admin Dashboard and admin-specific items at the top
+      if (normalizedUserRole === 'admin') {
+        // Admin Dashboard always comes first
+        if (a.name === 'Admin Dashboard') return -1;
+        if (b.name === 'Admin Dashboard') return 1;
+        
+        // Other admin-only items come next
+        const aIsAdminOnly = a.allowedRoles.length === 1 && a.allowedRoles[0] === 'admin';
+        const bIsAdminOnly = b.allowedRoles.length === 1 && b.allowedRoles[0] === 'admin';
+        
+        if (aIsAdminOnly && !bIsAdminOnly) return -1;
+        if (!aIsAdminOnly && bIsAdminOnly) return 1;
+        
+        // Within admin-only items, maintain specific order
+        if (aIsAdminOnly && bIsAdminOnly) {
+          const adminOrder = {
+            'User Management': 2,
+            'Hazard Center': 3,
+            'System Settings': 4,
+            'Activity Logs': 5
+          };
+          return (adminOrder[a.name] || 99) - (adminOrder[b.name] || 99);
+        }
+      }
+      // For non-admin users, keep original order
+      return 0;
+    });
 
   return (
     <>

@@ -135,24 +135,24 @@ const Notifications = () => {
   // Notification categories for filtering
   const categories = [
     { value: 'all', label: 'All', icon: Bell, count: stats.total },
-    { value: 'traffic_update', label: 'Traffic', icon: MapPin, count: notifications.filter(n => n.notification_type === 'traffic_update').length },
-    { value: 'weather_alert', label: 'Weather', icon: AlertTriangle, count: notifications.filter(n => n.notification_type === 'weather_alert').length },
-    { value: 'system_alert', label: 'System', icon: Zap, count: notifications.filter(n => n.notification_type === 'system_alert').length },
-    { value: 'achievement', label: 'Rewards', icon: Gift, count: notifications.filter(n => n.notification_type === 'achievement').length },
+    { value: 'TRAFFIC_ALERT', label: 'Traffic', icon: MapPin, count: notifications.filter(n => (n.notification_type || '').toString().toUpperCase() === 'TRAFFIC_ALERT').length },
+    { value: 'WEATHER_ALERT', label: 'Weather', icon: AlertTriangle, count: notifications.filter(n => (n.notification_type || '').toString().toUpperCase() === 'WEATHER_ALERT').length },
+    { value: 'SYSTEM_ANNOUNCEMENT', label: 'System', icon: Zap, count: notifications.filter(n => (n.notification_type || '').toString().toUpperCase() === 'SYSTEM_ANNOUNCEMENT').length },
+    { value: 'EMERGENCY', label: 'Emergency', icon: AlertTriangle, count: notifications.filter(n => (n.notification_type || '').toString().toUpperCase() === 'EMERGENCY').length },
   ];
 
   const getNotificationIcon = (type, priority) => {
     const iconMap = {
-      traffic_update: MapPin,
-      weather_alert: AlertTriangle,
-      system_alert: Info,
-      report_update: MessageSquare,
-      achievement: Star,
-      emergency_alert: AlertTriangle
+      'TRAFFIC_ALERT': MapPin,
+      'WEATHER_ALERT': AlertTriangle,
+      'SYSTEM_ANNOUNCEMENT': Info,
+      'REPORT_UPDATE': MessageSquare,
+      'EMERGENCY': AlertTriangle
     };
-    
-    const Icon = iconMap[type] || Bell;
-    return <Icon className={`w-5 h-5 ${priority === 'high' ? 'animate-pulse' : ''}`} />;
+    const normalizedType = (type || '').toString().toUpperCase();
+    const normalizedPriority = (priority || '').toString().toLowerCase();
+    const Icon = iconMap[normalizedType] || Bell;
+    return <Icon className={`w-5 h-5 ${normalizedPriority === 'high' || normalizedPriority === 'urgent' ? 'animate-pulse' : ''}`} />;
   };
 
   const getNotificationActions = (notification) => {
@@ -169,19 +169,20 @@ const Notifications = () => {
     }
     
     // Type-specific actions
-    if (notification.notification_type === 'traffic_update') {
+    const nType = (notification.notification_type || '').toString().toUpperCase();
+    if (nType === 'TRAFFIC_ALERT') {
       actions.push({
         label: 'View on map',
         icon: ExternalLink,
         onClick: () => window.location.href = '/traffic'
       });
-    } else if (notification.notification_type === 'weather_alert') {
+    } else if (nType === 'WEATHER_ALERT') {
       actions.push({
         label: 'Weather details',
         icon: ExternalLink,
         onClick: () => window.location.href = '/weather'
       });
-    } else if (notification.notification_type === 'report_update') {
+    } else if (nType === 'REPORT_UPDATE') {
       actions.push({
         label: 'View report',
         icon: ExternalLink,
@@ -372,15 +373,15 @@ const Notifications = () => {
                 <div className="flex items-start space-x-4">
                   {/* Priority Indicator */}
                   <div className={`flex-shrink-0 w-1 h-full rounded-full ${
-                    notification.priority === 'high' ? 'bg-red-500' :
-                    notification.priority === 'medium' ? 'bg-orange-500' :
+                    ((notification.priority || '').toString().toLowerCase()) === 'high' || ((notification.priority || '').toString().toLowerCase()) === 'urgent' ? 'bg-red-500' :
+                    ((notification.priority || '').toString().toLowerCase()) === 'medium' ? 'bg-orange-500' :
                     'bg-green-500'
                   }`}></div>
                   
                   {/* Icon */}
                   <div className={`flex-shrink-0 p-2 rounded-full ${
-                    notification.priority === 'high' ? 'bg-red-100 text-red-600' :
-                    notification.priority === 'medium' ? 'bg-orange-100 text-orange-600' :
+                    ((notification.priority || '').toString().toLowerCase()) === 'high' || ((notification.priority || '').toString().toLowerCase()) === 'urgent' ? 'bg-red-100 text-red-600' :
+                    ((notification.priority || '').toString().toLowerCase()) === 'medium' ? 'bg-orange-100 text-orange-600' :
                     'bg-blue-100 text-blue-600'
                   }`}>
                     {getNotificationIcon(notification.notification_type, notification.priority)}
@@ -394,13 +395,8 @@ const Notifications = () => {
                           <h3 className="text-lg font-semibold text-gray-900">
                             {notification.title}
                           </h3>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            notification.notification_type === 'achievement' ? 'bg-yellow-100 text-yellow-800' :
-                            notification.notification_type === 'weather_alert' ? 'bg-orange-100 text-orange-800' :
-                            notification.notification_type === 'traffic_update' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {notification.notification_type.replace('_', ' ')}
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800`}>
+                            {(notification.notification_type || '').toString().replace('_', ' ')}
                           </span>
                           {!notification.is_read && (
                             <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
@@ -417,11 +413,11 @@ const Notifications = () => {
                             <span>{notificationService.formatNotificationTime(notification.created_at)}</span>
                           </div>
                           <span className={`capitalize px-2 py-1 rounded-full text-xs ${
-                            notification.priority === 'high' ? 'bg-red-100 text-red-800' :
-                            notification.priority === 'medium' ? 'bg-orange-100 text-orange-800' :
+                            ((notification.priority || '').toString().toLowerCase()) === 'high' || ((notification.priority || '').toString().toLowerCase()) === 'urgent' ? 'bg-red-100 text-red-800' :
+                            ((notification.priority || '').toString().toLowerCase()) === 'medium' ? 'bg-orange-100 text-orange-800' :
                             'bg-green-100 text-green-800'
                           }`}>
-                            {notification.priority} priority
+                            {(notification.priority || '').toString().toLowerCase()} priority
                           </span>
                           {notification.is_broadcast && (
                             <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs flex items-center">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, ScaleControl, ZoomControl, Polygon, Circle, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
@@ -127,7 +127,6 @@ import SmartRoutePanel from '../components/SmartRoutePanel';
 import WeatherFloodAdvisory from '../components/WeatherFloodAdvisory';
 import TrafficPredictionsPanel from '../components/TrafficPredictionsPanel';
 import TrafficMonitoringPanel from '../components/TrafficMonitoringPanel';
-import ActiveIncidentsPanel from '../components/ActiveIncidentsPanel';
 
 // NEW state toggles for API-backed layers
 // NOTE: set initial defaults to off; wire to API in future step
@@ -345,210 +344,6 @@ const trafficRecordsToHeatmapPoints = (records, { includeAll = false } = {}) => 
   return points;
 };
 
-// ===== Rule-based Heatmap Utilities (time/location filters and critical area scoring) =====
-const parseRecordDate = (record) => {
-  const ts = record?.created_at || record?.timestamp || record?.updated_at || record?.last_updated || record?.date;
-  if (!ts) return null;
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return null;
-  return d;
-};
-
-const isPeakHour = (date) => {
-  const h = date.getHours();
-  // Morning 7-10, Evening 16-20
-  return (h >= 7 && h <= 10) || (h >= 16 && h <= 20);
-};
-
-const isNightHour = (date) => {
-  const h = date.getHours();
-  return h >= 21 || h <= 5;
-};
-
-const filterByTimeOption = (records, option) => {
-  if (!Array.isArray(records) || records.length === 0) return [];
-  const now = Date.now();
-  const withinMs = {
-    '1h': 1 * 60 * 60 * 1000,
-    '3h': 3 * 60 * 60 * 1000,
-    '24h': 24 * 60 * 60 * 1000,
-  };
-  if (option === 'today_peak' || option === 'night') {
-    return records.filter((r) => {
-      const d = parseRecordDate(r);
-      if (!d) return true;
-      if (option === 'today_peak') return isPeakHour(d);
-      if (option === 'night') return isNightHour(d);
-      return true;
-    });
-  }
-  const win = withinMs[option] ?? withinMs['24h'];
-  return records.filter((r) => {
-    const d = parseRecordDate(r);
-    if (!d) return true;
-    return now - d.getTime() <= win;
-  });
-};
-
-const toRad = (deg) => (deg * Math.PI) / 180;
-const haversineKm = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
-const filterByLocationOption = (records, option, params) => {
-  if (!Array.isArray(records) || records.length === 0) return [];
-  const mapBounds = params?.bounds;
-  const center = params?.center;
-  const radiusKm = params?.radiusKm ?? 2;
-  if (option === 'view' && mapBounds) {
-    const south = mapBounds.getSouth?.() ?? mapBounds.south ?? mapBounds.minLat ?? -90;
-    const north = mapBounds.getNorth?.() ?? mapBounds.north ?? mapBounds.maxLat ?? 90;
-    const west = mapBounds.getWest?.() ?? mapBounds.west ?? mapBounds.minLng ?? -180;
-    const east = mapBounds.getEast?.() ?? mapBounds.east ?? mapBounds.maxLng ?? 180;
-    return records.filter((r) => {
-      const lat = Number(r?.latitude ?? r?.lat ?? r?.center_latitude ?? r?.start_latitude ?? r?.location?.lat);
-      const lng = Number(r?.longitude ?? r?.lng ?? r?.center_longitude ?? r?.start_longitude ?? r?.location?.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-      return lat >= south && lat <= north && lng >= west && lng <= east;
-    });
-  }
-  if (option === 'city' && params?.defaultBounds) {
-    const b = params.defaultBounds;
-    return records.filter((r) => {
-      const lat = Number(r?.latitude ?? r?.lat ?? r?.center_latitude ?? r?.start_latitude ?? r?.location?.lat);
-      const lng = Number(r?.longitude ?? r?.lng ?? r?.center_longitude ?? r?.start_longitude ?? r?.location?.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-      return lat >= b.lat_min && lat <= b.lat_max && lng >= b.lng_min && lng <= b.lng_max;
-    });
-  }
-  if (option === 'radius' && center) {
-    return records.filter((r) => {
-      const lat = Number(r?.latitude ?? r?.lat ?? r?.center_latitude ?? r?.start_latitude ?? r?.location?.lat);
-      const lng = Number(r?.longitude ?? r?.lng ?? r?.center_longitude ?? r?.start_longitude ?? r?.location?.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-      return haversineKm(center[0], center[1], lat, lng) <= radiusKm;
-    });
-  }
-  return records;
-};
-
-const computeCriticalScores = (records, thresholdPct = 70, minOccurrences = 2) => {
-  const scores = new Map();
-  (records || []).forEach((r) => {
-    const road = (r?.road_name || r?.roadName || '').toLowerCase().trim();
-    if (!road) return;
-    const sev = String(r?.traffic_status || r?.status || '').toLowerCase();
-    const pct = Number(r?.congestion_percentage);
-    const heavyish = sev === 'heavy' || sev === 'severe' || sev === 'standstill' || (Number.isFinite(pct) && pct >= thresholdPct);
-    if (!heavyish) return;
-    const prev = scores.get(road) || 0;
-    scores.set(road, prev + 1);
-  });
-  // Reduce to only critical (occurrences >= minOccurrences)
-  const critical = new Map();
-  scores.forEach((count, road) => {
-    if (count >= minOccurrences) critical.set(road, count);
-  });
-  return critical;
-};
-
-const buildRuleHeatmapPoints = (records, { majorOnly = true, criticalScores }) => {
-  if (!Array.isArray(records)) return [];
-  const points = [];
-  const seen = new Set();
-  (records || []).forEach((record) => {
-    const roadName = record?.road_name || record?.roadName || '';
-    if (majorOnly && !isMajorRoad(roadName || '')) return;
-    const lat = Number(
-      record?.latitude ??
-      record?.lat ??
-      record?.center_latitude ??
-      record?.start_latitude ??
-      record?.location?.lat
-    );
-    const lng = Number(
-      record?.longitude ??
-      record?.lng ??
-      record?.center_longitude ??
-      record?.start_longitude ??
-      record?.location?.lng
-    );
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    let intensity = clamp01(deriveHeatIntensity(record), 0.05, 1);
-    // Boost intensity for critical roads
-    const keyRoad = (roadName || '').toLowerCase().trim();
-    if (keyRoad && criticalScores?.has(keyRoad)) {
-      const boostFactor = Math.min(1.0, 0.75 + (criticalScores.get(keyRoad) * 0.08));
-      intensity = clamp01(Math.max(intensity, boostFactor), 0.05, 1);
-    }
-    const key = `${roadName}-${lat.toFixed(5)}-${lng.toFixed(5)}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    points.push([lat, lng, intensity]);
-  });
-  return points;
-};
-// ===== End rule utilities =====
-
-// Categorize normalized intensity (0–1) to traffic colors.
-// We treat intensity as a normalized jamFactor-style value where:
-// 0–0.3  → free / green
-// 0.3–0.6 → moderate / yellow
-// 0.6–1.0 → heavy / red
-const categorizeIntensity = (intensity) => {
-  const v = Number.isFinite(intensity) ? clamp01(intensity, 0, 1) : 0;
-  if (v < 0.3) return 'green';
-  if (v < 0.6) return 'yellow';
-  return 'red';
-};
-
-const filterPointsByCategories = (points, { showGreen, showYellow, showRed }) => {
-  if (!Array.isArray(points) || points.length === 0) return [];
-  return points.filter((p) => {
-    const cat = categorizeIntensity(p[2]);
-    return (cat === 'green' && showGreen) || (cat === 'yellow' && showYellow) || (cat === 'red' && showRed);
-  });
-};
-
-const filterPointArrayByLocation = (points, option, params) => {
-  if (!Array.isArray(points) || points.length === 0) return [];
-  const mapBounds = params?.bounds;
-  const center = params?.center;
-  const radiusKm = params?.radiusKm ?? 2;
-  if (option === 'view' && mapBounds) {
-    const south = mapBounds.getSouth?.() ?? mapBounds.south ?? mapBounds.minLat ?? -90;
-    const north = mapBounds.getNorth?.() ?? mapBounds.north ?? mapBounds.maxLat ?? 90;
-    const west = mapBounds.getWest?.() ?? mapBounds.west ?? mapBounds.minLng ?? -180;
-    const east = mapBounds.getEast?.() ?? mapBounds.east ?? mapBounds.maxLng ?? 180;
-    return points.filter((p) => {
-      const [lat, lng] = p;
-      return Number.isFinite(lat) && Number.isFinite(lng) && lat >= south && lat <= north && lng >= west && lng <= east;
-    });
-  }
-  if (option === 'city' && params?.defaultBounds) {
-    const b = params.defaultBounds;
-    return points.filter((p) => {
-      const [lat, lng] = p;
-      return Number.isFinite(lat) && Number.isFinite(lng) && lat >= b.lat_min && lat <= b.lat_max && lng >= b.lng_min && lng <= b.lng_max;
-    });
-  }
-  if (option === 'radius' && center) {
-    return points.filter((p) => {
-      const [lat, lng] = p;
-      return Number.isFinite(lat) && Number.isFinite(lng) && haversineKm(center[0], center[1], lat, lng) <= radiusKm;
-    });
-  }
-  return points;
-};
-
 const TrafficMap = () => {
   const { user } = useAuth();
   const isGuest = !user;
@@ -598,7 +393,6 @@ const TrafficMap = () => {
   // Layout optimization states
   const [navigationPanelMinimized, setNavigationPanelMinimized] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [searchBarVisible, setSearchBarVisible] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [showSecondaryActions, setShowSecondaryActions] = useState(false);
@@ -624,7 +418,6 @@ const TrafficMap = () => {
   useEffect(() => {
     const handleResize = () => {
       setIsDesktop(window.innerWidth >= 1024);
-      setIsMobile(window.innerWidth < 768);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -816,27 +609,8 @@ const TrafficMap = () => {
   const [routeTrafficData, setRouteTrafficData] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
-  // Rule-based heatmap controls
-  const [ruleHeatmapEnabled, setRuleHeatmapEnabled] = useState(false);
-  const [showRulePanel, setShowRulePanel] = useState(false);
-  const [ruleTimeFilter, setRuleTimeFilter] = useState('24h'); // '1h' | '3h' | '24h' | 'today_peak' | 'night'
-  const [ruleLocationFilter, setRuleLocationFilter] = useState('view'); // 'view' | 'city' | 'radius'
-  const [ruleRadiusKm, setRuleRadiusKm] = useState(2);
-  const [ruleMajorRoadsOnly, setRuleMajorRoadsOnly] = useState(true);
-  const [ruleCriticalThreshold, setRuleCriticalThreshold] = useState(70); // congestion % or heavy/severe
-  const [ruleMinOccurrences, setRuleMinOccurrences] = useState(2);
-  const [ruleHeatmapOpacity, setRuleHeatmapOpacity] = useState(0.5);
-  const [ruleShowGreen, setRuleShowGreen] = useState(true);
-  const [ruleShowYellow, setRuleShowYellow] = useState(true);
-  const [ruleShowRed, setRuleShowRed] = useState(true);
-  // NEW: TomTom real-time traffic heatmap (Flow + Incidents)
-  const [ttHeatmapEnabled, setTtHeatmapEnabled] = useState(false);
-  const [ttHeatmapPoints, setTtHeatmapPoints] = useState([]);
-  const [isLoadingTtHeatmap, setIsLoadingTtHeatmap] = useState(false);
   const [isScrapingIncidentProne, setIsScrapingIncidentProne] = useState(false);
   const [showGuestIntro, setShowGuestIntro] = useState(false);
-  // Disable legacy sidebar heatmap; use floating HERE heatmap instead
-  const legacyHeatmapDisabled = true;
 
   // Scrape incident-prone areas and refresh layer
   const handleScrapeIncidentProneAreas = async () => {
@@ -933,28 +707,7 @@ const TrafficMap = () => {
     inFlight: false,
     cache: [],
   });
-  // NEW: Interval holder for TomTom heatmap refresh
-  const ttHeatmapIntervalRef = useRef(null);
-  // NEW: Fetch state for TomTom heatmap (debounce, cache)
-  const ttHeatmapFetchStateRef = useRef({
-    lastFetched: 0,
-    inFlight: false,
-    cache: [],
-    lastTomTomIncidentsFetched: 0,
-    tomtomIncidentsBackoffUntil: 0,
-  });
-  // NEW: Static bounds snapshot for HERE/TomTom heatmap (captured once)
-  const ttStaticBoundsRef = useRef(null);
-  // NEW: HERE specific state to avoid rate limits
-  const hereFetchStateRef = useRef({
-    backoffUntil: 0,           // epoch ms until when we should not call HERE
-    lastIncidentsFetched: 0,   // epoch ms for incidents throttling
-  });
-  // NEW: Global refresh throttle for TomTom heatmap (10 minutes)
-  const TT_MIN_REFRESH_MS = 600000;
   const roadGeocodeCacheRef = useRef(new Map());
-  // Track last map event type to distinguish pan vs zoom
-  const lastMapEventTypeRef = useRef(null);
 
   // NEW: 5 Priority Features States
   // Voice Navigation
@@ -984,17 +737,6 @@ const TrafficMap = () => {
   // Traffic Predictions Panel
   const [showPredictionsPanel, setShowPredictionsPanel] = useState(false);
   const [showTrafficMonitoringPanel, setShowTrafficMonitoringPanel] = useState(false);
-  const [showActiveIncidentsPanel, setShowActiveIncidentsPanel] = useState(false);
-
-  useEffect(() => {
-    if (showIncidentModal) {
-      setSearchBarVisible(false);
-      setShowSearchResults(false);
-      setShowSuggestions(false);
-    } else if (!isNavigationActive) {
-      setSearchBarVisible(true);
-    }
-  }, [showIncidentModal, isNavigationActive]);
 
   const getFallbackRoadCoordinate = useCallback(async (roadName) => {
     if (!roadName) return null;
@@ -1155,50 +897,9 @@ const TrafficMap = () => {
         });
       }
 
-      // Apply rule-based filtering if enabled
-      let recordsForHeatmap = trafficRecords;
-      if (ruleHeatmapEnabled) {
-        const mapInstanceForBounds = mapRef.current;
-        const boundsForFilter = mapInstanceForBounds?.getBounds?.() || null;
-        // Time filter
-        recordsForHeatmap = filterByTimeOption(recordsForHeatmap, ruleTimeFilter);
-        // Location filter
-        recordsForHeatmap = filterByLocationOption(recordsForHeatmap, ruleLocationFilter, {
-          bounds: boundsForFilter,
-          center: mapCenter,
-          radiusKm: ruleRadiusKm,
-          defaultBounds
-        });
-      }
-
-      let points;
-      if (ruleHeatmapEnabled) {
-        const criticalScores = computeCriticalScores(recordsForHeatmap, ruleCriticalThreshold, ruleMinOccurrences);
-        points = buildRuleHeatmapPoints(recordsForHeatmap, {
-          majorOnly: ruleMajorRoadsOnly,
-          criticalScores
-        });
-        // If no points under rules, fallback to broader include
-        if (points.length === 0 && recordsForHeatmap.length > 0) {
-          const criticalScores2 = computeCriticalScores(recordsForHeatmap, Math.max(50, ruleCriticalThreshold - 20), Math.max(1, ruleMinOccurrences - 1));
-          points = buildRuleHeatmapPoints(recordsForHeatmap, {
-            majorOnly: false,
-            criticalScores: criticalScores2
-          });
-        }
-      } else {
-        points = trafficRecordsToHeatmapPoints(recordsForHeatmap);
-        if (points.length === 0 && recordsForHeatmap.length > 0) {
-          points = trafficRecordsToHeatmapPoints(recordsForHeatmap, { includeAll: true });
-        }
-      }
-      // Apply category filter (green/yellow/red) when rules are enabled
-      if (ruleHeatmapEnabled) {
-        points = filterPointsByCategories(points, {
-          showGreen: ruleShowGreen,
-          showYellow: ruleShowYellow,
-          showRed: ruleShowRed
-        });
+      let points = trafficRecordsToHeatmapPoints(trafficRecords);
+      if (points.length === 0 && trafficRecords.length > 0) {
+        points = trafficRecordsToHeatmapPoints(trafficRecords, { includeAll: true });
       }
 
       if (points.length === 0 && fetchState.cache.length > 0) {
@@ -1222,535 +923,33 @@ const TrafficMap = () => {
     defaultBounds.lat_min,
     defaultBounds.lat_max,
     defaultBounds.lng_min,
-    defaultBounds.lng_max,
-    ruleHeatmapEnabled,
-    ruleTimeFilter,
-    ruleLocationFilter,
-    ruleRadiusKm,
-    ruleMajorRoadsOnly,
-    ruleCriticalThreshold,
-    ruleMinOccurrences,
-    mapCenter,
-    ruleShowGreen,
-    ruleShowYellow,
-    ruleShowRed
+    defaultBounds.lng_max
   ]);
 
   useEffect(() => {
-    if (legacyHeatmapDisabled) return;
     if (!heatmapEnabled) {
       setHeatmapData([]);
       return;
     }
+
     fetchMajorRoadHeatmap();
     const interval = setInterval(fetchMajorRoadHeatmap, 120000);
     return () => clearInterval(interval);
-  }, [heatmapEnabled, fetchMajorRoadHeatmap, legacyHeatmapDisabled]);
+  }, [heatmapEnabled, fetchMajorRoadHeatmap]);
 
   useEffect(() => {
-    if (legacyHeatmapDisabled) return;
     if (!heatmapEnabled) return;
-    if (lastMapEventTypeRef.current === 'zoom') return;
     fetchMajorRoadHeatmap();
-  }, [mapCenter, mapZoom, heatmapEnabled, fetchMajorRoadHeatmap, legacyHeatmapDisabled]);
-
-  // ===== NEW: Real-time TomTom Traffic Heatmap (Flow + Incidents) =====
-  // Map incident severity/type to heat intensity
-  const deriveIncidentIntensity = useCallback((incident) => {
-    const severity = String(incident?.severity || '').toLowerCase();
-    const type = String(incident?.type || incident?.incident_type || '').toLowerCase();
-    const baseBySeverity = {
-      low: 0.35,
-      medium: 0.55,
-      high: 0.82,
-      critical: 0.92
-    };
-    let intensity = baseBySeverity[severity] ?? 0.5;
-    if (type.includes('jam') || type.includes('congestion') || type.includes('closure')) {
-      intensity = Math.max(intensity, 0.8);
-    } else if (type.includes('accident') || type.includes('crash')) {
-      intensity = Math.max(intensity, 0.75);
-    } else if (type.includes('roadwork') || type.includes('hazard')) {
-      intensity = Math.max(intensity, 0.6);
-    }
-    return clamp01(intensity, 0.1, 1);
-  }, []);
-
-  // Convert flow records (flowSegmentData or monitoring) to heatmap points
-  const flowToHeatmapPoints = useCallback((flowRecords = []) => {
-    const points = [];
-    const pushPoint = (lat, lng, intensity) => {
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        points.push([lat, lng, clamp01(intensity, 0.05, 1)]);
-      }
-    };
-    flowRecords.forEach((rec) => {
-      const fsd = rec?.flowSegmentData || rec?.data?.flowSegmentData;
-      if (fsd) {
-        const currentSpeed = Number(fsd.currentSpeed);
-        const freeFlowSpeed = Number(fsd.freeFlowSpeed);
-        let intensity = 0.3;
-        if (Number.isFinite(currentSpeed) && Number.isFinite(freeFlowSpeed) && freeFlowSpeed > 0) {
-          intensity = clamp01(1 - currentSpeed / freeFlowSpeed, 0.1, 0.98);
-        }
-        const coordsList = fsd?.coordinates?.coordinate;
-        if (Array.isArray(coordsList) && coordsList.length) {
-          coordsList.forEach(c => {
-            const lat = Number(c.latitude ?? c.lat);
-            const lng = Number(c.longitude ?? c.lng ?? c.lon);
-            pushPoint(lat, lng, intensity);
-          });
-          return;
-        }
-        const lat = Number(rec.latitude ?? rec.lat);
-        const lng = Number(rec.longitude ?? rec.lng);
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          pushPoint(lat, lng, intensity);
-        }
-        return;
-      }
-      const lat = Number(
-        rec?.latitude ?? rec?.lat ?? rec?.center_latitude ?? rec?.start_latitude ?? rec?.location?.lat
-      );
-      const lng = Number(
-        rec?.longitude ?? rec?.lng ?? rec?.center_longitude ?? rec?.start_longitude ?? rec?.location?.lng
-      );
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      const intensity = clamp01(deriveHeatIntensity(rec), 0.05, 1);
-      pushPoint(lat, lng, intensity);
-    });
-    return points;
-  }, []);
-
-  // Convert incidents to heatmap points
-  const incidentsToHeatmapPoints = useCallback((incidents = []) => {
-    const points = [];
-    incidents.forEach((i) => {
-      const lat = Number(i.latitude ?? i.lat ?? i.location?.lat);
-      const lng = Number(i.longitude ?? i.lng ?? i.location?.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      const intensity = deriveIncidentIntensity(i);
-      const jitter = 0.00025;
-      const jlat = lat + (Math.random() - 0.5) * jitter;
-      const jlng = lng + (Math.random() - 0.5) * jitter;
-      points.push([jlat, jlng, intensity]);
-    });
-    return points;
-  }, [deriveIncidentIntensity]);
-
-  // Aggregate nearby points to reduce overdraw and memory footprint
-  const binHeatmapPoints = useCallback((points, bucketDegrees = 0.0001) => {
-    if (!Array.isArray(points) || points.length === 0) return [];
-    const buckets = new Map();
-    const toKey = (lat, lng) => {
-      const la = Math.round(lat / bucketDegrees);
-      const ln = Math.round(lng / bucketDegrees);
-      return `${la}_${ln}`;
-    };
-    for (const p of points) {
-      const [lat, lng, intensity] = p;
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      // Drop very low intensity to keep map clean, but keep enough range for free-flow greens
-      if (!Number.isFinite(intensity) || intensity < 0.08) continue;
-      const key = toKey(lat, lng);
-      const entry = buckets.get(key);
-      if (!entry) {
-        buckets.set(key, { lat, lng, intensityMax: intensity, intensitySum: intensity, count: 1 });
-      } else {
-        // Keep max to preserve hotspots, also track sum/count for optional averaging
-        if (intensity > entry.intensityMax) entry.intensityMax = intensity;
-        entry.intensitySum += intensity;
-        entry.count += 1;
-      }
-    }
-    // Use max intensity to keep edges crisp, with optional slight average weighting
-    const out = [];
-    buckets.forEach(({ lat, lng, intensityMax, intensitySum, count }) => {
-      const avg = intensitySum / count;
-      // Blend 80% max with 20% average
-      const blended = clamp01(intensityMax * 0.8 + avg * 0.2, 0.05, 1);
-      out.push([lat, lng, blended]);
-    });
-    // Hard cap: if still too many, sample uniformly
-    const MAX_POINTS = 1500;
-    if (out.length > MAX_POINTS) {
-      const step = Math.ceil(out.length / MAX_POINTS);
-      return out.filter((_, idx) => idx % step === 0);
-    }
-    return out;
-  }, []);
-
-  // Fetch TomTom Flow + Incidents and unify as heatmap points
-  const fetchTomTomHeatmap = useCallback(async () => {
-    // Simple debounce to avoid refetching too often on map move/zoom
-    const now = Date.now();
-    const fetchState = ttHeatmapFetchStateRef.current;
-    if (fetchState.inFlight) return;
-    if (now - fetchState.lastFetched < 2000) return;
-    fetchState.inFlight = true;
-    setIsLoadingTtHeatmap(true);
-    try {
-      const mapInstance = mapRef.current;
-      // Capture static bounds once and reuse for all subsequent requests (pan/zoom safe)
-      if (!ttStaticBoundsRef.current) {
-        const b = mapInstance?.getBounds?.();
-        ttStaticBoundsRef.current = b
-          ? {
-              minLat: b.getSouth(),
-              maxLat: b.getNorth(),
-              minLng: b.getWest(),
-              maxLng: b.getEast()
-            }
-          : {
-              minLat: defaultBounds.lat_min,
-              maxLat: defaultBounds.lat_max,
-              minLng: defaultBounds.lng_min,
-              maxLng: defaultBounds.lng_max
-            };
-      }
-      const requestBounds = ttStaticBoundsRef.current;
-
-      // Decide base URL: use Vite proxy in dev to bypass CORS, direct in prod
-      const isLocal = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)/.test(window.location.hostname);
-      const tomtomBase = isLocal ? '/tomtom' : 'https://api.tomtom.com';
-      const hereBase = isLocal ? '/here' : 'https://traffic.ls.hereapi.com';
-
-      // ======== FIRST: Try backend-cached heatmap (reduces TomTom/HERE quota usage) ========
-      try {
-        const cached = await trafficService.getTrafficHeatmap({
-          lat_min: requestBounds.minLat,
-          lat_max: requestBounds.maxLat,
-          lng_min: requestBounds.minLng,
-          lng_max: requestBounds.maxLng,
-          ttl_sec: 600 // request cache freshness up to 10 minutes if backend supports it
-        });
-        const cachedPoints = Array.isArray(cached?.heatmap_data) ? cached.heatmap_data : (Array.isArray(cached) ? cached : []);
-        if (cachedPoints.length > 0) {
-          fetchState.cache = cachedPoints;
-          setTtHeatmapPoints(cachedPoints);
-          setTtTrafficSource('CACHE');
-          try { console.info('[Traffic] Using backend cached heatmap', { points: cachedPoints.length }); } catch (_) {}
-          return;
-        }
-      } catch (_) {
-        // ignore cache errors and continue
-      }
-
-      // ======== PRIMARY: HERE Traffic (Flow + Incidents) ========
-      try {
-        // Respect HERE rate-limit backoff
-        const nowMs = Date.now();
-        if (hereFetchStateRef.current.backoffUntil && nowMs < hereFetchStateRef.current.backoffUntil) {
-          throw new Error('HERE_BACKOFF_ACTIVE');
-        }
-        const HERE_KEY = import.meta.env.VITE_HERE_API_KEY || import.meta.env.VITE_HERE_APIKEY;
-        if (HERE_KEY) {
-          // HERE v6.3 Flow & Incidents with bbox
-          const hereBbox = `${requestBounds.minLat},${requestBounds.minLng};${requestBounds.maxLat},${requestBounds.maxLng}`;
-          const hereFlowUrl = `${hereBase}/traffic/6.3/flow.json?apiKey=${encodeURIComponent(HERE_KEY)}&bbox=${hereBbox}&responseattributes=sh,fc`;
-          const hereIncUrl = `${hereBase}/traffic/6.3/incidents.json?apiKey=${encodeURIComponent(HERE_KEY)}&bbox=${hereBbox}`;
-          // Fetch sequentially to reduce QPS: flow first, incidents conditionally
-          const flowRes = await fetch(hereFlowUrl).catch(() => null);
-          let hereFlowPoints = [];
-          if (flowRes && flowRes.ok) {
-            const flowJson = await flowRes.json().catch(() => null);
-            const rws = flowJson?.RWS || [];
-            rws.forEach(rwObj => {
-              const rwsArr = rwObj?.RW || [];
-              rwsArr.forEach(r => {
-                const fis = r?.FIS || [];
-                fis.forEach(fisObj => {
-                  const fiArr = fisObj?.FI || [];
-                  fiArr.forEach(fi => {
-                    const cfs = fi?.CF || [];
-                    let currentSpeed = null;
-                    let freeFlow = null;
-                    let jamFactor = null;
-                    cfs.forEach(cf => {
-                      if (cf?.SU != null && cf?.FF != null) {
-                        currentSpeed = Number(cf.SU);
-                        freeFlow = Number(cf.FF);
-                      }
-                      if (cf?.JF != null) {
-                        jamFactor = Number(cf.JF);
-                      }
-                    });
-                    // Derive intensity primarily from HERE jamFactor (0–10),
-                    // falling back to speed ratio when jamFactor is missing.
-                    let intensity = 0.3;
-                    if (Number.isFinite(jamFactor)) {
-                      // Normalize jamFactor to 0–1 so it can drive the green/yellow/red palette.
-                      intensity = clamp01(jamFactor / 10, 0.05, 1);
-                    } else if (Number.isFinite(currentSpeed) && Number.isFinite(freeFlow) && freeFlow > 0) {
-                      intensity = clamp01(1 - currentSpeed / freeFlow, 0.1, 0.95);
-                    }
-                    const scaled = clamp01(intensity, 0.05, 0.95);
-                    const shapes = fi?.SHP || [];
-                    shapes.forEach(s => {
-                      const values = s?.value || [];
-                      values.forEach(v => {
-                        const pairs = String(v).trim().split(' ');
-                        pairs.forEach(pair => {
-                          const [latStr, lonStr] = pair.split(',') || [];
-                          const lat = Number(latStr);
-                          const lng = Number(lonStr);
-                          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                            hereFlowPoints.push([lat, lng, scaled]);
-                          }
-                        });
-                      });
-                    });
-                  });
-                });
-              });
-            });
-          }
-          let hereIncidentPoints = [];
-          // Throttle incidents: fetch at most every 30 minutes
-          const INCIDENT_TTL = 1800000;
-          const canFetchIncidents = nowMs - (hereFetchStateRef.current.lastIncidentsFetched || 0) >= INCIDENT_TTL;
-          if (canFetchIncidents) {
-            // Small delay to avoid bursting QPS
-            await new Promise(r => setTimeout(r, 300));
-            const incRes = await fetch(hereIncUrl).catch(() => null);
-            if (incRes) {
-              if (incRes.ok) {
-                const incJson = await incRes.json().catch(() => null);
-                const items = incJson?.TRAFFICITEMS?.TRAFFICITEM || [];
-                items.forEach(item => {
-                  const intensity = clamp01(deriveIncidentIntensity({
-                    type: item?.TRAFFICITEMTYPEDESC,
-                    severity: item?.CRITICALITY
-                  }) * 0.6, 0.05, 0.85);
-                  const pl = item?.LOCATION?.POLYLINE || item?.POLYLINE || item?.GEOLOC?.POLYLINE;
-                  const polylineArray = Array.isArray(pl) ? pl : [];
-                  if (polylineArray.length > 0) {
-                    polylineArray.forEach(p => {
-                      const str = p?.value || p?.DESCRIPTION || p;
-                      const coordsStr = Array.isArray(str) ? str[0] : str;
-                      const pairs = String(coordsStr || '').trim().split(' ');
-                      pairs.forEach(pair => {
-                        const [latStr, lonStr] = pair.split(',') || [];
-                        const lat = Number(latStr);
-                        const lng = Number(lonStr);
-                        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                          hereIncidentPoints.push([lat, lng, intensity]);
-                        }
-                      });
-                    });
-                  } else {
-                    const origin = item?.LOCATION?.GEOLOC?.ORIGIN;
-                    const to = item?.LOCATION?.GEOLOC?.TO;
-                    const candidates = [];
-                    if (origin) candidates.push(origin);
-                    if (to) candidates.push(to);
-                    candidates.forEach(pt => {
-                      const lat = Number(pt?.LATITUDE ?? pt?.latitude);
-                      const lng = Number(pt?.LONGITUDE ?? pt?.longitude);
-                      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                        hereIncidentPoints.push([lat, lng, intensity]);
-                      }
-                    });
-                  }
-                });
-                hereFetchStateRef.current.lastIncidentsFetched = nowMs;
-              } else if (incRes.status === 429) {
-                // Back off for 15 minutes on rate limit
-                hereFetchStateRef.current.backoffUntil = nowMs + 15 * 60 * 1000;
-              }
-            }
-          }
-          const hereCombined = binHeatmapPoints([...hereFlowPoints, ...hereIncidentPoints]);
-          if (hereCombined.length > 0) {
-            fetchState.cache = hereCombined;
-            setTtHeatmapPoints(hereCombined);
-            return; // Use HERE data successfully; skip TomTom fallback
-          }
-        }
-      } catch (_) {
-        // Ignore and fallback to TomTom
-      }
-
-      // ======== FALLBACK: TomTom Traffic (existing logic) ========
-      // Use user's TomTom API key directly (no backend)
-      const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY;
-      if (!TOMTOM_KEY) {
-        setIsLoadingTtHeatmap(false);
-        return;
-      }
-
-      // Fetch Flow by sampling a grid of points across current bounds (adaptive by zoom)
-      // Use a fixed sampling density to keep requests stable regardless of zoom/pan
-      const grid = 6;
-      const rows = grid;
-      const cols = grid;
-      const latStep = (requestBounds.maxLat - requestBounds.minLat) / (rows + 1);
-      const lngStep = (requestBounds.maxLng - requestBounds.minLng) / (cols + 1);
-      const samplePoints = [];
-      for (let r = 1; r <= rows; r++) {
-        for (let c = 1; c <= cols; c++) {
-          samplePoints.push({
-            lat: requestBounds.minLat + r * latStep,
-            lng: requestBounds.minLng + c * lngStep
-          });
-        }
-      }
-
-      // Limit concurrent fetches to avoid rate limits
-      const chunks = (arr, n) => arr.reduce((acc, _, i) => (i % n ? acc : [...acc, arr.slice(i, i + n)]), []);
-      const sampleChunks = chunks(samplePoints, 6);
-
-      const flowSegments = [];
-      for (const chunk of sampleChunks) {
-        const chunkResults = await Promise.all(
-          chunk.map(async (p) => {
-            // TomTom Flow Segment Data v4 endpoint
-            const url = `${tomtomBase}/traffic/services/4/flowSegmentData/absolute/10/json?key=${encodeURIComponent(TOMTOM_KEY)}&point=${p.lat},${p.lng}&unit=KMPH`;
-            try {
-              const res = await fetch(url);
-              if (!res.ok) return null;
-              const data = await res.json();
-              return data?.flowSegmentData ? data : null;
-            } catch {
-              return null;
-            }
-          })
-        );
-        chunkResults.forEach((cr) => cr && flowSegments.push(cr));
-        // Small delay between batches
-        await new Promise((r) => setTimeout(r, 120));
-      }
-
-      // Build heatmap points from flow segments along the road geometry
-      const flowPoints = [];
-      flowSegments.forEach((seg) => {
-        const fsd = seg.flowSegmentData;
-        if (!fsd) return;
-        const currentSpeed = Number(fsd.currentSpeed);
-        const freeFlowSpeed = Number(fsd.freeFlowSpeed);
-        let intensity = 0.3;
-        if (Number.isFinite(currentSpeed) && Number.isFinite(freeFlowSpeed) && freeFlowSpeed > 0) {
-          intensity = clamp01(1 - currentSpeed / freeFlowSpeed, 0.1, 0.98);
-        }
-        // Soften intensity to avoid over-saturated reds
-        const scaledIntensity = clamp01(intensity * 0.6, 0.05, 0.85);
-        const coordsList = fsd?.coordinates?.coordinate || [];
-        // Densify by iterating over each coordinate on the segment (already snapped to road)
-        coordsList.forEach((c) => {
-          const lat = Number(c.latitude ?? c.lat);
-          const lng = Number(c.longitude ?? c.lng ?? c.lon);
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            flowPoints.push([lat, lng, scaledIntensity]);
-          }
-        });
-      });
-
-      // Fetch Incidents for bbox
-      // TomTom Incident Details v4 (s3 flavor) requires bbox as lat1,lon1,lat2,lon2
-      const bbox = `${requestBounds.minLat},${requestBounds.minLng},${requestBounds.maxLat},${requestBounds.maxLng}`;
-      const incidentsUrl = `${tomtomBase}/traffic/services/4/incidentDetails/s3/${bbox}/json?key=${encodeURIComponent(TOMTOM_KEY)}`;
-      let incidentPoints = [];
-      try {
-        const nowMs = Date.now();
-        // Respect TomTom incidents TTL/backoff (reduce 400/429 noise)
-        const TOMTOM_INCIDENT_TTL = 10 * 60 * 1000; // 10 minutes
-        const state = ttHeatmapFetchStateRef.current;
-        if (state.tomtomIncidentsBackoffUntil && nowMs < state.tomtomIncidentsBackoffUntil) {
-          // In backoff period; skip incidents
-        } else if (nowMs - (state.lastTomTomIncidentsFetched || 0) >= TOMTOM_INCIDENT_TTL) {
-          const resp = await fetch(incidentsUrl);
-          if (resp.ok) {
-            const json = await resp.json();
-            const incidents = Array.isArray(json?.incidents) ? json.incidents : (Array.isArray(json?.result) ? json.result : []);
-            incidents.forEach((i) => {
-              const intensity = clamp01(deriveIncidentIntensity(i) * 0.6, 0.05, 0.85);
-              const geom = i?.geometry;
-              if (Array.isArray(geom) && geom.length) {
-                geom.forEach((pt) => {
-                  const lat = Number(pt?.latitude ?? pt?.lat);
-                  const lng = Number(pt?.longitude ?? pt?.lon ?? pt?.lng);
-                  if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                    incidentPoints.push([lat, lng, intensity]);
-                  }
-                });
-              } else {
-                const lat = Number(i?.latitude ?? i?.lat);
-                const lng = Number(i?.longitude ?? i?.lon ?? i?.lng);
-                if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                  incidentPoints.push([lat, lng, intensity]);
-                }
-              }
-            });
-            state.lastTomTomIncidentsFetched = nowMs;
-          } else {
-            // On 400/429, back off further
-            if (resp.status === 400 || resp.status === 429) {
-              state.tomtomIncidentsBackoffUntil = nowMs + 20 * 60 * 1000; // 20 minutes
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      // Aggregate and compact points
-      const combined = binHeatmapPoints([...flowPoints, ...incidentPoints]);
-      if (combined.length === 0 && fetchState.cache.length > 0) {
-        setTtHeatmapPoints(fetchState.cache);
-      } else {
-        fetchState.cache = combined;
-        setTtHeatmapPoints(combined);
-      }
-    } catch (_) {
-      // keep previous points on failure
-    } finally {
-      ttHeatmapFetchStateRef.current.lastFetched = Date.now();
-      ttHeatmapFetchStateRef.current.inFlight = false;
-      setIsLoadingTtHeatmap(false);
-    }
-  }, [
-    defaultBounds.lat_min,
-    defaultBounds.lat_max,
-    defaultBounds.lng_min,
-    defaultBounds.lng_max,
-    flowToHeatmapPoints,
-    incidentsToHeatmapPoints,
-    binHeatmapPoints
-  ]);
-
-  // Auto refresh loop (independent of toggle)
-  useEffect(() => {
-    // Initial fetch on mount
-    fetchTomTomHeatmap();
-    // Refresh every 10 minutes
-    ttHeatmapIntervalRef.current = setInterval(fetchTomTomHeatmap, 600000);
-    return () => {
-      if (ttHeatmapIntervalRef.current) {
-        clearInterval(ttHeatmapIntervalRef.current);
-        ttHeatmapIntervalRef.current = null;
-      }
-    };
-  }, []);
-
-  // Disable re-fetch on pan/zoom (heatmap remains stable; timer handles refresh)
-  useEffect(() => {
-    // no-op: intentionally do not refetch on pan/zoom
-  }, [mapCenter, mapZoom, ttHeatmapEnabled]);
-  // ===== END NEW heatmap =====
+  }, [mapCenter, mapZoom, heatmapEnabled, fetchMajorRoadHeatmap]);
 
   // Open/close traffic monitoring panel when toggle changes
-  // But don't open if Active Incidents Panel is open
   useEffect(() => {
-    if (trafficMonitorNewEnabled && !showActiveIncidentsPanel) {
-      // Only open Traffic Monitoring Panel if Active Incidents Panel is not open
+    if (trafficMonitorNewEnabled) {
       setShowTrafficMonitoringPanel(true);
-    } else if (!trafficMonitorNewEnabled) {
-      setShowTrafficMonitoringPanel(false);
-    } else if (showActiveIncidentsPanel) {
-      // If Active Incidents Panel is open, ensure Traffic Monitoring Panel is closed
+    } else {
       setShowTrafficMonitoringPanel(false);
     }
-  }, [trafficMonitorNewEnabled, showActiveIncidentsPanel]);
+  }, [trafficMonitorNewEnabled]);
 
   // Auto-hide sidebar when Traffic Monitoring Panel is open
   useEffect(() => {
@@ -4765,11 +3964,9 @@ const TrafficMap = () => {
       moveend: (e) => {
         const center = e.target.getCenter();
         setMapCenter([center.lat, center.lng]);
-        lastMapEventTypeRef.current = 'move';
       },
       zoomend: (e) => {
         setMapZoom(e.target.getZoom());
-        lastMapEventTypeRef.current = 'zoom';
       }
     });
     return null;
@@ -4812,223 +4009,11 @@ const TrafficMap = () => {
     }, 10 * 60 * 1000); // 10 minutes = 600,000 milliseconds
     
     return () => clearInterval(interval);
-  }, [isMiniOpen, mapCenter, isSimulating]);
+  }, [isMiniOpen, mapCenter, mapZoom, isSimulating]);
 
   // Current navigation step
   const currentStep = selectedRoute && selectedRoute.steps ? selectedRoute.steps[navigationStep] : null;
   const nextStep = selectedRoute && selectedRoute.steps ? selectedRoute.steps[navigationStep + 1] : null;
-  // Memoized HERE heatmap points with rule-based filters (unconditional to preserve hook order)
-  const ttFilteredHeatmapPoints = useMemo(() => {
-    let pts = Array.isArray(ttHeatmapPoints) ? ttHeatmapPoints : [];
-    if (ruleHeatmapEnabled && pts.length > 0) {
-      const bounds = mapRef.current?.getBounds?.() || null;
-      pts = filterPointArrayByLocation(pts, ruleLocationFilter, {
-        bounds,
-        center: mapCenter,
-        radiusKm: ruleRadiusKm,
-        defaultBounds
-      });
-      pts = filterPointsByCategories(pts, {
-        showGreen: ruleShowGreen,
-        showYellow: ruleShowYellow,
-        showRed: ruleShowRed
-      });
-      // Remap intensities to the selected category ranges for proper gradient display
-      // First, collect all intensities for the selected categories to normalize them
-      const selectedIntensities = pts.map(p => Number(p[2] ?? 0.0)).filter(i => Number.isFinite(i));
-      
-      if (selectedIntensities.length > 0) {
-        const onlyGreen = ruleShowGreen && !ruleShowYellow && !ruleShowRed;
-        const onlyYellow = !ruleShowGreen && ruleShowYellow && !ruleShowRed;
-        const onlyRed = !ruleShowGreen && !ruleShowYellow && ruleShowRed;
-        const greenAndYellow = ruleShowGreen && ruleShowYellow && !ruleShowRed;
-        const yellowAndRed = !ruleShowGreen && ruleShowYellow && ruleShowRed;
-        const greenAndRed = ruleShowGreen && !ruleShowYellow && ruleShowRed;
-        
-        // Find min/max for normalization when showing individual categories
-        let minIntensity = Math.min(...selectedIntensities);
-        let maxIntensity = Math.max(...selectedIntensities);
-        
-        // For individual categories, use category-specific ranges for better visibility
-        if (onlyGreen) {
-          minIntensity = 0.0;
-          maxIntensity = 0.34;
-        } else if (onlyYellow) {
-          minIntensity = 0.34;
-          maxIntensity = 0.80;
-        } else if (onlyRed) {
-          minIntensity = 0.80;
-          maxIntensity = 1.0;
-        }
-        
-        // Normalize range to ensure full visibility
-        const range = maxIntensity - minIntensity;
-        const minVisibleIntensity = 0.1; // Minimum intensity for visibility
-        
-        pts = pts.map((p) => {
-          const [la, ln, it] = p;
-          let intensity = Number(it ?? 0.0);
-          if (!Number.isFinite(intensity)) intensity = 0.0;
-          
-          const cat = categorizeIntensity(intensity);
-          let remappedIntensity = intensity;
-          
-          if (onlyGreen && cat === 'green') {
-            // Map green range (0.0-0.34) to full range (0.1-1.0) for visibility
-            if (range > 0) {
-              remappedIntensity = minVisibleIntensity + ((intensity - minIntensity) / range) * (1.0 - minVisibleIntensity);
-            } else {
-              remappedIntensity = 0.5; // Default if all same value
-            }
-          } else if (onlyYellow && cat === 'yellow') {
-            // Map yellow range (0.34-0.80) to full range (0.1-1.0) for visibility
-            if (range > 0) {
-              remappedIntensity = minVisibleIntensity + ((intensity - minIntensity) / range) * (1.0 - minVisibleIntensity);
-            } else {
-              remappedIntensity = 0.5; // Default if all same value
-            }
-          } else if (onlyRed && cat === 'red') {
-            // Map red range (0.80-1.0) to full range (0.1-1.0) for visibility
-            if (range > 0) {
-              remappedIntensity = minVisibleIntensity + ((intensity - minIntensity) / range) * (1.0 - minVisibleIntensity);
-            } else {
-              remappedIntensity = 0.5; // Default if all same value
-            }
-          } else if (greenAndYellow) {
-            if (cat === 'green') {
-              // Map green (0.0-0.34) to (0.1-0.5)
-              remappedIntensity = 0.1 + (intensity / 0.34) * 0.4;
-            } else if (cat === 'yellow') {
-              // Map yellow (0.34-0.80) to (0.5-1.0)
-              remappedIntensity = 0.5 + ((intensity - 0.34) / (0.80 - 0.34)) * 0.5;
-            }
-          } else if (yellowAndRed) {
-            if (cat === 'yellow') {
-              // Map yellow (0.34-0.80) to (0.1-0.5)
-              remappedIntensity = 0.1 + ((intensity - 0.34) / (0.80 - 0.34)) * 0.4;
-            } else if (cat === 'red') {
-              // Map red (0.80-1.0) to (0.5-1.0)
-              remappedIntensity = 0.5 + ((intensity - 0.80) / (1.0 - 0.80)) * 0.5;
-            }
-          } else if (greenAndRed) {
-            if (cat === 'green') {
-              // Map green (0.0-0.34) to (0.1-0.5)
-              remappedIntensity = 0.1 + (intensity / 0.34) * 0.4;
-            } else if (cat === 'red') {
-              // Map red (0.80-1.0) to (0.5-1.0)
-              remappedIntensity = 0.5 + ((intensity - 0.80) / (1.0 - 0.80)) * 0.5;
-            }
-          }
-          // For all three selected, keep original intensity (0.0-1.0) but ensure minimum
-          if (!onlyGreen && !onlyYellow && !onlyRed && !greenAndYellow && !yellowAndRed && !greenAndRed) {
-            remappedIntensity = Math.max(minVisibleIntensity, intensity);
-          }
-          
-          return [la, ln, Math.max(0.0, Math.min(remappedIntensity, 1.0))];
-        });
-      }
-    }
-    return pts;
-  }, [
-    ttHeatmapPoints,
-    ruleHeatmapEnabled,
-    ruleLocationFilter,
-    ruleRadiusKm,
-    mapCenter,
-    ruleShowGreen,
-    ruleShowYellow,
-    ruleShowRed
-  ]);
-
-  // Dynamic radius/blur for HERE/TomTom heatmap so it looks thinner and less "solid red"
-  // on high zoom levels while staying visible when zoomed out.
-  const heatmapRadius = useMemo(() => {
-    if (mapZoom <= 11) return 30;      // far zoom – thicker corridors
-    if (mapZoom <= 13) return 24;      // city-level view
-    if (mapZoom <= 15) return 18;      // district-level
-    return 14;                         // close zoom – thin lines / blobs
-  }, [mapZoom]);
-
-  const heatmapBlur = useMemo(() => {
-    if (mapZoom <= 11) return 18;
-    if (mapZoom <= 13) return 14;
-    if (mapZoom <= 15) return 10;
-    return 8;
-  }, [mapZoom]);
-
-  // Dynamic gradient based on selected traffic categories
-  const heatmapGradient = useMemo(() => {
-    // If rule-based heatmap is enabled, use filtered gradient
-    if (ruleHeatmapEnabled) {
-      const onlyGreen = ruleShowGreen && !ruleShowYellow && !ruleShowRed;
-      const onlyYellow = !ruleShowGreen && ruleShowYellow && !ruleShowRed;
-      const onlyRed = !ruleShowGreen && !ruleShowYellow && ruleShowRed;
-      const greenAndYellow = ruleShowGreen && ruleShowYellow && !ruleShowRed;
-      const yellowAndRed = !ruleShowGreen && ruleShowYellow && ruleShowRed;
-      const greenAndRed = ruleShowGreen && !ruleShowYellow && ruleShowRed;
-      
-      if (onlyGreen) {
-        // Only green: use green shades from light to dark
-        return {
-          0.0: '#86efac', // light green
-          0.5: '#4ade80', // medium green
-          1.0: '#22c55e'  // dark green
-        };
-      } else if (onlyYellow) {
-        // Only yellow: use yellow shades from light to dark
-        return {
-          0.0: '#fef08a', // light yellow
-          0.5: '#fde047', // medium yellow
-          1.0: '#eab308'  // dark yellow
-        };
-      } else if (onlyRed) {
-        // Only red: use red shades from light to dark
-        return {
-          0.0: '#fca5a5', // light red
-          0.5: '#f87171', // medium red
-          1.0: '#dc2626'  // dark red
-        };
-      } else if (greenAndYellow) {
-        // Green to yellow transition
-        return {
-          0.0: '#22c55e', // green
-          0.5: '#22c55e', // green
-          0.51: '#eab308', // yellow
-          1.0: '#eab308'  // yellow
-        };
-      } else if (yellowAndRed) {
-        // Yellow to red transition
-        return {
-          0.0: '#eab308', // yellow
-          0.5: '#eab308', // yellow
-          0.51: '#f87171', // red
-          1.0: '#dc2626'  // dark red
-        };
-      } else if (greenAndRed) {
-        // Green to red transition (skip yellow)
-        return {
-          0.0: '#22c55e', // green
-          0.5: '#22c55e', // green
-          0.51: '#f87171', // red
-          1.0: '#dc2626'  // dark red
-        };
-      }
-      // All three selected: use full range
-    }
-    
-    // Default: full color range (green -> yellow -> red).
-    // Bias more of the range toward green/yellow so red only appears on the worst congestion.
-    return {
-      0.0: '#22c55e',   // free
-      0.40: '#22c55e',  // stay green longer
-      0.41: '#eab308',  // moderate starts a bit later
-      0.70: '#eab308',
-      0.71: '#fb923c',  // orange for heavy but not worst
-      0.88: '#f97316',
-      0.89: '#f87171',  // true heavy jam
-      1.0: '#b91c1c'
-    };
-  }, [ruleHeatmapEnabled, ruleShowGreen, ruleShowYellow, ruleShowRed]);
 
   return (
     <DarkModeProvider mapStyle={mapStyle}>
@@ -5088,22 +4073,24 @@ const TrafficMap = () => {
             mapBounds={mapRef.current?.getBounds()}
           /> */}
 
-          {/* Legacy base heatmap removed (now using floating HERE heatmap only) */}
-
-          {/* NEW: Real-time Traffic Heatmap (TomTom Flow + Incidents) with rule-based filters */}
-          {ttHeatmapEnabled && ttFilteredHeatmapPoints.length > 0 && (
-            <HeatmapLayer
-              points={ttFilteredHeatmapPoints}
+          {/* Traditional Point-based Heatmap Layer (fallback) */}
+          {heatmapEnabled && heatmapData.length > 0 && (
+            <HeatmapLayer 
+              points={heatmapData}
               options={{
-                // Dynamic radius/blur tuned by zoom so corridors don't look like solid red slabs
-                radius: heatmapRadius,
-                blur: heatmapBlur,
-                // Increase max so combined samples don't over-saturate
-                max: 3.8,
-                // Keep a stable base opacity regardless of zoom
-                minOpacity: ruleHeatmapEnabled ? ruleHeatmapOpacity : 0.50,
-                // Dynamic gradient based on selected traffic categories
-                gradient: heatmapGradient,
+                radius: mapZoom >= 17 ? 26 : mapZoom >= 15 ? 32 : 40,
+                blur: mapZoom >= 17 ? 12 : 16,
+                max: 1,
+                minOpacity: 0.85,
+                gradient: {
+                  0.0: '#16a34a',
+                  0.2: '#84cc16',
+                  0.45: '#eab308',
+                  0.6: '#f97316',
+                  0.8: '#ef4444',
+                  0.95: '#b91c1c',
+                  1.0: '#7f1d1d'
+                }
               }}
             />
           )}
@@ -5235,8 +4222,8 @@ const TrafficMap = () => {
         </MapContainer>
       </div>
 
-      {/* Insights FAB - Enhanced - Hide when traffic monitoring panel is open, navigation is active, simulation is running, or active incidents panel is open */}
-      {!showTrafficMonitoringPanel && !isNavigationActive && !isSimulating && !showActiveIncidentsPanel && (
+      {/* Insights FAB - Enhanced - Hide when traffic monitoring panel is open, navigation is active, or simulation is running */}
+      {!showTrafficMonitoringPanel && !isNavigationActive && !isSimulating && (
         <div
           className={`absolute left-4 sm:left-6 z-50 transition-all duration-500 ease-out ${isMiniOpen ? 'opacity-0 pointer-events-none scale-0' : 'opacity-100 scale-100'}`}
           style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
@@ -5255,212 +4242,6 @@ const TrafficMap = () => {
             </span>
             <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 group-active:opacity-100 transition-opacity duration-200"></span>
           </button>
-        </div>
-      )}
-
-
-      {/* NEW: Toggle for Real-time Traffic Heatmap - Hide when Active Incidents Panel is open */}
-      {!showTrafficMonitoringPanel && !isSimulating && !showActiveIncidentsPanel && (
-        <div className="absolute right-4 sm:right-6 top-32 sm:top-28 z-50 flex flex-col items-end gap-2">
-          {/* Traffic Heatmap Toggle - Hidden during navigation */}
-          {!isNavigationActive && !showRulePanel && (
-            <>
-              <button
-                onClick={() => setTtHeatmapEnabled((v) => !v)}
-                className={`min-w-[44px] min-h-[40px] px-4 py-2 rounded-full shadow-xl transition-all duration-300 ease-out flex items-center gap-2 ${
-                  ttHeatmapEnabled
-                    ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white hover:from-red-700 hover:to-rose-700'
-                    : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50'
-                }`}
-                title="Show Traffic Heatmap"
-              >
-                <div className={`w-2.5 h-2.5 rounded-full ${ttHeatmapEnabled ? 'bg-red-300' : 'bg-gray-300'}`} />
-                <span className="text-sm font-semibold">
-                  {ttHeatmapEnabled ? 'Hide Traffic Heatmap' : 'Show Traffic Heatmap'}
-                </span>
-              </button>
-              {ttHeatmapEnabled && (
-                <div className="px-3 py-1 rounded-full bg-white/90 border border-gray-200 text-xs text-gray-700 shadow">
-                  {isLoadingTtHeatmap ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                      Updating...
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                      Live
-                    </span>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          {/* Rule-based Heatmap Toggle and Panel - Hidden during navigation and when active incidents panel is open */}
-          {!isNavigationActive && !showRulePanel && !showActiveIncidentsPanel && (
-            <>
-              <button
-                onClick={() => {
-                  const next = !ruleHeatmapEnabled;
-                  setRuleHeatmapEnabled(next);
-                  if (next) setHeatmapEnabled(true);
-                }}
-                className={`min-w-[44px] min-h-[40px] px-4 py-2 rounded-full shadow-xl transition-all duration-300 ease-out flex items-center gap-2 ${
-                  ruleHeatmapEnabled
-                    ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white hover:from-emerald-700 hover:to-green-700'
-                    : 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50'
-                }`}
-                title="Rule-based Heatmap"
-              >
-                <div className={`w-2.5 h-2.5 rounded-full ${ruleHeatmapEnabled ? 'bg-green-300' : 'bg-gray-300'}`} />
-                <span className="text-sm font-semibold">
-                  {ruleHeatmapEnabled ? 'Rules: ON' : 'Rules: OFF'}
-                </span>
-              </button>
-              <button
-                onClick={() => setShowRulePanel((v) => !v)}
-                className="min-w-[44px] min-h-[36px] px-3 py-2 rounded-full bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 shadow flex items-center gap-2"
-                title="Rule filters"
-              >
-                <Settings className="w-4 h-4" />
-                <span className="text-xs font-semibold">Filters</span>
-              </button>
-            </>
-          )}
-          {/* Rule Panel - Hidden during navigation and when active incidents panel is open */}
-          {!isNavigationActive && showRulePanel && !showActiveIncidentsPanel && (
-            <div className="w-72 bg-white/95 backdrop-blur rounded-2xl border border-gray-200 shadow-2xl p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-800">Rule-based Heatmap</span>
-                <button onClick={() => setShowRulePanel(false)} className="p-1 rounded hover:bg-gray-100">
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600">Time</label>
-                <select
-                  value={ruleTimeFilter}
-                  onChange={(e) => setRuleTimeFilter(e.target.value)}
-                  className="w-full text-sm border rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="1h">Last 1 hour</option>
-                  <option value="3h">Last 3 hours</option>
-                  <option value="24h">Last 24 hours</option>
-                  <option value="today_peak">Today peak hours</option>
-                  <option value="night">Night hours</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600">Location</label>
-                <select
-                  value={ruleLocationFilter}
-                  onChange={(e) => setRuleLocationFilter(e.target.value)}
-                  className="w-full text-sm border rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="view">Current view</option>
-                  <option value="city">City bounds</option>
-                  <option value="radius">Radius around center</option>
-                </select>
-                {ruleLocationFilter === 'radius' && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min="1"
-                      max="10"
-                      value={ruleRadiusKm}
-                      onChange={(e) => setRuleRadiusKm(Number(e.target.value))}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-gray-700 w-12">{ruleRadiusKm} km</span>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600">Opacity</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="0.2"
-                    max="0.9"
-                    step="0.05"
-                    value={ruleHeatmapOpacity}
-                    onChange={(e) => setRuleHeatmapOpacity(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-gray-700 w-10">{Math.round(ruleHeatmapOpacity * 100)}%</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600">Traffic categories</label>
-                <div className="flex items-center justify-between gap-2">
-                  <label className="flex items-center gap-2 text-xs text-gray-700">
-                    <input type="checkbox" checked={ruleShowGreen} onChange={(e) => setRuleShowGreen(e.target.checked)} />
-                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: '#22c55e' }} />
-                    <span>Free (green)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-gray-700">
-                    <input type="checkbox" checked={ruleShowYellow} onChange={(e) => setRuleShowYellow(e.target.checked)} />
-                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: '#eab308' }} />
-                    <span>Moderate (yellow)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs text-gray-700">
-                    <input type="checkbox" checked={ruleShowRed} onChange={(e) => setRuleShowRed(e.target.checked)} />
-                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: '#dc2626' }} />
-                    <span>Heavy (red)</span>
-                  </label>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-gray-700">Major roads only</label>
-                <input
-                  type="checkbox"
-                  checked={ruleMajorRoadsOnly}
-                  onChange={(e) => setRuleMajorRoadsOnly(e.target.checked)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600">Critical threshold (congestion %)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="40"
-                    max="100"
-                    step="5"
-                    value={ruleCriticalThreshold}
-                    onChange={(e) => setRuleCriticalThreshold(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-gray-700 w-10">{ruleCriticalThreshold}%</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600">Min occurrences (critical)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={ruleMinOccurrences}
-                    onChange={(e) => setRuleMinOccurrences(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-gray-700 w-10">{ruleMinOccurrences}+</span>
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    setHeatmapEnabled(true);
-                    // Trigger immediate refresh via changing a noop state (or rely on deps)
-                    fetchMajorRoadHeatmap();
-                  }}
-                  className="px-3 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -5592,8 +4373,8 @@ const TrafficMap = () => {
         })()
       )}
 
-      {/* Enhanced Search Panel - Hide when directions panel is open to avoid duplicate search bars, and hide on mobile when Active Incidents panel is open */}
-      {!showDirectionsPanel && !showIncidentModal && !(showActiveIncidentsPanel && isMobile) && (
+      {/* Enhanced Search Panel - Hide when directions panel is open to avoid duplicate search bars */}
+      {!showDirectionsPanel && (
         <div onClick={(e) => {
           if (showSearchResults && !searchPanelRef.current?.contains(e.target)) {
             setShowSearchResults(false);
@@ -5642,8 +4423,8 @@ const TrafficMap = () => {
         </div>
       )}
 
-      {/* Map Controls - GPS Status, Navigation Toggle, and FAB buttons - Hide when Active Incidents panel is open */}
-      {!showTrafficMonitoringPanel && !showActiveIncidentsPanel && (
+      {/* Map Controls - GPS Status, Navigation Toggle, and FAB buttons */}
+      {!showTrafficMonitoringPanel && (
         <MapControls
           isNavigationActive={isNavigationActive}
           isSimulating={isSimulating}
@@ -5663,8 +4444,6 @@ const TrafficMap = () => {
           voiceEnabled={voiceEnabled}
           showDirectionsPanel={showDirectionsPanel}
           isMiniOpen={isMiniOpen}
-          showSimulationCompleteModal={showSimulationCompleteModal}
-          showRulePanel={showRulePanel}
         />
       )}
 
@@ -5968,23 +4747,8 @@ const TrafficMap = () => {
           }
         }}
         myEmergencyReports={myEmergencyReports}
-        onOpenActiveIncidents={() => {
-          setShowActiveIncidentsPanel(true);
-          // Close sidebar after opening Active Incidents for better UX
-          setShowSidePanel(false);
-          // Enable traffic monitoring to load data (but don't show the panel)
-          if (!trafficMonitorNewEnabled) {
-            setTrafficMonitorNewEnabled(true);
-          }
-          // Ensure Traffic Monitoring Panel is closed when opening Active Incidents Panel
-          if (showTrafficMonitoringPanel) {
-            setShowTrafficMonitoringPanel(false);
-          }
-        }}
-        activeIncidentsCount={(tmRoadworks?.length || 0) + (tmIncidents?.length || 0)}
-        // Disable legacy heatmap control
-        heatmapEnabled={false}
-        setHeatmapEnabled={() => {}}
+        heatmapEnabled={heatmapEnabled}
+        setHeatmapEnabled={setHeatmapEnabled}
         trafficLayerEnabled={trafficLayerEnabled}
         setTrafficLayerEnabled={setTrafficLayerEnabled}
         mapStyle={mapStyle}
@@ -6045,31 +4809,6 @@ const TrafficMap = () => {
             });
           }
         }}
-      />
-
-      {/* Active Incidents Panel - Accessible to all users, especially CITIZEN */}
-      <ActiveIncidentsPanel
-        isOpen={showActiveIncidentsPanel}
-        onClose={() => {
-          setShowActiveIncidentsPanel(false);
-          // Disable traffic monitoring when panel closes to prevent Traffic Monitoring Panel from auto-opening
-          setTrafficMonitorNewEnabled(false);
-        }}
-        incidents={tmIncidents || []}
-        roadworks={tmRoadworks || []}
-        onIncidentClick={(item) => {
-          // Highlight the incident on the map
-          if (item.latitude && item.longitude) {
-            setHighlightedIncident({
-              lat: item.latitude,
-              lng: item.longitude,
-              title: item.title,
-              severity: item.severity,
-            });
-          }
-        }}
-        mapRef={mapRef}
-        mapCenter={mapCenter}
       />
 
       {/* Route Loading Overlay - Enhanced with Skeleton */}

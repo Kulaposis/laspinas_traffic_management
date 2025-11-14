@@ -49,3 +49,20 @@ def check_role_access(role: Union[UserRole, str], allowed_roles: list) -> tuple[
     has_access = role_upper in allowed_upper
     return has_access, role_value
 
+def safe_role_value(user_or_role) -> str:
+    """
+    Safely get role value from a User object or role directly.
+    Handles both enum and string roles, and User objects with role attribute.
+    
+    Args:
+        user_or_role: Can be a User object, UserRole enum, or string
+        
+    Returns:
+        String representation of the role value
+    """
+    # If it's a User object with a role attribute
+    if hasattr(user_or_role, 'role'):
+        return get_role_value(user_or_role.role)
+    # Otherwise treat it as a role directly
+    return get_role_value(user_or_role)
+

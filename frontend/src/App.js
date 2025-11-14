@@ -34,16 +34,18 @@ const EmergencyModeration = lazy(() => import('./pages/EmergencyModeration'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AdminUserManagement = lazy(() => import('./pages/AdminUserManagement'));
 const AdminSystemSettings = lazy(() => import('./pages/AdminSystemSettings'));
+const AdminHazardCenter = lazy(() => import('./pages/AdminHazardCenter'));
 
 // Role-based redirect component
 const RoleBasedRedirect = () => {
   const { user } = useAuth();
   
   // Check if user is admin or staff (non-citizen roles)
-  const isAdmin = user?.role === 'admin' || user?.role === 'lgu_staff';
+  const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'lgu_staff';
   
-  // Redirect to dashboard for admin/staff, traffic-map for citizens
-  return <Navigate to={isAdmin ? '/dashboard' : '/traffic-map'} replace />;
+  // Redirect to admin dashboard for admin, dashboard for staff, traffic-map for citizens
+  return <Navigate to={isAdmin ? '/admin/dashboard' : isStaff ? '/dashboard' : '/traffic-map'} replace />;
 };
 
 const AppContent = () => {
@@ -61,8 +63,9 @@ const AppContent = () => {
     if (isVerified === 'true' && email && user?.emailVerified) {
       // User was verified via email link, redirect based on role
       toast.success('Email verified successfully! Welcome!');
-      const isAdmin = user?.role === 'admin' || user?.role === 'lgu_staff';
-      navigate(isAdmin ? '/dashboard' : '/traffic-map', { replace: true });
+      const isAdmin = user?.role === 'admin';
+      const isStaff = user?.role === 'lgu_staff';
+      navigate(isAdmin ? '/admin/dashboard' : isStaff ? '/dashboard' : '/traffic-map', { replace: true });
     }
   }, [location.search, user?.emailVerified, user?.role, navigate]);
   
@@ -311,6 +314,14 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute requiredRoles={['admin']}>
                     <AdminSystemSettings />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/hazard-center"
+                element={
+                  <ProtectedRoute requiredRoles={['admin', 'lgu_staff']}>
+                    <AdminHazardCenter />
                   </ProtectedRoute>
                 }
               />

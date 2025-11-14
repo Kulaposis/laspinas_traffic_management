@@ -54,10 +54,11 @@ if "sslmode=require" in DATABASE_URL:
 
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=10,
+    pool_pre_ping=True,  # Validate connections before use
+    pool_recycle=120,    # Recycle every 2 minutes (prevent stale connections)
+    pool_size=3,         # Reduced from 5 to 3 for Leapcell (lower memory usage)
+    max_overflow=5,      # Reduced from 10 to 5 (lower memory usage)
+    pool_timeout=20,     # Timeout when getting connection from pool
     echo=False,
     connect_args=connect_args,
 )

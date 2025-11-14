@@ -5,10 +5,52 @@ class RoadworksService {
   async scrapeRoadworks(facebookPages = null) {
     try {
       const requestData = facebookPages ? { facebook_pages: facebookPages } : {};
-      const response = await api.post('/traffic/roadworks/scrape', requestData);
+      // Scraping can take up to 2 minutes, so use a longer timeout (150 seconds = 2.5 minutes)
+      const response = await api.post('/traffic/roadworks/scrape', requestData, {
+        timeout: 150000 // 150 seconds (2.5 minutes) to allow for scraping process
+      });
+      
+      // Backend returns 200 even on errors, check the result field
+      if (response.data?.result?.success === false) {
+        const errorMsg = response.data?.result?.error || response.data?.message || 'Scraping failed';
+        throw new Error(errorMsg);
+      }
+      
       return response.data;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to scrape roadworks data');
+      // Handle AxiosError specifically
+      if (error.isAxiosError) {
+        // Network error (no response from server)
+        if (!error.response) {
+          const networkError = error.message || 'Network error: Unable to connect to server';
+          throw new Error(networkError);
+        }
+        
+        // Server responded with error status
+        const status = error.response?.status;
+        const statusText = error.response?.statusText || '';
+        
+        // Extract error message from response
+        const errorMsg = error.response?.data?.result?.error || 
+                        error.response?.data?.detail || 
+                        error.response?.data?.message ||
+                        error.response?.data?.error ||
+                        error.message ||
+                        `Server error (${status}${statusText ? ': ' + statusText : ''})`;
+        
+        throw new Error(errorMsg);
+      }
+      
+      // If it's already our Error object with a message, re-throw it
+      if (error instanceof Error && error.message) {
+        throw error;
+      }
+      
+      // Fallback for any other error type
+      const errorMsg = error.message || 
+                      error.toString() || 
+                      'Failed to scrape roadworks data';
+      throw new Error(errorMsg);
     }
   }
 

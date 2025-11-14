@@ -812,10 +812,50 @@
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
-/* High z-index for History and Emergency Reports Panels */
+/* High z-index for History and Emergency Reports Panels - Must be higher than all other elements (99999) */
 [data-history-panel],
+[data-emergency-reports-panel],
 .emergency-reports-panel {
-  z-index: 10005 !important;
+  z-index: 99999 !important;
   visibility: visible !important;
   opacity: 1 !important;
+  pointer-events: auto !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+}
+
+/* Ensure backdrop has high z-index (99998) */
+.history-panel-backdrop,
+.emergency-reports-panel-backdrop {
+  z-index: 99998 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Dark Mode Styles - Applied when mapStyle is 'night' */
+.dark-mode,
+.dark-mode * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Dark mode scrollbar */
+.dark-mode .modern-scrollbar::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+.dark-mode .modern-scrollbar::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 10px;
+}
+
+.dark-mode .modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
 }

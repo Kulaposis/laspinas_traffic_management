@@ -16,7 +16,7 @@ def create_notification(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a new notification (staff/admin only)."""
-    if current_user.role.value not in ['lgu_staff', 'admin']:
+    if get_role_value(current_user.role) not in ['lgu_staff', 'admin']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to create notifications"
@@ -33,7 +33,7 @@ def create_broadcast_notification(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a broadcast notification for all users (admin only)."""
-    from ..utils.role_helpers import is_admin
+    from ..utils.role_helpers import is_admin, get_role_value
     if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

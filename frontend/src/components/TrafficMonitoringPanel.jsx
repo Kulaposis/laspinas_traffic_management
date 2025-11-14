@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, TrendingUp, TrendingDown, AlertCircle, MapPin, Clock, Car, Filter, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useDarkMode } from '../context/DarkModeContext';
 import trafficService from '../services/trafficService';
 
 /**
@@ -63,6 +64,7 @@ const TrafficMonitoringPanel = ({
   mapCenter = [14.4504, 121.0170],
   mapBounds = null 
 }) => {
+  const { isDarkMode } = useDarkMode();
   const [trafficData, setTrafficData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,20 +217,29 @@ const TrafficMonitoringPanel = ({
   // Get traffic status color
   const getStatusColor = (status) => {
     const s = (status || 'moderate').toLowerCase();
-    if (s === 'free_flow' || s === 'freeflow') return 'bg-green-100 text-green-800 border-green-300';
-    if (s === 'light') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    if (s === 'moderate') return 'bg-orange-100 text-orange-800 border-orange-300';
-    if (s === 'heavy') return 'bg-red-100 text-red-800 border-red-300';
-    if (s === 'severe' || s === 'standstill') return 'bg-red-200 text-red-900 border-red-400';
-    return 'bg-gray-100 text-gray-800 border-gray-300';
+    if (isDarkMode) {
+      if (s === 'free_flow' || s === 'freeflow') return 'bg-green-900/30 text-green-300 border-green-700';
+      if (s === 'light') return 'bg-yellow-900/30 text-yellow-300 border-yellow-700';
+      if (s === 'moderate') return 'bg-orange-900/30 text-orange-300 border-orange-700';
+      if (s === 'heavy') return 'bg-red-900/30 text-red-300 border-red-700';
+      if (s === 'severe' || s === 'standstill') return 'bg-red-900/50 text-red-200 border-red-600';
+      return 'bg-gray-800 text-gray-300 border-gray-700';
+    } else {
+      if (s === 'free_flow' || s === 'freeflow') return 'bg-green-100 text-green-800 border-green-300';
+      if (s === 'light') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      if (s === 'moderate') return 'bg-orange-100 text-orange-800 border-orange-300';
+      if (s === 'heavy') return 'bg-red-100 text-red-800 border-red-300';
+      if (s === 'severe' || s === 'standstill') return 'bg-red-200 text-red-900 border-red-400';
+      return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
   };
 
   // Get traffic status icon
   const getStatusIcon = (status) => {
     const s = (status || 'moderate').toLowerCase();
-    if (s === 'free_flow' || s === 'freeflow') return <TrendingDown className="w-4 h-4" />;
-    if (s === 'light' || s === 'moderate') return <Car className="w-4 h-4" />;
-    return <AlertCircle className="w-4 h-4" />;
+    if (s === 'free_flow' || s === 'freeflow') return <TrendingDown className={`w-4 h-4 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />;
+    if (s === 'light' || s === 'moderate') return <Car className={`w-4 h-4 ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`} />;
+    return <AlertCircle className={`w-4 h-4 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />;
   };
 
   // Format timestamp - only show time for today's data
@@ -288,7 +299,9 @@ const TrafficMonitoringPanel = ({
       />
 
       {/* Panel */}
-      <div className="relative w-full h-[85vh] sm:h-[80vh] sm:max-w-2xl sm:rounded-2xl bg-white shadow-2xl flex flex-col pointer-events-auto animate-slide-up">
+      <div className={`relative w-full h-[85vh] sm:h-[80vh] sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col pointer-events-auto animate-slide-up ${
+        isDarkMode ? 'bg-gray-900' : 'bg-white'
+      }`}>
         {/* Header */}
         <div className="flex-shrink-0 px-4 sm:px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
           <div className="flex items-center justify-between">
@@ -324,20 +337,26 @@ const TrafficMonitoringPanel = ({
         </div>
 
         {/* Stats Cards */}
-        <div className="flex-shrink-0 px-4 sm:px-6 py-4 bg-gray-50 border-b border-gray-200">
+        <div className={`flex-shrink-0 px-4 sm:px-6 py-4 border-b ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+        }`}>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
-            <StatCard label="Total" value={stats.total} color="blue" />
-            <StatCard label="Free Flow" value={stats.freeFlow} color="green" />
-            <StatCard label="Light" value={stats.light} color="yellow" />
-            <StatCard label="Moderate" value={stats.moderate} color="orange" />
-            <StatCard label="Heavy" value={stats.heavy + stats.severe} color="red" />
+            <StatCard label="Total" value={stats.total} color="blue" isDarkMode={isDarkMode} />
+            <StatCard label="Free Flow" value={stats.freeFlow} color="green" isDarkMode={isDarkMode} />
+            <StatCard label="Light" value={stats.light} color="yellow" isDarkMode={isDarkMode} />
+            <StatCard label="Moderate" value={stats.moderate} color="orange" isDarkMode={isDarkMode} />
+            <StatCard label="Heavy" value={stats.heavy + stats.severe} color="red" isDarkMode={isDarkMode} />
           </div>
         </div>
 
         {/* Filters */}
-        <div className="flex-shrink-0 px-4 sm:px-6 py-3 bg-white border-b border-gray-200">
+        <div className={`flex-shrink-0 px-4 sm:px-6 py-3 border-b ${
+          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
           <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide">
-            <Filter className="w-4 h-4 text-gray-500 flex-shrink-0" />
+            <Filter className={`w-4 h-4 flex-shrink-0 ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+            }`} />
             {['all', 'free_flow', 'light', 'moderate', 'heavy', 'severe'].map((filter) => (
               <button
                 key={filter}
@@ -345,7 +364,9 @@ const TrafficMonitoringPanel = ({
                 className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
                   selectedFilter === filter
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : (isDarkMode
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200')
                 }`}
               >
                 {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1).replace('_', ' ')}
@@ -359,12 +380,12 @@ const TrafficMonitoringPanel = ({
           {loading && trafficData.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full space-y-4">
               <RefreshCw className="w-12 h-12 text-blue-600 animate-spin" />
-              <p className="text-gray-600">Loading traffic data...</p>
+              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading traffic data...</p>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-full space-y-4">
-              <AlertCircle className="w-12 h-12 text-red-500" />
-              <p className="text-gray-600 text-center">{error}</p>
+              <AlertCircle className={`w-12 h-12 ${isDarkMode ? 'text-red-400' : 'text-red-500'}`} />
+              <p className={`text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{error}</p>
               <button
                 onClick={fetchTrafficData}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -374,8 +395,8 @@ const TrafficMonitoringPanel = ({
             </div>
           ) : filteredData.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full space-y-4">
-              <MapPin className="w-12 h-12 text-gray-400" />
-              <p className="text-gray-600 text-center">No traffic data available</p>
+              <MapPin className={`w-12 h-12 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+              <p className={`text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No traffic data available</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -389,7 +410,11 @@ const TrafficMonitoringPanel = ({
                 return (
                   <div
                     key={item.id || index}
-                    className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                    className={`rounded-xl border shadow-sm hover:shadow-md transition-shadow overflow-hidden ${
+                      isDarkMode
+                        ? 'bg-gray-800 border-gray-700'
+                        : 'bg-white border-gray-200'
+                    }`}
                   >
                     <div
                       className="p-4 cursor-pointer"
@@ -399,9 +424,13 @@ const TrafficMonitoringPanel = ({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2 mb-2">
                             {getStatusIcon(status)}
-                            <h3 className="font-semibold text-gray-900 truncate">{roadName}</h3>
+                            <h3 className={`font-semibold truncate ${
+                              isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                            }`}>{roadName}</h3>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                          <div className={`flex flex-wrap items-center gap-2 text-xs ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
                             <span className="flex items-center space-x-1">
                               <MapPin className="w-3 h-3" />
                               <span>{barangay}</span>
@@ -418,32 +447,40 @@ const TrafficMonitoringPanel = ({
                             {status.replace('_', ' ')}
                           </span>
                           {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-gray-400" />
+                            <ChevronUp className={`w-4 h-4 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                           ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                            <ChevronDown className={`w-4 h-4 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                           )}
                         </div>
                       </div>
                     </div>
 
                     {isExpanded && (
-                      <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50">
+                      <div className={`px-4 pb-4 border-t ${
+                        isDarkMode
+                          ? 'border-gray-700 bg-gray-800'
+                          : 'border-gray-100 bg-gray-50'
+                      }`}>
                         <div className="pt-4 space-y-3">
-                          <DetailRow label="Road Type" value={roadType} />
-                          <DetailRow label="Location" value={`${item.latitude?.toFixed(6)}, ${item.longitude?.toFixed(6)}`} />
+                          <DetailRow label="Road Type" value={roadType} isDarkMode={isDarkMode} />
+                          <DetailRow label="Location" value={`${item.latitude?.toFixed(6)}, ${item.longitude?.toFixed(6)}`} isDarkMode={isDarkMode} />
                           {item.average_speed && (
-                            <DetailRow label="Average Speed" value={`${item.average_speed} km/h`} />
+                            <DetailRow label="Average Speed" value={`${item.average_speed} km/h`} isDarkMode={isDarkMode} />
                           )}
                           {item.vehicle_count && (
-                            <DetailRow label="Vehicle Count" value={item.vehicle_count} />
+                            <DetailRow label="Vehicle Count" value={item.vehicle_count} isDarkMode={isDarkMode} />
                           )}
                           {item.confidence_score && (
-                            <DetailRow label="Confidence" value={`${(item.confidence_score * 100).toFixed(0)}%`} />
+                            <DetailRow label="Confidence" value={`${(item.confidence_score * 100).toFixed(0)}%`} isDarkMode={isDarkMode} />
                           )}
                           {item.description && (
                             <div>
-                              <p className="text-xs font-medium text-gray-700 mb-1">Description</p>
-                              <p className="text-sm text-gray-600">{item.description}</p>
+                              <p className={`text-xs font-medium mb-1 ${
+                                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>Description</p>
+                              <p className={`text-sm ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`}>{item.description}</p>
                             </div>
                           )}
                         </div>
@@ -457,7 +494,9 @@ const TrafficMonitoringPanel = ({
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-200">
+        <div className={`flex-shrink-0 px-4 sm:px-6 py-3 border-t ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+        }`}>
           <button
             onClick={fetchTrafficData}
             disabled={loading}
@@ -482,28 +521,44 @@ const TrafficMonitoringPanel = ({
 };
 
 // Stat Card Component
-const StatCard = ({ label, value, color }) => {
-  const colorClasses = {
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    green: 'bg-green-50 text-green-700 border-green-200',
-    yellow: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    orange: 'bg-orange-50 text-orange-700 border-orange-200',
-    red: 'bg-red-50 text-red-700 border-red-200'
-  };
+const StatCard = ({ label, value, color, isDarkMode = false }) => {
+  const colorClasses = isDarkMode
+    ? {
+        blue: 'bg-blue-900/30 text-blue-300 border-blue-700',
+        green: 'bg-green-900/30 text-green-300 border-green-700',
+        yellow: 'bg-yellow-900/30 text-yellow-300 border-yellow-700',
+        orange: 'bg-orange-900/30 text-orange-300 border-orange-700',
+        red: 'bg-red-900/30 text-red-300 border-red-700'
+      }
+    : {
+        blue: 'bg-blue-50 text-blue-700 border-blue-200',
+        green: 'bg-green-50 text-green-700 border-green-200',
+        yellow: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+        orange: 'bg-orange-50 text-orange-700 border-orange-200',
+        red: 'bg-red-50 text-red-700 border-red-200'
+      };
 
   return (
     <div className={`p-2 sm:p-3 rounded-lg border ${colorClasses[color] || colorClasses.blue}`}>
-      <p className="text-xs text-gray-600 mb-1">{label}</p>
-      <p className="text-lg sm:text-xl font-bold">{value}</p>
+      <p className={`text-xs mb-1 ${
+        isDarkMode ? 'text-gray-400' : 'text-gray-600'
+      }`}>{label}</p>
+      <p className={`text-lg sm:text-xl font-bold ${
+        isDarkMode ? 'text-gray-100' : 'text-gray-900'
+      }`}>{value}</p>
     </div>
   );
 };
 
 // Detail Row Component
-const DetailRow = ({ label, value }) => (
+const DetailRow = ({ label, value, isDarkMode = false }) => (
   <div className="flex justify-between items-center">
-    <span className="text-xs font-medium text-gray-600">{label}</span>
-    <span className="text-sm text-gray-900 font-medium">{value}</span>
+    <span className={`text-xs font-medium ${
+      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+    }`}>{label}</span>
+    <span className={`text-sm font-medium ${
+      isDarkMode ? 'text-gray-100' : 'text-gray-900'
+    }`}>{value}</span>
   </div>
 );
 

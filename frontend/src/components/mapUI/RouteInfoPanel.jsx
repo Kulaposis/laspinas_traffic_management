@@ -20,8 +20,20 @@ const RouteInfoPanel = ({
   if (!selectedRoute) return null;
 
   return (
-    <div className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40">
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+    <div 
+      className="absolute bottom-2 left-1 right-1 sm:bottom-4 sm:left-2 sm:right-2 z-40"
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+      }}
+    >
+      <div 
+        className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+        style={{
+          maxHeight: 'min(calc(100vh - 100px), calc(100dvh - 100px), 80vh)',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain'
+        }}
+      >
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
@@ -34,11 +46,11 @@ const RouteInfoPanel = ({
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               {routeAlternatives.length > 1 && (
                 <button
                   onClick={onShowAlternatives}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 touch-manipulation active:scale-95"
                   title="View alternative routes"
                 >
                   <Layers className="w-5 h-5 text-gray-600" />
@@ -46,29 +58,30 @@ const RouteInfoPanel = ({
               )}
               <button
                 onClick={onClearRoute}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 touch-manipulation active:scale-95"
                 title="Close route"
               >
                 <X className="w-5 h-5 text-gray-600" />
               </button>
               <button
                 onClick={onSaveFavorite}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 touch-manipulation active:scale-95"
                 title="Save as favorite"
               >
                 <Heart className="w-5 h-5 text-gray-600" />
               </button>
               <button
                 onClick={onStartSimulation}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
+                className="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center space-x-1.5 sm:space-x-2 shadow-sm touch-manipulation active:scale-95"
                 title="Simulate this trip"
               >
                 <Play className="w-4 h-4" />
                 <span className="hidden sm:inline">Simulate</span>
+                <span className="sm:hidden">Sim</span>
               </button>
               <button
                 onClick={onStartNavigation}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center space-x-1.5 sm:space-x-2 shadow-sm touch-manipulation active:scale-95"
               >
                 <Navigation className="w-4 h-4" />
                 <span>Start</span>

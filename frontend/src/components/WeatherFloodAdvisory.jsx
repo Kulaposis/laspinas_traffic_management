@@ -1,7 +1,51 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Cloud, AlertTriangle, Droplets, X, ChevronUp, ChevronDown, MapPin, Clock, Thermometer, Wind } from 'lucide-react';
+import { useDarkMode } from '../context/DarkModeContext';
 
 const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 'Las Piñas City', sidebarOpen = false, avoidCenter = false, shouldHide = false }) => {
+  const { isDarkMode } = useDarkMode();
+  
+  // Helper function to get advisory color classes based on severity and dark mode
+  const getAdvisoryColorClasses = useCallback((advisory, isDark) => {
+    const severity = advisory.severity;
+    const type = advisory.type;
+    const icon = advisory.icon;
+    const id = advisory.id;
+    
+    // Check if it's a thunderstorm warning (thunderstorm icon or thunderstorm ID)
+    const isThunderstorm = icon === '⛈️' || (id && id.includes('thunderstorm'));
+    
+    if (isDark) {
+      // Dark mode colors
+      if (severity === 'critical') return 'bg-red-900/30 border-red-700';
+      if (severity === 'high') {
+        // Thunderstorm warnings use purple
+        if (isThunderstorm) {
+          return 'bg-purple-900/30 border-purple-700';
+        }
+        return 'bg-orange-900/30 border-orange-700';
+      }
+      if (severity === 'moderate') return 'bg-yellow-900/30 border-yellow-700';
+      if (severity === 'low') return 'bg-blue-900/30 border-blue-700';
+      // Default for any other severity
+      return 'bg-blue-900/30 border-blue-700';
+    } else {
+      // Light mode colors
+      if (severity === 'critical') return 'bg-red-100 border-red-300';
+      if (severity === 'high') {
+        // Thunderstorm warnings use purple
+        if (isThunderstorm) {
+          return 'bg-purple-100 border-purple-300';
+        }
+        return 'bg-orange-100 border-orange-300';
+      }
+      if (severity === 'moderate') return 'bg-yellow-100 border-yellow-300';
+      if (severity === 'low') return 'bg-blue-100 border-blue-300';
+      // Default for any other severity
+      return 'bg-blue-100 border-blue-300';
+    }
+  }, []);
+  
   // More accurate coordinates for Las Piñas City center (City Hall area)
   const lasPinasCenter = [14.4504, 121.0170];
   // Start collapsed and closed by default - user can open manually
@@ -19,6 +63,7 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
   const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
   const panelRef = useRef(null);
+  const dragHandleRef = useRef(null);
   
   // Responsive heights: smaller on desktop, larger on mobile
   // On mobile, use viewport height to ensure footer is always visible
@@ -35,6 +80,100 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleClose = useCallback(() => {
+    setIsClosed(true);
+    setIsVisible(false);
+    setIsExpanded(false);
+    localStorage.setItem('weatherAdvisoryClosed', 'true');
+  }, []);
+
+  // Attach non-passive touch event listeners to drag handle for proper preventDefault support
+  useEffect(() => {
+    const dragHandle = dragHandleRef.current;
+    if (!dragHandle) return;
+
+    // Use event delegation - attach to the panel container to catch all drag handles
+    const panelContainer = dragHandle.closest('.fixed') || dragHandle.parentElement;
+    if (!panelContainer) return;
+
+    // Create wrapper functions that use native events
+    const handleTouchStartNative = (e) => {
+      const target = e.target;
+      const dragHandleElement = target.closest('.drag-handle') || target.closest('[data-drag-handle]');
+      if (!dragHandleElement) {
+        return;
+      }
+      const touch = e.touches[0];
+      setDragStartY(touch.clientY);
+      setDragCurrentY(touch.clientY);
+      setIsDragging(false);
+    };
+
+    const handleTouchMoveNative = (e) => {
+      if (dragStartY === null) return;
+      
+      // Check if we're still on a drag handle
+      const target = e.target;
+      const dragHandleElement = target.closest('.drag-handle') || target.closest('[data-drag-handle]');
+      if (!dragHandleElement) {
+        return;
+      }
+      
+      const touch = e.touches[0];
+      const currentY = touch.clientY;
+      const deltaY = Math.abs(currentY - dragStartY);
+      
+      // Only start dragging if movement exceeds a small threshold (prevents accidental drags)
+      if (deltaY > 10) {
+        if (!isDragging) {
+          setIsDragging(true);
+          e.preventDefault(); // Now we can preventDefault because listener is non-passive
+        } else {
+          e.preventDefault();
+        }
+        setDragCurrentY(currentY);
+      }
+    };
+
+    const handleTouchEndNative = (e) => {
+      if (dragStartY === null || dragCurrentY === null) {
+        setIsDragging(false);
+        setDragStartY(null);
+        setDragCurrentY(null);
+        return;
+      }
+
+      const deltaY = dragCurrentY - dragStartY;
+      const threshold = 50;
+
+      if (isDragging) {
+        if (deltaY > threshold && isExpanded) {
+          setIsExpanded(false);
+        } else if (deltaY < -threshold && !isExpanded) {
+          setIsExpanded(true);
+        } else if (deltaY > threshold * 2 && !isExpanded) {
+          handleClose();
+        }
+      }
+
+      setIsDragging(false);
+      setDragStartY(null);
+      setDragCurrentY(null);
+    };
+
+    // Attach with { passive: false } for touchmove to allow preventDefault
+    // Use event delegation on the panel container to catch all drag handles
+    panelContainer.addEventListener('touchstart', handleTouchStartNative, { passive: true });
+    panelContainer.addEventListener('touchmove', handleTouchMoveNative, { passive: false });
+    panelContainer.addEventListener('touchend', handleTouchEndNative, { passive: true });
+
+    return () => {
+      panelContainer.removeEventListener('touchstart', handleTouchStartNative);
+      panelContainer.removeEventListener('touchmove', handleTouchMoveNative);
+      panelContainer.removeEventListener('touchend', handleTouchEndNative);
+    };
+  }, [isDragging, dragStartY, dragCurrentY, isExpanded, handleClose]);
 
   // Don't auto-show on page load - always start closed
   // Panel will only show when user manually clicks the reopen button
@@ -358,10 +497,6 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
             message: `${floodAlert.barangay}: ${floodAlert.description}`,
             location: floodAlert.barangay,
             timestamp: floodAlert.timestamp,
-            color: floodAlert.severity === 'critical' ? 'bg-red-100 border-red-300' :
-                   floodAlert.severity === 'high' ? 'bg-orange-100 border-orange-300' :
-                   floodAlert.severity === 'moderate' ? 'bg-yellow-100 border-yellow-300' :
-                   'bg-blue-100 border-blue-300',
             isRealtime: true,
             source: floodAlert.source,
             coordinates: floodAlert.coordinates,
@@ -383,7 +518,6 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
             message: `${locationName}: Thunderstorm warning - Stay indoors`,
             location: locationName,
             timestamp: now.toISOString(),
-            color: 'bg-purple-100 border-purple-300',
             isRealtime: true
           });
         }
@@ -403,9 +537,6 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
             message: `${locationName}: ${condition.text}${currentPrecipitation > 0 ? ` - ${currentPrecipitation.toFixed(1)}mm/h` : ''}`,
             location: locationName,
             timestamp: now.toISOString(),
-            color: weatherCode >= 82 ? 'bg-red-100 border-red-300' :
-                   (weatherCode >= 65 && weatherCode <= 67) ? 'bg-orange-100 border-orange-300' :
-                   'bg-blue-100 border-blue-300',
             isRealtime: true
           });
         }
@@ -420,10 +551,6 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
             message: `${locationName}: ${risk.message}`,
             location: locationName,
             timestamp: now.toISOString(),
-            color: risk.risk === 'critical' ? 'bg-red-100 border-red-300' :
-                   risk.risk === 'high' ? 'bg-orange-100 border-orange-300' :
-                   risk.risk === 'moderate' ? 'bg-yellow-100 border-yellow-300' :
-                   'bg-blue-100 border-blue-300',
             isRealtime: true,
             precipitation: risk.precipitation
           });
@@ -490,10 +617,15 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
     if (deltaY > 10) {
       if (!isDragging) {
         setIsDragging(true);
-        // Prevent default only when actual dragging starts
-        e.preventDefault();
+        // Prevent default only when actual dragging starts and event is cancelable
+        if (e.cancelable) {
+          e.preventDefault();
+        }
       } else {
-        e.preventDefault();
+        // Prevent default only if event is cancelable
+        if (e.cancelable) {
+          e.preventDefault();
+        }
       }
       setDragCurrentY(currentY);
     }
@@ -529,13 +661,6 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
     setDragStartY(null);
     setDragCurrentY(null);
   }, [isDragging, dragStartY, dragCurrentY, isExpanded]);
-
-  const handleClose = () => {
-    setIsClosed(true);
-    setIsVisible(false);
-    setIsExpanded(false);
-    localStorage.setItem('weatherAdvisoryClosed', 'true');
-  };
 
   const handleReopen = () => {
     setIsClosed(false);
@@ -679,7 +804,11 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
       }}
     >
       {/* Glassmorphism Panel - Scrollable */}
-      <div className="w-full h-full bg-white/98 backdrop-blur-xl rounded-t-3xl shadow-2xl border-t border-x border-gray-200/30 flex flex-col overflow-hidden">
+      <div className={`w-full h-full backdrop-blur-xl rounded-t-3xl shadow-2xl border-t border-x flex flex-col overflow-hidden ${
+        isDarkMode 
+          ? 'bg-gray-900/98 border-gray-700/30' 
+          : 'bg-white/98 border-gray-200/30'
+      }`}>
         {/* Scrollable Content Container */}
         <div className="flex-1 overflow-y-auto" style={{ 
           touchAction: 'pan-y',
@@ -688,38 +817,42 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
         }}>
         {/* Drag Handle & Header */}
         <div 
+          ref={dragHandleRef}
           className={`flex-shrink-0 drag-handle ${!isDesktop ? 'pt-3 pb-3 px-4' : 'pt-2.5 pb-2 px-4'}`}
           data-drag-handle
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
           style={{ touchAction: 'none' }}
         >
           {/* Drag Bar - Enhanced for mobile */}
           {!isDesktop && (
-            <div className="w-14 h-1.5 bg-gray-300 rounded-full mx-auto mb-3 cursor-grab active:cursor-grabbing shadow-sm" />
+            <div className={`w-14 h-1.5 rounded-full mx-auto mb-3 cursor-grab active:cursor-grabbing shadow-sm ${
+              isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+            }`} />
           )}
           
           {/* Header - Modern Design */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className={`flex-shrink-0 ${!isDesktop ? 'w-12 h-12' : 'w-9 h-9'} rounded-xl flex items-center justify-center shadow-sm transition-all ${
-                hasHighSeverity ? 'bg-gradient-to-br from-red-500 to-red-600' : currentWeather ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gray-200'
+                hasHighSeverity ? 'bg-gradient-to-br from-red-500 to-red-600' : currentWeather ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : (isDarkMode ? 'bg-gray-700' : 'bg-gray-200')
               }`}>
                 {hasHighSeverity ? (
                   <AlertTriangle className={`${!isDesktop ? 'w-5 h-5' : 'w-4 h-4'} text-white`} />
                 ) : currentWeather ? (
                   <span className={`${!isDesktop ? 'text-2xl' : 'text-lg'}`}>{currentWeather.condition.icon}</span>
                 ) : (
-                  <Cloud className={`${!isDesktop ? 'w-5 h-5' : 'w-4 h-4'} text-gray-600`} />
+                  <Cloud className={`${!isDesktop ? 'w-5 h-5' : 'w-4 h-4'} ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className={`${!isDesktop ? 'text-base' : 'text-sm'} font-bold text-gray-900 truncate`}>
+                <h3 className={`${!isDesktop ? 'text-base' : 'text-sm'} font-bold truncate ${
+                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                }`}>
                   Weather & Flood
                 </h3>
-                <div className="flex items-center gap-1.5 text-xs text-gray-600 mt-0.5">
-                  <MapPin className="w-3.5 h-3.5 text-gray-500" />
+                <div className={`flex items-center gap-1.5 text-xs mt-0.5 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>
+                  <MapPin className={`w-3.5 h-3.5 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`} />
                   <span className="truncate font-medium">{locationName}</span>
                 </div>
               </div>
@@ -728,57 +861,95 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
             {/* Close Button - Enhanced */}
             <button
               onClick={handleClose}
-              className={`flex-shrink-0 ml-2 ${!isDesktop ? 'p-2' : 'p-1'} rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-all active:scale-95`}
+              className={`flex-shrink-0 ml-2 ${!isDesktop ? 'p-2' : 'p-1'} rounded-xl transition-all active:scale-95 ${
+                isDarkMode 
+                  ? 'bg-gray-800 hover:bg-gray-700 active:bg-gray-600' 
+                  : 'bg-gray-100 hover:bg-gray-200 active:bg-gray-300'
+              }`}
               aria-label="Close advisory panel"
             >
-              <X className={`${!isDesktop ? 'w-5 h-5' : 'w-4 h-4'} text-gray-700`} />
+              <X className={`${!isDesktop ? 'w-5 h-5' : 'w-4 h-4'} ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`} />
             </button>
           </div>
           
           {/* Current Weather Display - Compact Design */}
           {currentWeather && (
-            <div className={`${!isDesktop ? 'py-2 px-2.5' : 'py-2 px-2'} bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl border border-blue-200/50 shadow-sm`}>
+            <div className={`${!isDesktop ? 'py-2 px-2.5' : 'py-2 px-2'} rounded-xl border shadow-sm ${
+              isDarkMode 
+                ? 'bg-gradient-to-br from-blue-900/30 via-indigo-900/30 to-purple-900/30 border-blue-700/50' 
+                : 'bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200/50'
+            }`}>
               <div className={`grid grid-cols-4 ${!isDesktop ? 'gap-2' : 'gap-1.5'}`}>
                 <div className="flex flex-col items-center group">
-                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg bg-red-100 flex items-center justify-center mb-1 group-hover:bg-red-200 transition-colors`}>
-                    <Thermometer className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-red-600`} />
+                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg flex items-center justify-center mb-1 transition-colors ${
+                    isDarkMode 
+                      ? 'bg-red-900 group-hover:bg-red-800' 
+                      : 'bg-red-100 group-hover:bg-red-200'
+                  }`}>
+                    <Thermometer className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} />
                   </div>
-                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold text-gray-900 mb-0.5`}>
+                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold mb-0.5 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                     {currentWeather.temperature !== null && currentWeather.temperature !== undefined 
                       ? currentWeather.temperature.toFixed(1) 
                       : '--'}°C
                   </span>
-                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} text-gray-600`}>Temp</span>
+                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Temp</span>
                 </div>
                 <div className="flex flex-col items-center group">
-                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg bg-blue-100 flex items-center justify-center mb-1 group-hover:bg-blue-200 transition-colors`}>
-                    <Droplets className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-blue-600`} />
-                  </div>
-                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold text-gray-900 mb-0.5`}>{currentWeather.humidity}%</span>
-                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} text-gray-600`}>Humidity</span>
+                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg flex items-center justify-center mb-1 transition-colors ${
+                    isDarkMode 
+                      ? 'bg-blue-900 group-hover:bg-blue-800' 
+                      : 'bg-blue-100 group-hover:bg-blue-200'
+                  }`}>
+                    <Droplets className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                </div>
+                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold mb-0.5 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>{currentWeather.humidity}%</span>
+                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Humidity</span>
                 </div>
                 <div className="flex flex-col items-center group">
-                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg bg-gray-100 flex items-center justify-center mb-1 group-hover:bg-gray-200 transition-colors`}>
-                    <Cloud className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-gray-600`} />
+                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg flex items-center justify-center mb-1 transition-colors ${
+                    isDarkMode 
+                      ? 'bg-gray-700 group-hover:bg-gray-600' 
+                      : 'bg-gray-100 group-hover:bg-gray-200'
+                  }`}>
+                    <Cloud className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} />
                   </div>
-                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold text-gray-900 mb-0.5`}>
+                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold mb-0.5 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                     {currentWeather.currentPrecipitation?.toFixed(1) || currentWeather.precipitation?.toFixed(1) || '0'}mm
                   </span>
-                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} text-gray-600`}>Rain/h</span>
+                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Rain/h</span>
                 </div>
                 <div className="flex flex-col items-center group">
-                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg bg-green-100 flex items-center justify-center mb-1 group-hover:bg-green-200 transition-colors`}>
-                    <Wind className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-green-600`} />
+                  <div className={`${!isDesktop ? 'w-7 h-7' : 'w-6 h-6'} rounded-lg flex items-center justify-center mb-1 transition-colors ${
+                    isDarkMode 
+                      ? 'bg-green-900 group-hover:bg-green-800' 
+                      : 'bg-green-100 group-hover:bg-green-200'
+                  }`}>
+                    <Wind className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-3 h-3'} ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
                   </div>
-                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold text-gray-900 mb-0.5`}>
+                  <span className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold mb-0.5 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>
                     {Math.round(currentWeather.windSpeed || 0)}
                   </span>
-                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} text-gray-600`}>km/h</span>
+                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>km/h</span>
                 </div>
               </div>
               {currentWeather.todayPrecipitation > 0 && (
-                <div className={`mt-2 pt-2 border-t border-blue-200/50 text-center`}>
-                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded-full inline-block`}>
+                <div className={`mt-2 pt-2 border-t text-center ${
+                  isDarkMode ? 'border-blue-700/50' : 'border-blue-200/50'
+                }`}>
+                  <span className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} font-medium px-2 py-1 rounded-full inline-block ${
+                    isDarkMode 
+                      ? 'text-blue-300 bg-blue-900/50' 
+                      : 'text-blue-700 bg-blue-100'
+                  }`}>
                     Today's Total: {currentWeather.todayPrecipitation.toFixed(1)}mm
                   </span>
                 </div>
@@ -795,42 +966,60 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
           {loading ? (
               <div className="flex flex-col items-center justify-center py-8">
                 <div className="relative w-12 h-12 mb-3">
-                  <div className="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+                  <div className={`absolute inset-0 border-4 rounded-full ${
+                    isDarkMode ? 'border-blue-800' : 'border-blue-200'
+                  }`}></div>
                   <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
                 </div>
-                <p className="text-sm font-medium text-gray-700">Loading weather data...</p>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Loading weather data...</p>
             </div>
           ) : activeAdvisoriesCount === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className={`${!isDesktop ? 'w-16 h-16' : 'w-12 h-12'} rounded-2xl bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center mb-3 shadow-sm`}>
-                  <Cloud className={`${!isDesktop ? 'w-8 h-8' : 'w-6 h-6'} text-green-600`} />
+                <div className={`${!isDesktop ? 'w-16 h-16' : 'w-12 h-12'} rounded-2xl flex items-center justify-center mb-3 shadow-sm ${
+                  isDarkMode 
+                    ? 'bg-gradient-to-br from-green-900 to-emerald-900' 
+                    : 'bg-gradient-to-br from-green-100 to-emerald-100'
+                }`}>
+                  <Cloud className={`${!isDesktop ? 'w-8 h-8' : 'w-6 h-6'} ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
                 </div>
-                <p className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold text-gray-800 mb-1`}>All Clear</p>
-                <p className={`${!isDesktop ? 'text-xs' : 'text-[10px]'} text-gray-500`}>No active advisories</p>
+                <p className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-semibold mb-1 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                }`}>All Clear</p>
+                <p className={`${!isDesktop ? 'text-xs' : 'text-[10px]'} ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>No active advisories</p>
             </div>
           ) : (
               <div className={!isDesktop ? 'space-y-3' : 'space-y-1.5'}>
                 {advisories.slice(0, isDesktop ? 5 : 10).map((advisory) => (
                 <div
                   key={advisory.id}
-                    className={`${!isDesktop ? 'p-3 rounded-xl' : 'p-2 rounded-lg'} border transition-all duration-300 active:scale-[0.98] shadow-sm hover:shadow-md ${advisory.color} ${advisory.isRealtime ? 'ring-2 ring-blue-400/50' : ''}`}
+                    className={`${!isDesktop ? 'p-3 rounded-xl' : 'p-2 rounded-lg'} border transition-all duration-300 active:scale-[0.98] shadow-sm hover:shadow-md ${getAdvisoryColorClasses(advisory, isDarkMode)} ${advisory.isRealtime ? (isDarkMode ? 'ring-2 ring-blue-700/50' : 'ring-2 ring-blue-400/50') : ''}`}
                 >
                     <div className="flex items-start gap-3">
-                      <div className={`flex-shrink-0 ${!isDesktop ? 'w-10 h-10' : 'w-8 h-8'} rounded-xl bg-white/80 flex items-center justify-center text-xl shadow-sm`}>
+                      <div className={`flex-shrink-0 ${!isDesktop ? 'w-10 h-10' : 'w-8 h-8'} rounded-xl flex items-center justify-center text-xl shadow-sm ${
+                        isDarkMode ? 'bg-gray-800/80' : 'bg-white/80'
+                      }`}>
                         {advisory.icon}
                       </div>
                     <div className="flex-1 min-w-0">
-                        <p className={`${!isDesktop ? 'text-base' : 'text-sm'} font-bold text-gray-900 leading-snug mb-2`}>
+                        <p className={`${!isDesktop ? 'text-base' : 'text-sm'} font-bold leading-snug mb-2 ${
+                          isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                        }`}>
                         {advisory.message}
                       </p>
-                        <div className={`flex flex-wrap items-center gap-2 ${!isDesktop ? 'text-xs' : 'text-[10px]'} text-gray-600`}>
+                        <div className={`flex flex-wrap items-center gap-2 ${!isDesktop ? 'text-xs' : 'text-[10px]'} ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
                           {advisory.location && advisory.location !== locationName && (
-                            <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded-full">
+                            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                              isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                            }`}>
                               <MapPin className={`${!isDesktop ? 'w-3 h-3' : 'w-2.5 h-2.5'}`} />
                           <span className="truncate font-medium">{advisory.location}</span>
                         </span>
                           )}
-                          <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded-full">
+                          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                            isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                          }`}>
                             <Clock className={`${!isDesktop ? 'w-3 h-3' : 'w-2.5 h-2.5'}`} />
                           <span className="font-medium">{formatTimestamp(advisory.timestamp)}</span>
                         </span>
@@ -847,9 +1036,13 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
               ))}
                 {advisories.length > (isDesktop ? 5 : 10) && (
                   <div className={!isDesktop ? 'text-center py-3' : 'text-center py-1'}>
-                    <p className={`${!isDesktop ? 'text-sm' : 'text-xs'} text-gray-500 font-medium bg-gray-50 px-4 py-2 rounded-full inline-block`}>
-                      +{advisories.length - (isDesktop ? 5 : 10)} more advisories
-                    </p>
+                    <p className={`${!isDesktop ? 'text-sm' : 'text-xs'} font-medium px-4 py-2 rounded-full inline-block ${
+                      isDarkMode 
+                        ? 'text-gray-400 bg-gray-800' 
+                        : 'text-gray-500 bg-gray-50'
+                    }`}>
+                    +{advisories.length - (isDesktop ? 5 : 10)} more advisories
+                  </p>
                   </div>
                 )}
             </div>
@@ -863,9 +1056,6 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
           <div 
             className={`flex-shrink-0 ${!isDesktop ? 'px-4 pb-3' : 'px-3 pb-2'} drag-handle`}
             data-drag-handle
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
           >
             {/* On mobile, show first advisory preview when collapsed */}
             {!isDesktop && advisories.length > 0 && (
@@ -873,14 +1063,18 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
                 className="mb-2 cursor-pointer"
                 onClick={toggleExpand}
               >
-                <div className={`p-2.5 rounded-xl border transition-all duration-300 active:scale-[0.98] shadow-sm ${advisories[0].color} ${advisories[0].isRealtime ? 'ring-1 ring-blue-400/50' : ''}`}>
+                <div className={`p-2.5 rounded-xl border transition-all duration-300 active:scale-[0.98] shadow-sm ${getAdvisoryColorClasses(advisories[0], isDarkMode)} ${advisories[0].isRealtime ? (isDarkMode ? 'ring-1 ring-blue-700/50' : 'ring-1 ring-blue-400/50') : ''}`}>
                   <div className="flex items-start gap-2">
                     <span className="text-lg flex-shrink-0">{advisories[0].icon}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2">
+                      <p className={`text-xs font-semibold leading-snug line-clamp-2 ${
+                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                      }`}>
                         {advisories[0].message}
                       </p>
-                      <div className="flex items-center gap-2 text-[10px] text-gray-600 mt-1">
+                      <div className={`flex items-center gap-2 text-[10px] mt-1 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>
                         {advisories[0].isRealtime && (
                           <span className="px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full font-bold shadow-sm flex items-center gap-1">
                             <span className="w-1 h-1 bg-white rounded-full animate-pulse"></span>
@@ -888,13 +1082,17 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
                           </span>
                         )}
                         {advisories.length > 1 && (
-                          <span className="text-gray-500 font-medium">
+                          <span className={`font-medium ${
+                            isDarkMode ? 'text-gray-500' : 'text-gray-500'
+                          }`}>
                             +{advisories.length - 1} more
                           </span>
                         )}
                       </div>
                     </div>
-                    <ChevronUp className="w-4 h-4 text-gray-600 flex-shrink-0 mt-0.5" />
+                    <ChevronUp className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`} />
                   </div>
                 </div>
               </div>
@@ -904,42 +1102,68 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
             <div 
               className="cursor-pointer"
               onClick={toggleExpand}
-            >
-              {activeAdvisoriesCount > 0 ? (
-                <div className={`flex items-center justify-between ${!isDesktop ? 'p-2.5' : 'p-1.5'} bg-gradient-to-r from-orange-50 to-red-50 rounded-xl border border-orange-200/50 hover:from-orange-100 hover:to-red-100 active:scale-[0.98] transition-all shadow-sm`}>
+          >
+            {activeAdvisoriesCount > 0 ? (
+                <div className={`flex items-center justify-between ${!isDesktop ? 'p-2.5' : 'p-1.5'} rounded-xl border active:scale-[0.98] transition-all shadow-sm ${
+                  isDarkMode 
+                    ? 'bg-gradient-to-r from-orange-900/30 to-red-900/30 border-orange-700/50 hover:from-orange-800/30 hover:to-red-800/30' 
+                    : 'bg-gradient-to-r from-orange-50 to-red-50 border-orange-200/50 hover:from-orange-100 hover:to-red-100'
+                }`}>
                   <div className="flex items-center gap-2.5">
-                    <div className={`${!isDesktop ? 'w-9 h-9' : 'w-8 h-8'} rounded-xl bg-orange-100 flex items-center justify-center`}>
+                    <div className={`${!isDesktop ? 'w-9 h-9' : 'w-8 h-8'} rounded-xl flex items-center justify-center ${
+                      isDarkMode ? 'bg-orange-900' : 'bg-orange-100'
+                    }`}>
                       <span className={`${!isDesktop ? 'text-lg' : 'text-base'}`}>{hasHighSeverity ? '⚠️' : '🌧️'}</span>
                     </div>
                     <div>
-                      <span className={`${!isDesktop ? 'text-xs' : 'text-[10px]'} font-bold text-gray-900`}>
-                        {activeAdvisoriesCount} {activeAdvisoriesCount === 1 ? 'alert' : 'alerts'}
-                      </span>
-                      <p className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} text-gray-600 mt-0.5`}>Tap to expand</p>
-                    </div>
-                  </div>
-                  <ChevronUp className={`${!isDesktop ? 'w-4 h-4' : 'w-3.5 h-3.5'} text-gray-600`} />
+                      <span className={`${!isDesktop ? 'text-xs' : 'text-[10px]'} font-bold ${
+                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                      }`}>
+                    {activeAdvisoriesCount} {activeAdvisoriesCount === 1 ? 'alert' : 'alerts'}
+                  </span>
+                      <p className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} mt-0.5 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>Tap to expand</p>
                 </div>
-              ) : currentWeather ? (
-                <div className={`flex items-center justify-between ${!isDesktop ? 'p-2.5' : 'p-1.5'} bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200/50 hover:from-blue-100 hover:to-indigo-100 active:scale-[0.98] transition-all shadow-sm`}>
+                  </div>
+                  <ChevronUp className={`${!isDesktop ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`} />
+              </div>
+            ) : currentWeather ? (
+                <div className={`flex items-center justify-between ${!isDesktop ? 'p-2.5' : 'p-1.5'} rounded-xl border active:scale-[0.98] transition-all shadow-sm ${
+                  isDarkMode 
+                    ? 'bg-gradient-to-r from-blue-900/30 to-indigo-900/30 border-blue-700/50 hover:from-blue-800/30 hover:to-indigo-800/30' 
+                    : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50 hover:from-blue-100 hover:to-indigo-100'
+                }`}>
                   <div className="flex items-center gap-2.5">
-                    <div className={`${!isDesktop ? 'w-9 h-9' : 'w-8 h-8'} rounded-xl bg-blue-100 flex items-center justify-center`}>
+                    <div className={`${!isDesktop ? 'w-9 h-9' : 'w-8 h-8'} rounded-xl flex items-center justify-center ${
+                      isDarkMode ? 'bg-blue-900' : 'bg-blue-100'
+                    }`}>
                       <span className={`${!isDesktop ? 'text-lg' : 'text-base'}`}>{currentWeather.condition.icon}</span>
                     </div>
                     <div>
-                      <span className={`${!isDesktop ? 'text-xs' : 'text-[10px]'} font-bold text-gray-900`}>
-                        {currentWeather.condition.text}
-                      </span>
-                      <p className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} text-gray-600 mt-0.5`}>Tap to expand</p>
-                    </div>
-                  </div>
-                  <ChevronUp className={`${!isDesktop ? 'w-4 h-4' : 'w-3.5 h-3.5'} text-gray-600`} />
+                      <span className={`${!isDesktop ? 'text-xs' : 'text-[10px]'} font-bold ${
+                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                      }`}>
+                    {currentWeather.condition.text}
+                </span>
+                      <p className={`${!isDesktop ? 'text-[10px]' : 'text-[9px]'} mt-0.5 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>Tap to expand</p>
                 </div>
-              ) : (
-                <div className={`flex items-center justify-center ${!isDesktop ? 'p-2.5' : 'p-1.5'}`}>
-                  <ChevronUp className={`${!isDesktop ? 'w-4 h-4' : 'w-3.5 h-3.5'} text-gray-400`} />
+                  </div>
+                  <ChevronUp className={`${!isDesktop ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`} />
               </div>
-              )}
+            ) : (
+                <div className={`flex items-center justify-center ${!isDesktop ? 'p-2.5' : 'p-1.5'}`}>
+                  <ChevronUp className={`${!isDesktop ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${
+                    isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
+            </div>
+            )}
             </div>
           </div>
         )}
@@ -947,14 +1171,22 @@ const WeatherFloodAdvisory = ({ mapCenter = [14.4504, 121.0170], locationName = 
         {/* Expanded View Footer - Modern Design */}
         {isExpanded && (
           <div 
-            className={`flex-shrink-0 ${!isDesktop ? 'px-4' : 'px-3'} border-t border-gray-200/50 ${!isDesktop ? 'pt-3 pb-4' : 'pt-1.5 pb-3'}`}
+            className={`flex-shrink-0 ${!isDesktop ? 'px-4' : 'px-3'} border-t ${!isDesktop ? 'pt-3 pb-4' : 'pt-1.5 pb-3'} ${
+              isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50'
+            }`}
             style={{
               paddingBottom: !isDesktop ? 'calc(1rem + env(safe-area-inset-bottom, 0px))' : '0.75rem'
             }}
           >
-            <div className={`flex items-center justify-between ${!isDesktop ? 'text-xs' : 'text-[10px]'} text-gray-600`}>
-              <span className="flex items-center gap-1.5 bg-gray-100 px-3 py-1.5 rounded-full">
-                <Clock className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} text-gray-500`} />
+            <div className={`flex items-center justify-between ${!isDesktop ? 'text-xs' : 'text-[10px]'} ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
+                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+              }`}>
+                <Clock className={`${!isDesktop ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-500'
+                }`} />
                 <span className="font-medium">Updated {lastUpdate ? formatTimestamp(lastUpdate.toISOString()) : 'Just now'}</span>
               </span>
               <button

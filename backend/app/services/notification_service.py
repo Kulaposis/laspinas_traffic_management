@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from ..models.notification import Notification
 from ..models.user import User
 from ..schemas.notification_schema import NotificationCreate, NotificationUpdate
+from ..utils.role_helpers import get_role_value
 
 class NotificationService:
     def __init__(self, db: Session):
@@ -112,7 +113,7 @@ class NotificationService:
 
     def delete_notification(self, notification_id: int, user: User) -> bool:
         """Delete a notification (admin only)."""
-        if user.role.value != 'admin':
+        if get_role_value(user.role) != 'admin':
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only admins can delete notifications"
