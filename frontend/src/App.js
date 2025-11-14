@@ -272,7 +272,7 @@ const AppContent = () => {
               <Route
                 path="/activity-logs"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRoles={['admin']}>
                     <ActivityLogs />
                   </ProtectedRoute>
                 }
