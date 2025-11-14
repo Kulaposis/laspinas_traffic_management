@@ -147,38 +147,58 @@ def create_user(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create new user (admin only)."""
-    if not is_admin(current_user.role):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can create users"
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"User creation request by {current_user.email} (ID: {current_user.id}, Role: {current_user.role})")
+        
+        if not is_admin(current_user.role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can create users"
+            )
+        
+        # Check if user already exists
+        existing_user = db.query(User).filter(
+            (User.email == user_data.email) | (User.username == user_data.username)
+        ).first()
+        
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this email or username already exists"
+            )
+        
+        # Create new user
+        from ..auth import get_password_hash
+        logger.info(f"Hashing password for new user: {user_data.email}")
+        hashed_password = get_password_hash(user_data.password)
+        logger.info(f"Password hashed successfully")
+        
+        user = User(
+            email=user_data.email,
+            username=user_data.username,
+            hashed_password=hashed_password,
+            full_name=user_data.full_name,
+            phone_number=user_data.phone_number,
+            role=user_data.role
         )
-    
-    # Check if user already exists
-    existing_user = db.query(User).filter(
-        (User.email == user_data.email) | (User.username == user_data.username)
-    ).first()
-    
-    if existing_user:
+        
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"User created successfully: {user.email} (ID: {user.id})")
+        return user
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403, 400)
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {e}", exc_info=True)
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email or username already exists"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
         )
-    
-    # Create new user
-    from ..auth import get_password_hash
-    hashed_password = get_password_hash(user_data.password)
-    
-    user = User(
-        email=user_data.email,
-        username=user_data.username,
-        hashed_password=hashed_password,
-        full_name=user_data.full_name,
-        phone_number=user_data.phone_number,
-        role=user_data.role
-    )
-    
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    
-    return user

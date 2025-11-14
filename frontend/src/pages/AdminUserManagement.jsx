@@ -586,6 +586,15 @@ const AdminUserManagement = () => {
                       alert('Please fill in full name, email, username, and password');
                       return;
                     }
+                    // Verify token exists before creating user
+                    const token = localStorage.getItem('access_token');
+                    if (!token) {
+                      alert('Authentication token not found. Please log out and log back in.');
+                      setCreateLoading(false);
+                      return;
+                    }
+                    
+                    console.log('Creating user with token:', token ? 'Token exists' : 'No token');
                     const newUser = await userService.createUser({
                       full_name: createForm.full_name,
                       email: createForm.email,

@@ -16,9 +16,35 @@ class UserService {
       const token = localStorage.getItem('access_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        // Debug logging for user creation
+        if (config.url === '/' && config.method === 'post') {
+          console.log('🔐 UserService: Adding Authorization header for user creation');
+          console.log('🔐 UserService: Token exists:', !!token);
+          console.log('🔐 UserService: Token (first 30 chars):', token.substring(0, 30) + '...');
+        }
+      } else {
+        console.warn('⚠️ UserService: No access token found in localStorage');
+        if (config.url === '/' && config.method === 'post') {
+          console.error('❌ UserService: Cannot create user without authentication token!');
+        }
       }
       return config;
     });
+    
+    // Add response interceptor to handle auth errors
+    this.api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          console.error('❌ UserService: Authentication failed (401)');
+          console.error('   URL:', error.config?.url);
+          console.error('   Method:', error.config?.method);
+          console.error('   Headers:', error.config?.headers);
+          console.error('   Error:', error.response?.data);
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   // Get current user info
