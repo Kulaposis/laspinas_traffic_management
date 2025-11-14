@@ -86,8 +86,6 @@ const TrafficMapSidebar = ({
   myEmergencyReports = [],
   onOpenActiveIncidents = noop,
   activeIncidentsCount = 0,
-  heatmapEnabled = false,
-  setHeatmapEnabled = noop,
   trafficLayerEnabled = true,
   setTrafficLayerEnabled = noop,
   mapStyle = 'main',
@@ -282,7 +280,7 @@ const TrafficMapSidebar = ({
 
         {/* Map Layers */}
         <Section title="Map Layers" subtitle="Toggle map overlays" icon={<Layers className="w-5 h-5" />} isDarkMode={isDarkMode}>
-          <Toggle label="Traffic Heatmap" checked={heatmapEnabled} onChange={(e) => setHeatmapEnabled(e.target.checked)} isDarkMode={isDarkMode} />
+          {/* Heatmap toggle temporarily disabled while layer is under maintenance */}
           <Toggle label="Traffic Flow Layer" checked={trafficLayerEnabled} onChange={(e) => setTrafficLayerEnabled(e.target.checked)} isDarkMode={isDarkMode} />
         </Section>
 

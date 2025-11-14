@@ -92,14 +92,46 @@ export const getTrafficMapTourSteps = () => {
     });
   }
 
+  // Show Traffic Heatmap button (floating toggle, top-right)
+  const heatmapToggleButton =
+    findElementByText('button', 'Show Traffic Heatmap') ||
+    document.querySelector('button[title="Show Traffic Heatmap"]');
+  if (heatmapToggleButton) {
+    steps.push({
+      element: heatmapToggleButton,
+      popover: {
+        title: '🔥 Traffic Heatmap',
+        description: 'Visualize congestion hotspots. Toggle this to overlay the live traffic heatmap on the map.',
+        side: 'left',
+        align: 'start'
+      }
+    });
+  }
+
   // Emergency Report Button (red button with AlertTriangle icon)
-  const emergencyReportButton = document.querySelector('button[title="Report Incident"]');
+  const emergencyReportButton =
+    document.querySelector('button[title="Report Incident"]') ||
+    document.querySelector('button[title="Report Emergency"]');
   if (emergencyReportButton) {
     steps.push({
       element: emergencyReportButton,
       popover: {
         title: '🚨 Report Emergency Incident',
         description: 'Click this button to report traffic incidents, accidents, or emergencies. Help keep the community informed about road conditions.',
+        side: 'left',
+        align: 'start'
+      }
+    });
+  }
+
+  // Traffic Predictions button (cyan floating action button)
+  const trafficPredictionsButton = document.querySelector('button[title="Traffic Predictions"]');
+  if (trafficPredictionsButton) {
+    steps.push({
+      element: trafficPredictionsButton,
+      popover: {
+        title: '📈 Traffic Predictions',
+        description: 'Open detailed forecasts to see how congestion will change in the next few hours.',
         side: 'left',
         align: 'start'
       }

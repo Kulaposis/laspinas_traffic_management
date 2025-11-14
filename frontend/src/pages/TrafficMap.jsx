@@ -549,6 +549,24 @@ const filterPointArrayByLocation = (points, option, params) => {
   return points;
 };
 
+const normalizeHeatmapPoint = (point) => {
+  if (!point) return null;
+  if (Array.isArray(point)) {
+    const [lat, lng, intensity = 0.3] = point;
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    const nIntensity = Number(intensity);
+    if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return null;
+    return [nLat, nLng, clamp01(Number.isFinite(nIntensity) ? nIntensity : 0.3, 0, 1)];
+  }
+  const lat = Number(point.lat ?? point.latitude ?? point.y);
+  const lng = Number(point.lng ?? point.longitude ?? point.x);
+  const intensity = Number(point.intensity ?? point.value ?? point.weight ?? point[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const normalizedIntensity = clamp01(Number.isFinite(intensity) ? intensity : 0.3, 0, 1);
+  return [lat, lng, normalizedIntensity];
+};
+
 const TrafficMap = () => {
   const { user } = useAuth();
   const isGuest = !user;
@@ -4820,6 +4838,7 @@ const TrafficMap = () => {
   // Memoized HERE heatmap points with rule-based filters (unconditional to preserve hook order)
   const ttFilteredHeatmapPoints = useMemo(() => {
     let pts = Array.isArray(ttHeatmapPoints) ? ttHeatmapPoints : [];
+    pts = pts.map(normalizeHeatmapPoint).filter(Boolean);
     if (ruleHeatmapEnabled && pts.length > 0) {
       const bounds = mapRef.current?.getBounds?.() || null;
       pts = filterPointArrayByLocation(pts, ruleLocationFilter, {
