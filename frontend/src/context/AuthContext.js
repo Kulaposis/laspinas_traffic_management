@@ -228,9 +228,27 @@ export const AuthProvider = ({ children }) => {
         return result;
       } else {
         // Return failure result instead of throwing to allow backend fallback
+        // Don't log credential errors as they're expected for backend-only accounts
+        const isCredentialError = result?.error?.includes('INVALID_LOGIN_CREDENTIALS') ||
+                                 result?.error?.includes('Invalid login credentials') ||
+                                 result?.error?.includes('user-not-found') ||
+                                 result?.error?.includes('wrong-password');
+        if (!isCredentialError) {
+          console.warn('Firebase authentication failed:', result?.error);
+        }
         return { success: false, error: result?.error || 'Firebase authentication failed' };
       }
     } catch (error) {
+      // Catch any unexpected errors (network errors, etc.) and return failure
+      // Don't log credential errors as they're expected for backend-only accounts
+      const isCredentialError = error?.message?.includes('INVALID_LOGIN_CREDENTIALS') ||
+                               error?.code === 'auth/invalid-credential' ||
+                               error?.code === 'auth/invalid-login-credentials' ||
+                               error?.code === 'auth/user-not-found' ||
+                               error?.code === 'auth/wrong-password';
+      if (!isCredentialError) {
+        console.warn('Firebase authentication error:', error.message || error);
+      }
       // Return failure result instead of throwing to allow backend fallback
       return { success: false, error: error.message || 'Firebase authentication failed' };
     }

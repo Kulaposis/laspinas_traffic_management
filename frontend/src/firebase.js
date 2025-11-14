@@ -147,17 +147,16 @@ export const signInWithEmailPassword = async (email, password) => {
       console.warn('Firebase authentication error:', error.code, error.message);
     }
 
-    let errorMessage = 'An error occurred during sign-in';
+    // For credential errors, return a clean failure that allows backend fallback
+    // Don't throw - return failure result instead
+    let errorMessage = 'Invalid login credentials';
 
     switch (error.code) {
       case 'auth/user-not-found':
-        errorMessage = 'No account found with this email address';
-        break;
-      case 'auth/wrong-password':
-        errorMessage = 'Incorrect password';
-        break;
       case 'auth/invalid-credential':
       case 'auth/invalid-login-credentials':
+      case 'auth/wrong-password':
+        // These are credential errors - return clean failure for backend fallback
         errorMessage = 'Invalid login credentials';
         break;
       case 'auth/invalid-email':
@@ -170,13 +169,16 @@ export const signInWithEmailPassword = async (email, password) => {
         errorMessage = 'Too many failed attempts. Please try again later';
         break;
       case 'auth/network-request-failed':
-        errorMessage = 'Network error. Please check your connection.';
+        // Network errors should also allow backend fallback
+        errorMessage = 'Network error. Trying backend authentication...';
         break;
       default:
-        errorMessage = error.message;
+        // For unknown errors, still return failure (don't throw) to allow backend fallback
+        errorMessage = error.message || 'Authentication failed';
     }
 
-    return { success: false, error: errorMessage };
+    // Always return failure result instead of throwing to allow backend fallback
+    return { success: false, error: errorMessage, code: error.code };
   }
 };
 
