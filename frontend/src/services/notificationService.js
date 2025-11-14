@@ -8,17 +8,28 @@ class NotificationService {
         // In Google-only sessions, notifications require backend auth; return empty quietly
         return [];
       }
-      const { skip = 0, limit = 50, unread_only = false } = params;
+      const { skip = 0, limit = 50, unread_only = false, notification_type = null } = params;
       const queryParams = new URLSearchParams({
         skip: skip.toString(),
         limit: limit.toString(),
         unread_only: unread_only.toString(),
       });
+      
+      if (notification_type) {
+        queryParams.append('notification_type', notification_type);
+      }
 
       const response = await api.get(`/notifications/?${queryParams}`);
       return response.data;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to fetch notifications');
+      // Handle network errors gracefully
+      if (error.message === 'Failed to fetch' || error.code === 'ERR_NETWORK') {
+        console.warn('Network error fetching notifications - backend may be unavailable');
+        return [];
+      }
+      // For other errors, log but return empty array to prevent UI breakage
+      console.warn('Error fetching notifications:', error.response?.data?.detail || error.message);
+      return [];
     }
   }
 

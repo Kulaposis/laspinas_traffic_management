@@ -16,6 +16,7 @@ from ..utils.role_helpers import get_role_value
 from ..models.user import User
 from ..models.report import Report
 from ..models.violation import Violation
+from ..models.traffic import TrafficMonitoring, TrafficStatus
 from ..schemas.admin_schemas import *
 
 class AdminService:
@@ -272,15 +273,53 @@ class AdminService:
             )
         )
         
-        if user_role:
-            query = query.filter(
-                or_(
-                    SystemAlert.target_roles.is_(None),
-                    SystemAlert.target_roles.contains([user_role])
-                )
-            )
+        # Get all active alerts first, then filter by target_roles in Python
+        # This is more reliable than complex JSON queries
+        all_alerts = query.order_by(desc(SystemAlert.created_at)).all()
         
-        return query.order_by(desc(SystemAlert.created_at)).all()
+        # If user_role is None (admin dashboard), return all alerts without filtering
+        if user_role is None:
+            return all_alerts
+        
+        # Filter by target_roles for non-admin users
+        # user_role can be empty string "" for guests, or a role name for logged-in users
+        filtered_alerts = []
+        user_role_lower = user_role.lower() if user_role else ""
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Filtering {len(all_alerts)} alerts for user_role: {user_role_lower}")
+        
+        for alert in all_alerts:
+            # If no target_roles specified, show to everyone
+            if not alert.target_roles or len(alert.target_roles) == 0:
+                logger.debug(f"Alert {alert.id} has no target_roles - including")
+                filtered_alerts.append(alert)
+                continue
+            
+            # Convert target_roles to lowercase list for comparison
+            target_roles_lower = [str(r).lower() for r in alert.target_roles]
+            logger.debug(f"Alert {alert.id} target_roles: {target_roles_lower}, user_role: {user_role_lower}")
+            
+            # Check if 'all' is in target_roles - show to everyone
+            if 'all' in target_roles_lower:
+                logger.debug(f"Alert {alert.id} has 'all' in target_roles - including")
+                filtered_alerts.append(alert)
+                continue
+            
+            # If user_role is provided (not empty string), check if it matches
+            if user_role_lower and user_role_lower != "":
+                if user_role_lower in target_roles_lower:
+                    logger.debug(f"Alert {alert.id} matches user_role {user_role_lower} - including")
+                    filtered_alerts.append(alert)
+            else:
+                # For guests (empty string user_role), check if 'citizen' or 'all' is in target_roles
+                if 'citizen' in target_roles_lower or 'all' in target_roles_lower:
+                    logger.debug(f"Alert {alert.id} has 'citizen' or 'all' in target_roles - including for guest")
+                    filtered_alerts.append(alert)
+        
+        logger.info(f"Filtered to {len(filtered_alerts)} alerts")
+        return filtered_alerts
 
     # Data Export
     def create_export_job(self, export_request: DataExportRequest, admin_id: int) -> DataExportJob:
@@ -395,4 +434,201 @@ class AdminService:
             "api": "healthy",
             "websocket": "healthy",
             "overall": "healthy" if db_status == "healthy" else "degraded"
+        }
+
+    # Traffic Area Statistics
+    def get_traffic_area_statistics(self, days: int = 7, barangay: Optional[str] = None) -> Dict[str, Any]:
+        """Get comprehensive traffic area statistics for Las Piñas City."""
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+        
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        
+        # Base query
+        query = self.db.query(TrafficMonitoring).filter(
+            TrafficMonitoring.last_updated >= start_date
+        )
+        
+        if barangay:
+            query = query.filter(TrafficMonitoring.barangay.ilike(f"%{barangay}%"))
+        
+        traffic_data = query.all()
+        
+        if not traffic_data:
+            # Return empty structure if no data
+            return {
+                "period": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "days": days
+                },
+                "summary": {
+                    "total_monitored_areas": 0,
+                    "overall_avg_congestion": 0.0,
+                    "total_vehicle_count": 0,
+                    "most_congested_area": None
+                },
+                "by_barangay": [],
+                "top_congested_roads": [],
+                "peak_hours_analysis": {
+                    "hourly_distribution": [],
+                    "peak_hour": 0,
+                    "peak_day": "Monday"
+                },
+                "geographic_data": [],
+                "traffic_status_distribution": {}
+            }
+        
+        # Aggregate by barangay
+        barangay_stats = defaultdict(lambda: {
+            "congestion_sum": 0.0,
+            "vehicle_sum": 0,
+            "speed_sum": 0.0,
+            "speed_count": 0,
+            "roads": set(),
+            "count": 0
+        })
+        
+        # Road statistics
+        road_stats = defaultdict(lambda: {
+            "congestion_sum": 0.0,
+            "vehicle_sum": 0,
+            "speed_sum": 0.0,
+            "speed_count": 0,
+            "count": 0,
+            "barangay": "",
+            "statuses": []
+        })
+        
+        # Status distribution
+        status_dist = defaultdict(int)
+        
+        # Geographic data
+        geo_data = []
+        
+        for traffic in traffic_data:
+            barangay_name = traffic.barangay
+            road_name = traffic.road_name
+            
+            # Barangay aggregation
+            barangay_stats[barangay_name]["congestion_sum"] += traffic.congestion_percentage or 0.0
+            barangay_stats[barangay_name]["vehicle_sum"] += traffic.vehicle_count or 0
+            barangay_stats[barangay_name]["roads"].add(road_name)
+            barangay_stats[barangay_name]["count"] += 1
+            if traffic.average_speed_kmh:
+                barangay_stats[barangay_name]["speed_sum"] += traffic.average_speed_kmh
+                barangay_stats[barangay_name]["speed_count"] += 1
+            
+            # Road aggregation
+            road_stats[road_name]["congestion_sum"] += traffic.congestion_percentage or 0.0
+            road_stats[road_name]["vehicle_sum"] += traffic.vehicle_count or 0
+            road_stats[road_name]["barangay"] = barangay_name
+            road_stats[road_name]["count"] += 1
+            if traffic.average_speed_kmh:
+                road_stats[road_name]["speed_sum"] += traffic.average_speed_kmh
+                road_stats[road_name]["speed_count"] += 1
+            road_stats[road_name]["statuses"].append(traffic.traffic_status.value)
+            
+            # Status distribution
+            status_dist[traffic.traffic_status.value] += 1
+            
+            # Geographic data
+            geo_data.append({
+                "latitude": traffic.latitude,
+                "longitude": traffic.longitude,
+                "intensity": (traffic.congestion_percentage or 0.0) / 100.0,
+                "area_name": road_name,
+                "congestion_percentage": traffic.congestion_percentage or 0.0
+            })
+        
+        # Process barangay statistics
+        barangay_list = []
+        for barangay_name, stats in barangay_stats.items():
+            count = stats["count"]
+            avg_congestion = stats["congestion_sum"] / count if count > 0 else 0.0
+            avg_speed = stats["speed_sum"] / stats["speed_count"] if stats["speed_count"] > 0 else None
+            
+            # Determine status
+            if avg_congestion >= 80:
+                status = "CRITICAL"
+            elif avg_congestion >= 60:
+                status = "HIGH"
+            elif avg_congestion >= 40:
+                status = "MEDIUM"
+            else:
+                status = "LOW"
+            
+            barangay_list.append({
+                "barangay": barangay_name,
+                "avg_congestion": round(avg_congestion, 2),
+                "total_vehicles": stats["vehicle_sum"],
+                "road_count": len(stats["roads"]),
+                "status": status,
+                "trend": "stable",  # Would need historical data for actual trend
+                "avg_speed_kmh": round(avg_speed, 2) if avg_speed else None
+            })
+        
+        # Sort by congestion
+        barangay_list.sort(key=lambda x: x["avg_congestion"], reverse=True)
+        
+        # Process road statistics
+        road_list = []
+        for road_name, stats in road_stats.items():
+            count = stats["count"]
+            avg_congestion = stats["congestion_sum"] / count if count > 0 else 0.0
+            avg_speed = stats["speed_sum"] / stats["speed_count"] if stats["speed_count"] > 0 else 0.0
+            
+            # Get most common status
+            most_common_status = max(set(stats["statuses"]), key=stats["statuses"].count) if stats["statuses"] else "FREE_FLOW"
+            
+            # Estimate peak hours (would need time-based data for accuracy)
+            peak_hours = ["07:00-09:00", "17:00-19:00"]  # Default peak hours
+            
+            road_list.append({
+                "road_name": road_name,
+                "barangay": stats["barangay"],
+                "congestion_percentage": round(avg_congestion, 2),
+                "avg_speed_kmh": round(avg_speed, 2),
+                "peak_hours": peak_hours,
+                "vehicle_count": stats["vehicle_sum"],
+                "traffic_status": most_common_status
+            })
+        
+        # Sort roads by congestion
+        road_list.sort(key=lambda x: x["congestion_percentage"], reverse=True)
+        top_roads = road_list[:10]  # Top 10
+        
+        # Calculate summary
+        total_congestion = sum(b["avg_congestion"] for b in barangay_list)
+        overall_avg_congestion = total_congestion / len(barangay_list) if barangay_list else 0.0
+        total_vehicles = sum(b["total_vehicles"] for b in barangay_list)
+        most_congested = barangay_list[0]["barangay"] if barangay_list else None
+        
+        # Peak hours analysis (simplified - would need time-based aggregation)
+        hourly_dist = [{"hour": i, "avg_congestion": 0.0} for i in range(24)]
+        peak_hour = 8  # Default
+        peak_day = "Monday"  # Default
+        
+        return {
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": days
+            },
+            "summary": {
+                "total_monitored_areas": len(set(t.road_name for t in traffic_data)),
+                "overall_avg_congestion": round(overall_avg_congestion, 2),
+                "total_vehicle_count": total_vehicles,
+                "most_congested_area": most_congested
+            },
+            "by_barangay": barangay_list,
+            "top_congested_roads": top_roads,
+            "peak_hours_analysis": {
+                "hourly_distribution": hourly_dist,
+                "peak_hour": peak_hour,
+                "peak_day": peak_day
+            },
+            "geographic_data": geo_data,
+            "traffic_status_distribution": dict(status_dist)
         }

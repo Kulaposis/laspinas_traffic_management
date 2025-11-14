@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   Settings,
@@ -25,7 +25,9 @@ import {
   BarChart3
 } from 'lucide-react';
 import adminService from '../services/adminService';
+import notificationService from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -33,10 +35,19 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const lastNotificationIdRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+    startEmergencyNotificationPolling();
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [user]);
 
   const fetchDashboardData = async () => {
     try {
@@ -55,6 +66,99 @@ const AdminDashboard = () => {
     setRefreshing(true);
     await fetchDashboardData();
     setRefreshing(false);
+  };
+
+  const startEmergencyNotificationPolling = () => {
+    // Only poll if user is admin
+    if (user?.role !== 'admin') return;
+
+    // Initial fetch to get the latest notification ID
+    const initializePolling = async () => {
+      try {
+        const notifications = await notificationService.getNotifications({ 
+          limit: 1,
+          notification_type: 'EMERGENCY'
+        });
+        if (notifications && notifications.length > 0) {
+          lastNotificationIdRef.current = notifications[0].id;
+        }
+      } catch (error) {
+        // Service now returns empty array on error, so this should rarely be hit
+        // But handle gracefully if it does
+        console.warn('Error initializing notification polling:', error);
+      }
+    };
+
+    initializePolling();
+
+    // Poll every 10 seconds for new emergency notifications
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const notifications = await notificationService.getNotifications({ 
+          limit: 10,
+          notification_type: 'EMERGENCY',
+          unread_only: true
+        });
+        
+        // Service now returns empty array on error, so check if we got valid data
+        if (!notifications || !Array.isArray(notifications)) {
+          return; // Skip if no valid notifications
+        }
+
+        if (notifications && notifications.length > 0) {
+          // Find new notifications (those with ID greater than the last seen)
+          const newNotifications = lastNotificationIdRef.current
+            ? notifications.filter(n => n.id > lastNotificationIdRef.current)
+            : notifications.slice(0, 1); // If no last ID, only show the latest
+
+          if (newNotifications.length > 0) {
+            // Update last seen ID
+            lastNotificationIdRef.current = Math.max(
+              ...newNotifications.map(n => n.id),
+              lastNotificationIdRef.current || 0
+            );
+
+            // Show toast for each new emergency notification
+            newNotifications.forEach(notification => {
+              const priority = notification.priority?.toLowerCase() || 'medium';
+              const toastType = priority === 'urgent' || priority === 'high' ? 'error' : 'warning';
+              
+              toast(
+                (t) => (
+                  <div className="flex items-start space-x-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-gray-900">{notification.title}</p>
+                      <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                      <button
+                        onClick={() => {
+                          toast.dismiss(t.id);
+                          window.location.href = '/emergency/moderation';
+                        }}
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        View Emergency →
+                      </button>
+                    </div>
+                  </div>
+                ),
+                {
+                  id: `emergency-${notification.id}`,
+                  duration: priority === 'urgent' || priority === 'high' ? 10000 : 6000,
+                  icon: '🚨',
+                  style: {
+                    minWidth: '300px',
+                    maxWidth: '400px'
+                  }
+                }
+              );
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error polling emergency notifications:', error);
+      }
+    }, 10000); // Poll every 10 seconds
   };
 
   const StatCard = ({ title, value, icon: Icon, color, description, trend, onClick }) => (
@@ -385,6 +489,14 @@ const AdminDashboard = () => {
           >
             <Server className="w-8 h-8 text-gray-600 mb-2 mx-auto group-hover:scale-110 transition-transform" />
             <span className="text-sm font-medium text-gray-900">Maintenance</span>
+          </button>
+
+          <button
+            onClick={() => window.location.href = '/admin/traffic-report'}
+            className="p-4 border border-gray-200 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 transition-all duration-300 text-center group"
+          >
+            <BarChart3 className="w-8 h-8 text-indigo-600 mb-2 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="text-sm font-medium text-gray-900">Traffic Report</span>
           </button>
         </div>
       </div>

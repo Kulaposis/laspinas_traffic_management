@@ -18,6 +18,8 @@ from ..schemas.emergency_schema import (
     EmergencyModerationUpdate, EmergencyModerationResponse, ModerationQueueResponse
 )
 from ..services.activity_logger import get_activity_logger
+from ..services.notification_service import NotificationService
+from ..models.notification import NotificationType, NotificationPriority
 from ..utils.role_helpers import is_authorized, normalize_role, get_role_value
 
 logger = logging.getLogger(__name__)
@@ -485,8 +487,37 @@ def report_emergency(
         else:
             emergency.photo_urls = []
         
-        # TODO: Send notification to emergency responders
-        # TODO: Integrate with emergency dispatch system
+        # Send notification to all admin users
+        try:
+            notification_service = NotificationService(db)
+            severity_priority_map = {
+                'low': NotificationPriority.LOW,
+                'medium': NotificationPriority.MEDIUM,
+                'high': NotificationPriority.HIGH,
+                'critical': NotificationPriority.URGENT
+            }
+            priority = severity_priority_map.get(emergency_dict.get('severity', 'medium').lower(), NotificationPriority.HIGH)
+            
+            # Create notification title and message
+            emergency_type_display = emergency.emergency_type.value.replace('_', ' ').title()
+            title = f"New Emergency Report: {emergency_type_display}"
+            message = f"Emergency #{emergency.emergency_number} reported: {emergency.title or emergency_type_display}"
+            if emergency.address:
+                message += f" at {emergency.address}"
+            if emergency.severity:
+                message += f" (Severity: {emergency.severity.upper()})"
+            
+            notification_service.create_notification_for_admins(
+                title=title,
+                message=message,
+                notification_type=NotificationType.EMERGENCY,
+                priority=priority,
+                latitude=str(emergency.latitude) if emergency.latitude else None,
+                longitude=str(emergency.longitude) if emergency.longitude else None
+            )
+        except Exception as notif_error:
+            # Don't fail the entire request if notification fails
+            logger.warning(f"Failed to create admin notifications for emergency {emergency.id}: {notif_error}")
         
         return emergency
         
@@ -550,6 +581,42 @@ def report_emergency_anonymous(
                 emergency.photo_urls = []
         else:
             emergency.photo_urls = []
+        
+        # Send notification to all admin users
+        try:
+            notification_service = NotificationService(db)
+            severity_priority_map = {
+                'low': NotificationPriority.LOW,
+                'medium': NotificationPriority.MEDIUM,
+                'high': NotificationPriority.HIGH,
+                'critical': NotificationPriority.URGENT
+            }
+            priority = severity_priority_map.get(emergency_dict.get('severity', 'medium').lower(), NotificationPriority.HIGH)
+            
+            # Create notification title and message
+            emergency_type_display = emergency.emergency_type.value.replace('_', ' ').title()
+            title = f"New Emergency Report: {emergency_type_display}"
+            message = f"Emergency #{emergency.emergency_number} reported: {emergency.title or emergency_type_display}"
+            if emergency.address:
+                message += f" at {emergency.address}"
+            if emergency.severity:
+                message += f" (Severity: {emergency.severity.upper()})"
+            if emergency.reporter_name:
+                message += f" - Reported by: {emergency.reporter_name}"
+            else:
+                message += " - Anonymous report"
+            
+            notification_service.create_notification_for_admins(
+                title=title,
+                message=message,
+                notification_type=NotificationType.EMERGENCY,
+                priority=priority,
+                latitude=str(emergency.latitude) if emergency.latitude else None,
+                longitude=str(emergency.longitude) if emergency.longitude else None
+            )
+        except Exception as notif_error:
+            # Don't fail the entire request if notification fails
+            logger.warning(f"Failed to create admin notifications for emergency {emergency.id}: {notif_error}")
         
         return emergency
         

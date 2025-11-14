@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from ..db import get_db
 from ..auth import get_current_active_user
 from ..models.user import User
+from ..models.notification import NotificationType
 from ..schemas.notification_schema import NotificationCreate, NotificationResponse
 from ..services.notification_service import NotificationService
+from ..utils.role_helpers import get_role_value, is_admin
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -33,7 +35,6 @@ def create_broadcast_notification(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a broadcast notification for all users (admin only)."""
-    from ..utils.role_helpers import is_admin, get_role_value
     if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -49,13 +50,14 @@ def get_my_notifications(
     skip: int = 0,
     limit: int = 50,
     unread_only: bool = Query(False, description="Show only unread notifications"),
+    notification_type: Optional[str] = Query(None, description="Filter by notification type"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Get notifications for the current user."""
     notification_service = NotificationService(db)
     notifications = notification_service.get_user_notifications(
-        current_user.id, skip=skip, limit=limit, unread_only=unread_only
+        current_user.id, skip=skip, limit=limit, unread_only=unread_only, notification_type=notification_type
     )
     return notifications
 

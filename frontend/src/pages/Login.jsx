@@ -55,19 +55,13 @@ const Login = ({ onLoginSuccess = () => {} }) => {
       // Try Firebase first (for regular users), or skip Firebase entirely for backend-only domains
       let firebaseSuccess = false;
       
-      if (prefersBackend) {
-        console.log('🔐 Email domain prefers backend authentication, skipping Firebase...');
-      } else {
+      if (!prefersBackend) {
         // Try Firebase authentication first - fail silently if it doesn't recognize the account
-        console.log('🔥 Step 1: Attempting Firebase authentication...');
-        console.log('ℹ️ Note: If you see a failed request to identitytoolkit.googleapis.com, this is expected for backend-only accounts.');
-        
         try {
           const firebaseResult = await firebaseLogin(formData.email, formData.password);
           
           if (firebaseResult && firebaseResult.success) {
             firebaseSuccess = true;
-            console.log('✅ Firebase authentication successful!');
             toast.success(`Welcome back, ${firebaseResult.user.displayName || firebaseResult.user.email}!`);
             onLoginSuccess(firebaseResult.user);
             setLoading(false);
@@ -75,28 +69,19 @@ const Login = ({ onLoginSuccess = () => {} }) => {
           }
           // If result exists but success is false, Firebase didn't recognize the account
           // Silently fall through to backend authentication
-          console.log('⚠️ Firebase authentication failed (account not found in Firebase), trying backend...');
-          console.log('ℹ️ The failed identitytoolkit.googleapis.com request above is expected and can be ignored.');
         } catch (firebaseError) {
           // Firebase threw an error - silently fall through to backend authentication
           // This is expected for backend-only accounts (like admin)
-          console.log('⚠️ Firebase error caught, trying backend authentication...', firebaseError.message);
-          console.log('ℹ️ The failed identitytoolkit.googleapis.com request above is expected and can be ignored.');
         }
       }
       
       // If Firebase didn't succeed, automatically try backend authentication
       // This handles admin accounts and other backend-only users stored in Supabase
       if (!firebaseSuccess) {
-        console.log('🗄️ Step 2: Attempting backend/database authentication...');
         try {
           const backendResult = await login(formData.email, formData.password);
           
           if (backendResult && backendResult.user) {
-            console.log('✅ Backend authentication successful!', {
-              user: backendResult.user.email || backendResult.user.username,
-              role: backendResult.user.role
-            });
             toast.success(`Welcome back, ${backendResult.user.full_name || backendResult.user.email}!`);
             onLoginSuccess(backendResult.user);
             setLoading(false);
@@ -104,11 +89,6 @@ const Login = ({ onLoginSuccess = () => {} }) => {
           }
         } catch (backendError) {
           // Both authentication methods failed - show error to user
-          console.error('❌ Backend authentication failed:', {
-            status: backendError?.response?.status,
-            message: backendError?.response?.data?.detail || backendError?.message,
-            url: backendError?.config?.url
-          });
           const errorMsg = backendError?.response?.data?.detail || 
                           backendError?.message || 
                           'Invalid email/username or password. Please check your credentials.';
@@ -122,7 +102,6 @@ const Login = ({ onLoginSuccess = () => {} }) => {
       toast.error('Login failed. Please check your credentials.');
       setLoading(false);
     } catch (error) {
-      console.error('❌ Unexpected login error:', error);
       toast.error(error.message || 'Failed to sign in');
       setLoading(false);
     }

@@ -188,6 +188,12 @@ const Notifications = () => {
         icon: ExternalLink,
         onClick: () => window.location.href = '/reports'
       });
+    } else if (nType === 'EMERGENCY') {
+      actions.push({
+        label: 'View Emergency',
+        icon: ExternalLink,
+        onClick: () => window.location.href = '/emergency/moderation'
+      });
     }
     
     return actions;

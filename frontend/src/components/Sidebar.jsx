@@ -16,7 +16,8 @@ import {
   Gift,
   FileBarChart,
   AlertTriangle,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -101,12 +102,18 @@ const Sidebar = ({ isMobileOpen, onMobileClose }) => {
       name: 'User Management',
       href: '/admin/users',
       icon: Users,
-      allowedRoles: ['admin']
+      allowedRoles: ['admin', 'lgu_staff']
     },
     {
       name: 'System Settings',
       href: '/admin/settings',
       icon: FileBarChart,
+      allowedRoles: ['admin']
+    },
+    {
+      name: 'Traffic Report',
+      href: '/admin/traffic-report',
+      icon: BarChart3,
       allowedRoles: ['admin']
     },
     {

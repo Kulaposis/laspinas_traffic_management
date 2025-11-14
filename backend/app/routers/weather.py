@@ -438,10 +438,10 @@ def create_flood_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Create new flood monitoring entry."""
-    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin", "lgu_staff"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only traffic enforcers and admins can create flood monitoring data"
+            detail="Only traffic enforcers, admins, and LGU staff can create flood monitoring data"
         )
     
     flood = FloodMonitoring(**flood_data.dict())
@@ -458,10 +458,10 @@ def update_flood_monitoring(
     current_user: User = Depends(get_current_user)
 ):
     """Update flood monitoring data."""
-    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin"]:
+    if get_role_value(current_user.role) not in ["traffic_enforcer", "admin", "lgu_staff"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only traffic enforcers and admins can update flood data"
+            detail="Only traffic enforcers, admins, and LGU staff can update flood data"
         )
     
     flood = db.query(FloodMonitoring).filter(FloodMonitoring.id == flood_id).first()

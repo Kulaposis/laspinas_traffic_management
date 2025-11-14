@@ -35,6 +35,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AdminUserManagement = lazy(() => import('./pages/AdminUserManagement'));
 const AdminSystemSettings = lazy(() => import('./pages/AdminSystemSettings'));
 const AdminHazardCenter = lazy(() => import('./pages/AdminHazardCenter'));
+const AdminTrafficReport = lazy(() => import('./pages/AdminTrafficReport'));
 
 // Role-based redirect component
 const RoleBasedRedirect = () => {
@@ -304,7 +305,7 @@ const AppContent = () => {
               <Route
                 path="/admin/users"
                 element={
-                  <ProtectedRoute requiredRoles={['admin']}>
+                  <ProtectedRoute requiredRoles={['admin', 'lgu_staff']}>
                     <AdminUserManagement />
                   </ProtectedRoute>
                 }
@@ -322,6 +323,14 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute requiredRoles={['admin', 'lgu_staff']}>
                     <AdminHazardCenter />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/traffic-report"
+                element={
+                  <ProtectedRoute requiredRoles={['admin']}>
+                    <AdminTrafficReport />
                   </ProtectedRoute>
                 }
               />

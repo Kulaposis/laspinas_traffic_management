@@ -282,3 +282,43 @@ class PaginatedResponse(BaseModel):
     pages: int
     has_next: bool
     has_prev: bool
+
+# Traffic Area Statistics Schemas
+class BarangayStatistics(BaseModel):
+    barangay: str
+    avg_congestion: float
+    total_vehicles: int
+    road_count: int
+    status: str  # LOW, MEDIUM, HIGH, CRITICAL
+    trend: str  # increasing, decreasing, stable
+    avg_speed_kmh: Optional[float] = None
+
+class RoadStatistics(BaseModel):
+    road_name: str
+    barangay: str
+    congestion_percentage: float
+    avg_speed_kmh: float
+    peak_hours: List[str]
+    vehicle_count: int
+    traffic_status: str
+
+class PeakHoursAnalysis(BaseModel):
+    hourly_distribution: List[Dict[str, Any]]
+    peak_hour: int
+    peak_day: str
+
+class GeographicDataPoint(BaseModel):
+    latitude: float
+    longitude: float
+    intensity: float
+    area_name: str
+    congestion_percentage: float
+
+class TrafficAreaStatisticsResponse(BaseModel):
+    period: Dict[str, Any]
+    summary: Dict[str, Any]
+    by_barangay: List[BarangayStatistics]
+    top_congested_roads: List[RoadStatistics]
+    peak_hours_analysis: PeakHoursAnalysis
+    geographic_data: List[GeographicDataPoint]
+    traffic_status_distribution: Dict[str, int]

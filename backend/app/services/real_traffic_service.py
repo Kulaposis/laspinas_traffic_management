@@ -16,9 +16,17 @@ logger = logging.getLogger(__name__)
 
 class RealTrafficService:
     def __init__(self):
+        import os
+        
         # TomTom API configuration
-        self.tomtom_api_key = "nawcMJzWJ4arsNUPa9E7i0MSp0ZwJZ0y"
+        self.tomtom_api_key = os.getenv("TOMTOM_API_KEY", "nawcMJzWJ4arsNUPa9E7i0MSp0ZwJZ0y")
         self.tomtom_base_url = "https://api.tomtom.com/traffic/services/4"
+        
+        # HERE API configuration
+        self.here_api_key = os.getenv("HERE_API_KEY") or os.getenv("VITE_HERE_API_KEY")
+        self.here_base_url = "https://data.traffic.hereapi.com/v7"
+        self.here_legacy_url = "https://traffic.ls.hereapi.com/traffic/6.3"
+        
         self.timeout = 30.0
         self.max_retries = 3
         
@@ -112,15 +120,20 @@ class RealTrafficService:
         ]
         
         # API availability tracking
-        self.api_available = True
+        self.tomtom_available = True
+        self.here_available = True if self.here_api_key else False
         self.last_api_check = None
-        self.consecutive_failures = 0
+        self.tomtom_consecutive_failures = 0
+        self.here_consecutive_failures = 0
         self.max_consecutive_failures = 5
     
     async def check_api_availability(self) -> bool:
-        """Check if TomTom API is available"""
+        """Check if APIs (TomTom and HERE) are available"""
+        tomtom_ok = False
+        here_ok = False
+        
+        # Check TomTom API
         try:
-            # Simple API health check
             params = {
                 "key": self.tomtom_api_key,
                 "point": "14.4504,121.0170",  # Las Piñas coordinates
@@ -134,23 +147,54 @@ class RealTrafficService:
                 )
                 
                 if response.status_code == 200:
-                    self.api_available = True
-                    self.consecutive_failures = 0
+                    self.tomtom_available = True
+                    self.tomtom_consecutive_failures = 0
+                    tomtom_ok = True
                     logger.info("TomTom API is available")
-                    return True
                 else:
                     logger.warning(f"TomTom API returned status {response.status_code}")
-                    return False
                     
         except Exception as e:
             logger.error(f"TomTom API health check failed: {str(e)}")
-            self.consecutive_failures += 1
+            self.tomtom_consecutive_failures += 1
             
-            if self.consecutive_failures >= self.max_consecutive_failures:
-                self.api_available = False
+            if self.tomtom_consecutive_failures >= self.max_consecutive_failures:
+                self.tomtom_available = False
                 logger.warning("TomTom API marked as unavailable after consecutive failures")
-            
-            return False
+        
+        # Check HERE API if key is configured
+        if self.here_api_key:
+            try:
+                # Use HERE Traffic Flow API v7
+                params = {
+                    "apiKey": self.here_api_key,
+                    "locationReferencing": "shape",
+                    "in": "circle:14.4504,121.0170;r=1000"  # Las Piñas coordinates, 1km radius
+                }
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        f"{self.here_base_url}/flow",
+                        params=params
+                    )
+                    
+                    if response.status_code == 200:
+                        self.here_available = True
+                        self.here_consecutive_failures = 0
+                        here_ok = True
+                        logger.info("HERE API is available")
+                    else:
+                        logger.warning(f"HERE API returned status {response.status_code}")
+                        
+            except Exception as e:
+                logger.error(f"HERE API health check failed: {str(e)}")
+                self.here_consecutive_failures += 1
+                
+                if self.here_consecutive_failures >= self.max_consecutive_failures:
+                    self.here_available = False
+                    logger.warning("HERE API marked as unavailable after consecutive failures")
+        
+        return tomtom_ok or here_ok
     
     async def fetch_traffic_data_from_tomtom(self, lat: float, lng: float) -> Optional[Dict]:
         """Fetch real traffic data from TomTom API"""
@@ -175,12 +219,56 @@ class RealTrafficService:
                 
         except httpx.HTTPStatusError as e:
             logger.error(f"TomTom API HTTP error: {e.response.status_code} - {e.response.text}")
+            self.tomtom_consecutive_failures += 1
+            if self.tomtom_consecutive_failures >= self.max_consecutive_failures:
+                self.tomtom_available = False
             return None
         except httpx.TimeoutException:
             logger.error("TomTom API request timed out")
+            self.tomtom_consecutive_failures += 1
             return None
         except Exception as e:
             logger.error(f"Error fetching traffic data from TomTom: {str(e)}")
+            self.tomtom_consecutive_failures += 1
+            return None
+    
+    async def fetch_traffic_data_from_here(self, lat: float, lng: float) -> Optional[Dict]:
+        """Fetch real traffic data from HERE API"""
+        if not self.here_api_key:
+            return None
+            
+        try:
+            # Use HERE Traffic Flow API v7
+            params = {
+                "apiKey": self.here_api_key,
+                "locationReferencing": "shape",
+                "in": f"circle:{lat},{lng};r=1000"  # 1km radius
+            }
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.here_base_url}/flow",
+                    params=params
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                logger.debug(f"HERE API response for {lat},{lng}: {data}")
+                return data
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HERE API HTTP error: {e.response.status_code} - {e.response.text}")
+            self.here_consecutive_failures += 1
+            if self.here_consecutive_failures >= self.max_consecutive_failures:
+                self.here_available = False
+            return None
+        except httpx.TimeoutException:
+            logger.error("HERE API request timed out")
+            self.here_consecutive_failures += 1
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching traffic data from HERE: {str(e)}")
+            self.here_consecutive_failures += 1
             return None
     
     def parse_tomtom_response(self, api_data: Dict, road_info: Dict) -> Dict:
@@ -251,6 +339,89 @@ class RealTrafficService:
             
         except Exception as e:
             logger.error(f"Error parsing TomTom response: {str(e)}")
+            return self.get_fallback_data(road_info)
+    
+    def parse_here_response(self, api_data: Dict, road_info: Dict) -> Dict:
+        """Parse HERE API response into our traffic model format"""
+        try:
+            # HERE API v7 response structure
+            results = api_data.get("results", [])
+            if not results:
+                return self.get_fallback_data(road_info)
+            
+            # Get the first result (closest to our point)
+            result = results[0]
+            location = result.get("location", {})
+            current_flow = result.get("currentFlow", {})
+            
+            # Extract speed information
+            speed = current_flow.get("speed", {})
+            current_speed = speed.get("value", 0)  # m/s, convert to km/h
+            free_flow_speed = speed.get("freeFlow", {}).get("value", 0)  # m/s
+            
+            # Convert from m/s to km/h
+            current_speed_kmh = current_speed * 3.6 if current_speed > 0 else 0
+            free_flow_speed_kmh = free_flow_speed * 3.6 if free_flow_speed > 0 else 0
+            
+            # Get jam factor (0-10, where 10 is heavy congestion)
+            jam_factor = current_flow.get("jamFactor", 0)
+            
+            # Calculate congestion percentage from jam factor (0-10 scale to 0-100%)
+            congestion_pct = (jam_factor / 10.0) * 100 if jam_factor > 0 else 0
+            
+            # If we have speed data, use it for more accurate congestion calculation
+            if free_flow_speed_kmh > 0 and current_speed_kmh > 0:
+                congestion_pct = max(0, (1 - (current_speed_kmh / free_flow_speed_kmh)) * 100)
+            
+            # Determine traffic status based on congestion
+            if congestion_pct < 20:
+                status = TrafficStatus.FREE_FLOW
+            elif congestion_pct < 40:
+                status = TrafficStatus.LIGHT
+            elif congestion_pct < 60:
+                status = TrafficStatus.MODERATE
+            elif congestion_pct < 80:
+                status = TrafficStatus.HEAVY
+            else:
+                status = TrafficStatus.STANDSTILL
+            
+            # Estimate vehicle count based on congestion and road type
+            base_vehicle_count = {
+                RoadType.HIGHWAY: 100,
+                RoadType.MAIN_ROAD: 50,
+                RoadType.SIDE_STREET: 20,
+                RoadType.RESIDENTIAL: 10,
+                RoadType.BRIDGE: 30
+            }.get(road_info["type"], 20)
+            
+            vehicle_count = int(base_vehicle_count * (congestion_pct / 100))
+            
+            # Get road length from shape or estimate
+            shape = location.get("shape", {})
+            road_length = shape.get("length", 1.0) / 1000.0 if shape.get("length") else 1.0  # Convert m to km
+            
+            # Calculate travel time
+            if current_speed_kmh > 0:
+                travel_time = (road_length / current_speed_kmh) * 60  # minutes
+            else:
+                travel_time = road_length * 2  # fallback: 2 min per km
+            
+            # Confidence from jam factor reliability
+            confidence = current_flow.get("confidence", 0.8)
+            
+            return {
+                "traffic_status": status,
+                "congestion_percentage": round(congestion_pct, 1),
+                "average_speed_kmh": round(current_speed_kmh, 2),
+                "vehicle_count": vehicle_count,
+                "estimated_travel_time": round(travel_time, 1),
+                "road_segment_length": round(road_length, 2),
+                "confidence_score": confidence,
+                "data_source": "here_api"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing HERE response: {str(e)}")
             return self.get_fallback_data(road_info)
     
     def get_fallback_data(self, road_info: Dict) -> Dict:
@@ -340,7 +511,7 @@ class RealTrafficService:
             raise
     
     async def update_traffic_data(self, db: Session):
-        """Update traffic data using TomTom API with fallback to generator"""
+        """Update traffic data using TomTom and HERE APIs with fallback to generator"""
         try:
             logger.info("Starting real-time traffic data update")
             
@@ -355,23 +526,35 @@ class RealTrafficService:
             
             for road_info in self.monitoring_points:
                 try:
-                    if self.api_available:
-                        # Try to fetch real data from TomTom API
+                    traffic_data = None
+                    api_used = None
+                    
+                    # Try TomTom API first if available
+                    if self.tomtom_available:
                         api_data = await self.fetch_traffic_data_from_tomtom(
                             road_info["lat"], road_info["lng"]
                         )
                         
                         if api_data and "flowSegmentData" in api_data:
-                            # Parse and use real API data
                             traffic_data = self.parse_tomtom_response(api_data, road_info)
+                            api_used = "tomtom"
                             successful_updates += 1
-                        else:
-                            # API returned no data, use fallback
-                            traffic_data = self.get_fallback_data(road_info)
-                            failed_updates += 1
-                    else:
-                        # API is marked as unavailable, use fallback
+                    
+                    # If TomTom failed or unavailable, try HERE API
+                    if not traffic_data and self.here_available and self.here_api_key:
+                        api_data = await self.fetch_traffic_data_from_here(
+                            road_info["lat"], road_info["lng"]
+                        )
+                        
+                        if api_data and "results" in api_data and len(api_data["results"]) > 0:
+                            traffic_data = self.parse_here_response(api_data, road_info)
+                            api_used = "here"
+                            successful_updates += 1
+                    
+                    # If both APIs failed, use fallback
+                    if not traffic_data:
                         traffic_data = self.get_fallback_data(road_info)
+                        api_used = "fallback"
                         failed_updates += 1
                     
                     # Update database record
@@ -389,7 +572,7 @@ class RealTrafficService:
             # Broadcast heatmap update
             await self.broadcast_heatmap_update(db)
             
-            logger.info(f"Traffic update completed: {successful_updates} from API, {failed_updates} fallback")
+            logger.info(f"Traffic update completed: {successful_updates} from APIs (TomTom/HERE), {failed_updates} fallback")
             
         except Exception as e:
             logger.error(f"Error in traffic data update: {str(e)}")
@@ -428,10 +611,15 @@ class RealTrafficService:
                 })
             
             # Broadcast the update
+            api_status = "available" if (self.tomtom_available or self.here_available) else "unavailable"
             await manager.send_traffic_heatmap_update({
                 "heatmap_data": heatmap_data,
                 "timestamp": datetime.now().isoformat(),
-                "api_status": "available" if self.api_available else "unavailable",
+                "api_status": api_status,
+                "api_providers": {
+                    "tomtom": self.tomtom_available,
+                    "here": self.here_available
+                },
                 "bounds": {
                     "lat_min": 14.4200,
                     "lat_max": 14.4700,
@@ -448,10 +636,22 @@ class RealTrafficService:
     def get_api_status(self) -> Dict:
         """Get current API status information"""
         return {
-            "api_available": self.api_available,
-            "consecutive_failures": self.consecutive_failures,
+            "tomtom_available": self.tomtom_available,
+            "here_available": self.here_available,
+            "tomtom_consecutive_failures": self.tomtom_consecutive_failures,
+            "here_consecutive_failures": self.here_consecutive_failures,
             "last_check": self.last_api_check.isoformat() if self.last_api_check else None,
-            "provider": "tomtom"
+            "providers": {
+                "tomtom": {
+                    "available": self.tomtom_available,
+                    "failures": self.tomtom_consecutive_failures
+                },
+                "here": {
+                    "available": self.here_available,
+                    "configured": bool(self.here_api_key),
+                    "failures": self.here_consecutive_failures
+                }
+            }
         }
 
 # Global instance

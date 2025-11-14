@@ -36,7 +36,14 @@ class WeatherService {
       const response = await api.get('/weather/flood', { params });
       return response.data;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to fetch flood monitoring data');
+      // Handle network errors gracefully
+      if (error.message === 'Failed to fetch' || error.code === 'ERR_NETWORK') {
+        console.warn('Network error fetching flood monitoring data - backend may be unavailable');
+        return [];
+      }
+      // For other errors, log but return empty array
+      console.warn('Error fetching flood monitoring data:', error.response?.data?.detail || error.message);
+      return [];
     }
   }
 

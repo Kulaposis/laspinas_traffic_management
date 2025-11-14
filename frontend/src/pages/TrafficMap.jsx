@@ -104,6 +104,7 @@ import reportService from '../services/reportService';
 import notificationService from '../services/notificationService';
 import emergencyService from '../services/emergencyService';
 import incidentProneService from '../services/incidentProneService';
+import adminService from '../services/adminService';
 
 // NEW: 5 Priority Features Services
 import voiceNavigationService from '../services/voiceNavigationService';
@@ -123,6 +124,7 @@ import EmergencyReportsPanel from '../components/EmergencyReportsPanel';
 import MultiStopPlanner from '../components/MultiStopPlanner';
 import LocationSharePanel from '../components/LocationSharePanel';
 import WeatherAlertBanner from '../components/WeatherAlertBanner';
+import AnnouncementBanner from '../components/AnnouncementBanner';
 import SmartRoutePanel from '../components/SmartRoutePanel';
 import WeatherFloodAdvisory from '../components/WeatherFloodAdvisory';
 import TrafficPredictionsPanel from '../components/TrafficPredictionsPanel';
@@ -995,6 +997,8 @@ const TrafficMap = () => {
   const [weatherData, setWeatherData] = useState(null);
   const [weatherWarnings, setWeatherWarnings] = useState([]);
   const [showWeatherAlert, setShowWeatherAlert] = useState(true);
+  const [systemAnnouncements, setSystemAnnouncements] = useState([]);
+  const [showAnnouncements, setShowAnnouncements] = useState(true);
 
   // Smart Route Panel
   const [showSmartRoutePanel, setShowSmartRoutePanel] = useState(false);
@@ -2440,6 +2444,18 @@ const TrafficMap = () => {
     loadUserData();
   }, [user]);
 
+  // Load system announcements on mount and periodically refresh
+  useEffect(() => {
+    loadAnnouncements();
+    
+    // Refresh announcements every 5 minutes
+    const interval = setInterval(() => {
+      loadAnnouncements();
+    }, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [user]);
+
   // Load traffic and heatmap data with 10-minute auto-refresh from TomTom API
   useEffect(() => {
     // REMOVED: Automatic traffic data loading
@@ -2489,6 +2505,30 @@ const TrafficMap = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDirectionsPanel]);
+
+  const loadAnnouncements = async () => {
+    try {
+      // Fetch public announcements (available to all users including guests)
+      let alerts = [];
+      try {
+        alerts = await adminService.getPublicAlerts();
+      } catch (error) {
+        // For errors, silently fail - announcements are optional
+        setSystemAnnouncements([]);
+        return;
+      }
+      
+      // Backend already filters by active status, date range, and target roles
+      // Just use the alerts as-is, but filter out any that are dismissed
+      const dismissedIds = JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]');
+      const visibleAlerts = alerts.filter(alert => !dismissedIds.includes(alert.id));
+      
+      setSystemAnnouncements(visibleAlerts);
+    } catch (error) {
+      // Silently handle errors - announcements are optional
+      setSystemAnnouncements([]);
+    }
+  };
 
   const loadUserData = async () => {
     if (!user) {
@@ -6131,6 +6171,28 @@ const TrafficMap = () => {
             weather={weatherData}
             warnings={weatherWarnings}
             onDismiss={() => setShowWeatherAlert(false)}
+          />
+        </div>
+      )}
+
+      {/* System Announcements Banner - Hide during simulation */}
+      {showAnnouncements && systemAnnouncements.length > 0 && !showDirectionsPanel && !isSimulating && (
+        <div 
+          className={`
+            absolute z-40 max-w-2xl mx-auto
+            ${showWeatherAlert && weatherWarnings.length > 0 
+              ? 'top-44 sm:top-48' 
+              : 'top-20 sm:top-24'
+            }
+            left-2 right-2 sm:left-4 sm:right-4
+          `}
+        >
+          <AnnouncementBanner
+            announcements={systemAnnouncements}
+            onDismiss={() => {
+              // Announcement is already handled in the component via localStorage
+              // This callback is for any additional cleanup if needed
+            }}
           />
         </div>
       )}

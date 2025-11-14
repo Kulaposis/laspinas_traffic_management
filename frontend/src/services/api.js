@@ -40,6 +40,13 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Handle network errors (backend not available) - don't log as errors
+    if (!error.response && (error.message === 'Failed to fetch' || error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED')) {
+      // Services will handle these gracefully by returning empty data
+      // Don't log as error to reduce console noise
+      return Promise.reject(error);
+    }
+    
     if (error.response?.status === 401) {
       // Only force redirect if this app was using backend token auth
       const hadBackendToken = !!localStorage.getItem('access_token');

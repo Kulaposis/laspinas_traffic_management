@@ -7,7 +7,14 @@ class IncidentProneService {
       const response = await api.get('/incident-prone-areas/', { params });
       return response.data;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to fetch incident prone areas');
+      // Handle network errors gracefully
+      if (error.message === 'Failed to fetch' || error.code === 'ERR_NETWORK') {
+        console.warn('Network error fetching incident prone areas - backend may be unavailable');
+        return { areas: [], total: 0, page: 1, per_page: 50 };
+      }
+      // For other errors, log but return empty data structure
+      console.warn('Error fetching incident prone areas:', error.response?.data?.detail || error.message);
+      return { areas: [], total: 0, page: 1, per_page: 50 };
     }
   }
 

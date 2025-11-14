@@ -41,6 +41,13 @@ class AdminService {
     return response.data;
   }
 
+  async getTrafficAreaStatistics(days = 7, barangay = null) {
+    const params = { days };
+    if (barangay) params.barangay = barangay;
+    const response = await this.api.get('/analytics/traffic-areas', { params });
+    return response.data;
+  }
+
   async getSystemHealth() {
     const response = await this.api.get('/health');
     return response.data;
@@ -93,6 +100,20 @@ class AdminService {
   async getSystemAlerts() {
     const response = await this.api.get('/alerts');
     return response.data;
+  }
+
+  async getPublicAlerts() {
+    try {
+      const response = await this.api.get('/alerts/public');
+      return response.data || [];
+    } catch (error) {
+      // Handle network errors gracefully
+      if (error.message === 'Failed to fetch' || error.code === 'ERR_NETWORK') {
+        return [];
+      }
+      // For other errors, return empty array
+      return [];
+    }
   }
 
   async createSystemAlert(alertData) {

@@ -328,9 +328,14 @@ const AdminHazardCenter = () => {
       const data = await incidentProneService.getIncidentProneAreas({ per_page: 25 });
       const list = Array.isArray(data?.areas) ? data.areas : Array.isArray(data) ? data : [];
       setIncidentAreas(list);
+      // Only show error if we expected data but got none (not for network errors)
+      if (list.length === 0 && data && data.total > 0) {
+        console.warn('Expected incident areas but received empty list');
+      }
     } catch (error) {
-      console.error(error);
-      toast.error(error.message || 'Failed to load incident prone areas');
+      // Service now returns empty data structure on error, so this should rarely be hit
+      console.warn('Error in refreshIncidentAreas:', error);
+      setIncidentAreas([]);
     } finally {
       setLoadingIncident(false);
     }
@@ -354,9 +359,11 @@ const AdminHazardCenter = () => {
       setLoadingFloods(true);
       const list = await weatherService.getFloodMonitoring();
       setFloodAreas(Array.isArray(list) ? list : []);
+      // Service now returns empty array on error, so no need for error toast
     } catch (error) {
-      console.error(error);
-      toast.error(error.message || 'Failed to load flood monitoring data');
+      // Service now returns empty array on error, so this should rarely be hit
+      console.warn('Error in refreshFloodAreas:', error);
+      setFloodAreas([]);
     } finally {
       setLoadingFloods(false);
     }

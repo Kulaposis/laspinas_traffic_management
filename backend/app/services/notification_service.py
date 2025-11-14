@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from fastapi import HTTPException, status
-from ..models.notification import Notification
-from ..models.user import User
+from ..models.notification import Notification, NotificationType, NotificationPriority
+from ..models.user import User, UserRole
 from ..schemas.notification_schema import NotificationCreate, NotificationUpdate
 from ..utils.role_helpers import get_role_value
 
@@ -36,7 +36,14 @@ class NotificationService:
         
         return self.create_notification(notification_data)
 
-    def get_user_notifications(self, user_id: int, skip: int = 0, limit: int = 50, unread_only: bool = False) -> List[Notification]:
+    def get_user_notifications(
+        self, 
+        user_id: int, 
+        skip: int = 0, 
+        limit: int = 50, 
+        unread_only: bool = False,
+        notification_type: Optional[str] = None
+    ) -> List[Notification]:
         """Get notifications for a specific user."""
         query = self.db.query(Notification).filter(
             (Notification.user_id == user_id) | (Notification.is_broadcast == True)
@@ -44,6 +51,15 @@ class NotificationService:
         
         if unread_only:
             query = query.filter(Notification.is_read == False)
+        
+        if notification_type:
+            try:
+                # Try to match the notification type enum
+                type_enum = NotificationType[notification_type.upper()]
+                query = query.filter(Notification.notification_type == type_enum)
+            except (KeyError, AttributeError):
+                # If invalid type, return empty list
+                return []
         
         return query.order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
 
@@ -124,3 +140,41 @@ class NotificationService:
         self.db.commit()
         
         return True
+
+    def create_notification_for_admins(
+        self,
+        title: str,
+        message: str,
+        notification_type: NotificationType = NotificationType.EMERGENCY,
+        priority: NotificationPriority = NotificationPriority.HIGH,
+        latitude: Optional[str] = None,
+        longitude: Optional[str] = None
+    ) -> List[Notification]:
+        """Create notifications for all admin users."""
+        # Get all active admin users
+        admin_users = self.db.query(User).filter(
+            User.role == UserRole.ADMIN,
+            User.is_active == True
+        ).all()
+        
+        notifications = []
+        for admin_user in admin_users:
+            notification = Notification(
+                title=title,
+                message=message,
+                notification_type=notification_type,
+                priority=priority,
+                user_id=admin_user.id,
+                is_broadcast=False,
+                latitude=latitude,
+                longitude=longitude
+            )
+            self.db.add(notification)
+            notifications.append(notification)
+        
+        if notifications:
+            self.db.commit()
+            for notification in notifications:
+                self.db.refresh(notification)
+        
+        return notifications

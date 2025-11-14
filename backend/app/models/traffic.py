@@ -32,7 +32,7 @@ class TrafficMonitoring(Base):
     congestion_percentage = Column(Float, default=0.0, nullable=False)  # 0-100%
     estimated_travel_time = Column(Float, nullable=True)  # minutes
     road_segment_length = Column(Float, nullable=True)  # kilometers
-    data_source = Column(String(50), default="tomtom_api", nullable=False)  # tomtom_api, fallback_generator, manual
+    data_source = Column(String(50), default="tomtom_api", nullable=False)  # tomtom_api, here_api, fallback_generator, manual
     confidence_score = Column(Float, default=1.0, nullable=False)  # 0-1 confidence in data
     last_updated = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())

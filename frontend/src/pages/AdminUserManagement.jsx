@@ -23,8 +23,11 @@ import {
 } from 'lucide-react';
 import adminService from '../services/adminService';
 import userService from '../services/userService';
+import { useAuth } from '../context/AuthContext';
 
 const AdminUserManagement = () => {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
   const [users, setUsers] = useState([]);
   const [userStats, setUserStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,14 +74,26 @@ const AdminUserManagement = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [usersData, statsData] = await Promise.all([
-        userService.getUsers({ ...filters, limit: 100 }),
-        adminService.getUserStats()
-      ]);
-      setUsers(usersData);
-      setUserStats(statsData);
+      // Fetch users and stats separately so users can still display if stats fail
+      try {
+        const usersData = await userService.getUsers({ ...filters, limit: 100 });
+        setUsers(usersData || []);
+      } catch (userError) {
+        console.error('Error fetching users:', userError);
+        setUsers([]);
+        alert(`Failed to load users: ${userError?.response?.data?.detail || userError?.message || 'Unknown error'}`);
+      }
+      
+      try {
+        const statsData = await adminService.getUserStats();
+        setUserStats(statsData);
+      } catch (statsError) {
+        console.error('Error fetching user stats:', statsError);
+        // Stats are optional, so we don't show an error to the user
+        setUserStats(null);
+      }
     } catch (error) {
-
+      console.error('Unexpected error in fetchData:', error);
     } finally {
       setLoading(false);
     }
@@ -306,29 +321,33 @@ const AdminUserManagement = () => {
                   <UserX className="w-4 h-4 mr-1 inline" />
                   Deactivate
                 </button>
-                <button
-                  onClick={() => {
-                    const newRole = prompt('Enter new role (admin, lgu_staff, traffic_enforcer, citizen):');
-                    if (newRole) {
-                      handleBulkAction('change_role', { new_role: newRole });
-                    }
-                  }}
-                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                >
-                  <Shield className="w-4 h-4 mr-1 inline" />
-                  Change Role
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm('Are you sure you want to delete selected users?')) {
-                      handleBulkAction('delete');
-                    }
-                  }}
-                  className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                >
-                  <Trash2 className="w-4 h-4 mr-1 inline" />
-                  Delete
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      const newRole = prompt('Enter new role (admin, lgu_staff, traffic_enforcer, citizen):');
+                      if (newRole) {
+                        handleBulkAction('change_role', { new_role: newRole });
+                      }
+                    }}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    <Shield className="w-4 h-4 mr-1 inline" />
+                    Change Role
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete selected users?')) {
+                        handleBulkAction('delete');
+                      }
+                    }}
+                    className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1 inline" />
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -450,12 +469,23 @@ const AdminUserManagement = () => {
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete User"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to delete ${user.full_name}?`)) {
+                              userService.deleteUser(user.id).then(() => {
+                                fetchData();
+                              }).catch(err => {
+                                alert(err?.response?.data?.detail || 'Failed to delete user');
+                              });
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -636,7 +666,7 @@ const AdminUserManagement = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Role</label>
                     <select className="mt-1 w-full border rounded p-2" value={createForm.role} onChange={(e)=>setCreateForm({...createForm, role:e.target.value})}>
-                      <option value="admin">Admin</option>
+                      {isAdmin && <option value="admin">Admin</option>}
                       <option value="lgu_staff">LGU Staff</option>
                       <option value="traffic_enforcer">Traffic Enforcer</option>
                       <option value="citizen">Citizen</option>
@@ -743,12 +773,31 @@ const AdminUserManagement = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Role</label>
-                    <select className="mt-1 w-full border rounded p-2" value={editForm.role} onChange={(e)=>setEditForm({...editForm, role:e.target.value})}>
-                      <option value="admin">Admin</option>
+                    <select 
+                      className="mt-1 w-full border rounded p-2" 
+                      value={editForm.role} 
+                      onChange={(e)=>{
+                        const newRole = e.target.value;
+                        // LGU staff cannot change roles to/from admin
+                        if (!isAdmin) {
+                          const currentRole = editForm.role?.toLowerCase();
+                          if (newRole === 'admin' || currentRole === 'admin') {
+                            alert('LGU staff cannot change roles to/from admin');
+                            return;
+                          }
+                        }
+                        setEditForm({...editForm, role: newRole});
+                      }}
+                      disabled={!isAdmin && editForm.role?.toLowerCase() === 'admin'}
+                    >
+                      {isAdmin && <option value="admin">Admin</option>}
                       <option value="lgu_staff">LGU Staff</option>
                       <option value="traffic_enforcer">Traffic Enforcer</option>
                       <option value="citizen">Citizen</option>
                     </select>
+                    {!isAdmin && editForm.role?.toLowerCase() === 'admin' && (
+                      <p className="mt-1 text-xs text-gray-500">LGU staff cannot modify admin users</p>
+                    )}
                   </div>
                   <div className="flex items-center space-x-2 mt-6">
                     <input id="isActive" type="checkbox" className="h-4 w-4" checked={editForm.is_active} onChange={(e)=>setEditForm({...editForm, is_active:e.target.checked})} />

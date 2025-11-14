@@ -83,11 +83,11 @@ def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Update user by ID (admin only)."""
-    if not is_admin(current_user.role):
+    """Update user by ID (admin or LGU staff)."""
+    if not is_authorized(current_user.role, ['admin', 'lgu_staff']):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can update other users"
+            detail="Only admins and LGU staff can update other users"
         )
     
     user = db.query(User).filter(User.id == user_id).first()
@@ -99,6 +99,27 @@ def update_user(
         )
     
     update_data = user_update.dict(exclude_unset=True)
+    
+    # LGU staff cannot change roles to/from admin
+    if 'role' in update_data and not is_admin(current_user.role):
+        # Check if trying to change to/from admin role
+        from ..models.user import UserRole
+        new_role = update_data['role']
+        if isinstance(new_role, str):
+            new_role_upper = new_role.upper()
+        elif isinstance(new_role, UserRole):
+            new_role_upper = new_role.value
+        else:
+            new_role_upper = str(new_role).upper()
+        
+        current_role_upper = get_role_value(user.role).upper()
+        
+        if new_role_upper == 'ADMIN' or current_role_upper == 'ADMIN':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="LGU staff cannot change roles to/from admin"
+            )
+    
     for field, value in update_data.items():
         setattr(user, field, value)
     
@@ -113,7 +134,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Delete user by ID (admin only)."""
+    """Delete user by ID (admin only - LGU staff cannot delete users)."""
     if not is_admin(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -146,18 +167,35 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Create new user (admin only)."""
+    """Create new user (admin or LGU staff)."""
     import logging
     logger = logging.getLogger(__name__)
     
     try:
         logger.info(f"User creation request by {current_user.email} (ID: {current_user.id}, Role: {current_user.role})")
         
-        if not is_admin(current_user.role):
+        if not is_authorized(current_user.role, ['admin', 'lgu_staff']):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admins can create users"
+                detail="Only admins and LGU staff can create users"
             )
+        
+        # LGU staff cannot create admin users
+        if not is_admin(current_user.role):
+            from ..models.user import UserRole
+            requested_role = user_data.role
+            if isinstance(requested_role, str):
+                requested_role_upper = requested_role.upper()
+            elif isinstance(requested_role, UserRole):
+                requested_role_upper = requested_role.value
+            else:
+                requested_role_upper = str(requested_role).upper()
+            
+            if requested_role_upper == 'ADMIN':
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="LGU staff cannot create admin users"
+                )
         
         # Check if user already exists
         existing_user = db.query(User).filter(

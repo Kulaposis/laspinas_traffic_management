@@ -1,17 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Header
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import io
 import csv
+import logging
 
 from ..db import get_db
-from ..auth import get_current_user
+from ..auth import get_current_user, get_current_user_optional
 from ..models.user import User
 from ..services.admin_service import AdminService
 from ..schemas.admin_schemas import *
-from ..utils.role_helpers import is_admin
+from ..utils.role_helpers import is_admin, is_authorized, get_role_value
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -133,9 +136,14 @@ async def delete_system_setting(
 @router.get("/users/stats", response_model=UserManagementStats)
 async def get_user_management_stats(
     admin_service: AdminService = Depends(get_admin_service),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
-    """Get user management statistics."""
+    """Get user management statistics (admin or LGU staff)."""
+    if not is_authorized(current_user.role, ['admin', 'lgu_staff']):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or LGU staff access required"
+        )
     return admin_service.get_user_management_stats()
 
 @router.get("/users/{user_id}/activity", response_model=UserActivitySummary)
@@ -160,18 +168,73 @@ async def bulk_user_operation(
 @router.get("/alerts", response_model=List[SystemAlertResponse])
 async def get_system_alerts(
     admin_service: AdminService = Depends(get_admin_service),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
-    """Get all system alerts."""
+    """Get all system alerts (admin or LGU staff)."""
+    if not is_authorized(current_user.role, ['admin', 'lgu_staff']):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or LGU staff access required"
+        )
     return admin_service.get_active_alerts()
+
+@router.get("/alerts/public", response_model=List[SystemAlertResponse])
+async def get_public_alerts(
+    admin_service: AdminService = Depends(get_admin_service),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    db: Session = Depends(get_db)
+):
+    """Get active system alerts for public display (all users including guests)."""
+    import logging
+    import os
+    from jose import jwt, JWTError
+    
+    logger = logging.getLogger(__name__)
+    
+    # Manually check for user if authorization header exists (but don't require it)
+    current_user = None
+    user_role = ""
+    
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization.split(" ")[1]
+            SECRET_KEY = os.getenv("SECRET_KEY")
+            ALGORITHM = "HS256"
+            if SECRET_KEY:
+                try:
+                    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                    username: str = payload.get("sub")
+                    if username:
+                        current_user = db.query(User).filter(User.username == username).first()
+                        if current_user:
+                            user_role = get_role_value(current_user.role).lower() if hasattr(current_user, 'role') else ""
+                            logger.info(f"Public alerts requested by user {current_user.id} with role: {user_role}")
+                except JWTError:
+                    logger.debug("Invalid token provided, treating as guest")
+                    pass  # Invalid token, treat as guest
+        except Exception as e:
+            logger.debug(f"Error parsing auth token: {e}")
+            pass  # Treat as guest
+    
+    if not current_user:
+        logger.info("Public alerts requested by guest user (user_role='')")
+    
+    alerts = admin_service.get_active_alerts(user_role=user_role)
+    logger.info(f"Returning {len(alerts)} alerts for user_role: '{user_role}'")
+    return alerts
 
 @router.post("/alerts", response_model=SystemAlertResponse, status_code=status.HTTP_201_CREATED)
 async def create_system_alert(
     alert_data: SystemAlertCreate,
     admin_service: AdminService = Depends(get_admin_service),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
-    """Create a new system alert."""
+    """Create a new system alert (admin or LGU staff)."""
+    if not is_authorized(current_user.role, ['admin', 'lgu_staff']):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or LGU staff access required"
+        )
     return admin_service.create_system_alert(alert_data, current_user.id)
 
 # Security Events
@@ -306,6 +369,24 @@ async def get_system_analytics(
 ):
     """Get detailed system analytics."""
     return admin_service.get_system_analytics()
+
+@router.get("/analytics/traffic-areas")
+async def get_traffic_area_statistics(
+    days: int = Query(7, ge=1, le=365, description="Number of days to analyze"),
+    barangay: Optional[str] = Query(None, description="Filter by barangay"),
+    admin_service: AdminService = Depends(get_admin_service),
+    current_user: User = Depends(require_admin)
+):
+    """Get comprehensive traffic area statistics for Las Piñas City."""
+    try:
+        result = admin_service.get_traffic_area_statistics(days=days, barangay=barangay)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting traffic area statistics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching traffic statistics: {str(e)}"
+        )
 
 # Backup and Maintenance
 @router.post("/maintenance/backup")
