@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 import logging
 import os
+from datetime import datetime
 from .db import get_db, Base, engine
 from sqlalchemy import inspect, text
 from slowapi import Limiter
@@ -271,8 +272,27 @@ def read_root():
     return {"message": "Traffic Management System API", "status": "running"}
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint that verifies database connection"""
+    try:
+        # Test database connection
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
 
 # Leapcell reverse proxy healthcheck path
 @app.get("/kaithheathcheck")
