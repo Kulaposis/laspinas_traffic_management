@@ -77,6 +77,14 @@ const TrafficPredictionsPanel = ({
     return `${formatHour(startHour)} - ${formatHour(endHour)}`;
   };
 
+  // Helper function to format hour to 12-hour format with AM/PM
+  const formatHourTo12Hour = (hour) => {
+    if (hour === 0) return '12:00 AM';
+    if (hour < 12) return `${hour}:00 AM`;
+    if (hour === 12) return '12:00 PM';
+    return `${hour - 12}:00 PM`;
+  };
+
   // Calculate predictions for different time periods
   const timeBasedPredictions = useMemo(() => {
     if (!patterns || !patterns.data) return null;
@@ -149,7 +157,7 @@ const TrafficPredictionsPanel = ({
           avgSpeed: Math.round(avgSpeed),
           congestionLevel,
           congestionScore: congestionCount / hourData.length,
-          label: `${hour}:00`
+          label: formatHourTo12Hour(hour)
         });
       }
     });
@@ -690,7 +698,7 @@ const TrafficPredictionsPanel = ({
                                         ? (congestionLevel === 'heavy' ? 'text-red-300' : congestionLevel === 'moderate' ? 'text-yellow-300' : 'text-green-300')
                                         : 'text-gray-600'
                                     }`}>
-                                      {period.hours[0]}:00 - {period.hours[period.hours.length - 1] + 1}:00
+                                      {formatHourTo12Hour(period.hours[0])} - {formatHourTo12Hour(period.hours[period.hours.length - 1] + 1)}
                                     </div>
                                   </div>
                                 </div>
@@ -718,12 +726,12 @@ const TrafficPredictionsPanel = ({
                           {(() => {
                             // Group hours into 4-hour periods for simplicity
                             const periods = [
-                              { label: '12 AM - 6 AM', hours: [0, 1, 2, 3, 4, 5], labelShort: 'Night' },
-                              { label: '6 AM - 10 AM', hours: [6, 7, 8, 9], labelShort: 'Morning' },
-                              { label: '10 AM - 2 PM', hours: [10, 11, 12, 13], labelShort: 'Midday' },
-                              { label: '2 PM - 6 PM', hours: [14, 15, 16, 17], labelShort: 'Afternoon' },
-                              { label: '6 PM - 10 PM', hours: [18, 19, 20, 21], labelShort: 'Evening' },
-                              { label: '10 PM - 12 AM', hours: [22, 23], labelShort: 'Late Night' }
+                              { label: '12:00 AM - 6:00 AM', hours: [0, 1, 2, 3, 4, 5], labelShort: 'Night' },
+                              { label: '6:00 AM - 10:00 AM', hours: [6, 7, 8, 9], labelShort: 'Morning' },
+                              { label: '10:00 AM - 2:00 PM', hours: [10, 11, 12, 13], labelShort: 'Midday' },
+                              { label: '2:00 PM - 6:00 PM', hours: [14, 15, 16, 17], labelShort: 'Afternoon' },
+                              { label: '6:00 PM - 10:00 PM', hours: [18, 19, 20, 21], labelShort: 'Evening' },
+                              { label: '10:00 PM - 12:00 AM', hours: [22, 23], labelShort: 'Late Night' }
                             ];
 
                             return periods.map((period, idx) => {

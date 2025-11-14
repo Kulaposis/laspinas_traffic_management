@@ -14,7 +14,8 @@ import {
   Bus,
   MoreHorizontal,
   Settings,
-  Search
+  Search,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import enhancedGeocodingService from '../services/enhancedGeocodingService';
@@ -34,6 +35,7 @@ const GoogleMapsStyleNavigation = ({
   onStart,
   onSimulate,
   onSave,
+  onPredictions, // Callback for traffic predictions
   onClose,
   onModeChange, // Optional callback for mode changes
   minimized: controlledMinimized, // Controlled minimized state from parent
@@ -804,11 +806,11 @@ const GoogleMapsStyleNavigation = ({
               </div>
 
               {/* Action Buttons - Sticky at Bottom */}
-              <div className="px-3 py-2.5 flex items-center space-x-2 bg-gray-50 border-t border-gray-100 flex-shrink-0">
+              <div className="px-3 py-2.5 flex items-center space-x-2 bg-gray-50 border-t border-gray-100 flex-shrink-0 flex-wrap gap-2">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onStart && onStart({ mode: selectedMode, route: routes[selectedRoute] })}
-                  className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 px-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-1.5"
+                  className="flex-1 min-w-[100px] bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 px-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-1.5"
                 >
                   <Navigation className="w-4 h-4" />
                   <span className="text-sm">Start</span>
@@ -817,16 +819,26 @@ const GoogleMapsStyleNavigation = ({
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onSimulate && onSimulate({ mode: selectedMode, route: routes[selectedRoute] })}
-                  className="bg-white hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-full shadow-md hover:shadow-lg transition-all border border-gray-200 flex items-center justify-center space-x-1.5"
+                  className="flex-1 min-w-[100px] bg-white hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-full shadow-md hover:shadow-lg transition-all border border-gray-200 flex items-center justify-center space-x-1.5"
                 >
                   <Footprints className="w-4 h-4" />
                   <span className="text-sm">Simulate</span>
+                </motion.button>
+
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onPredictions && onPredictions({ mode: selectedMode, route: routes[selectedRoute] })}
+                  className="flex-1 min-w-[100px] bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-1.5"
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="text-sm hidden sm:inline">Traffic Prediction</span>
+                  <span className="text-sm sm:hidden">Prediction</span>
                 </motion.button>
                 
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onSave && onSave({ mode: selectedMode, route: routes[selectedRoute] })}
-                  className="bg-white hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-full shadow-md hover:shadow-lg transition-all border border-gray-200 flex items-center justify-center space-x-1.5"
+                  className="flex-1 min-w-[100px] bg-white hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-full shadow-md hover:shadow-lg transition-all border border-gray-200 flex items-center justify-center space-x-1.5"
                 >
                   <Bookmark className="w-4 h-4" />
                   <span className="text-sm">Save</span>

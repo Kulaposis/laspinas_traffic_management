@@ -5947,6 +5947,12 @@ const TrafficMap = () => {
           onSimulate={() => {
             startSimulation();
           }}
+          onPredictions={() => {
+            // Open traffic predictions panel
+            setShowPredictionsPanel(true);
+            // Optionally close directions panel or keep it open
+            // setShowDirectionsPanel(false);
+          }}
         />
       )}
 
